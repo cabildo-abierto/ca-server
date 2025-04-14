@@ -24,3 +24,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+package-lock.json
+fly.toml
+Dockerfile
+docker-entrypoint.js
+.dockerignore
+.github
+.nvmrc
+.vscode

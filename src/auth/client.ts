@@ -1,18 +1,25 @@
 import { NodeOAuthClient } from '@atproto/oauth-client-node'
-import type { Database } from '#/db'
-import { env } from '#/lib/env'
 import { SessionStore, StateStore } from './storage'
+import { PrismaClient } from '@prisma/client'
+import {env} from "#/lib/env";
 
-export const createClient = async (db: Database) => {
+
+export const createClient = async (db: PrismaClient) => {
   const publicUrl = env.PUBLIC_URL
   const url = publicUrl || `http://127.0.0.1:${env.PORT}`
   const enc = encodeURIComponent
+
+  const client_id = publicUrl
+      ? `${url}/client-metadata.json`
+      : `http://localhost?redirect_uri=${enc(`${url}/oauth/callback`)}&scope=${enc('atproto transition:generic')}`
+
+  console.log("url:", url)
+  console.log("client id:", client_id)
+
   return new NodeOAuthClient({
     clientMetadata: {
       client_name: 'AT Protocol Express App',
-      client_id: publicUrl
-        ? `${url}/client-metadata.json`
-        : `http://localhost?redirect_uri=${enc(`${url}/oauth/callback`)}&scope=${enc('atproto transition:generic')}`,
+      client_id: client_id,
       client_uri: url,
       redirect_uris: [`${url}/oauth/callback`],
       scope: 'atproto transition:generic',

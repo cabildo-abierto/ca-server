@@ -4,44 +4,69 @@ import type {
   NodeSavedState,
   NodeSavedStateStore,
 } from '@atproto/oauth-client-node'
-import type { Database } from '#/db'
+import { PrismaClient } from '@prisma/client'
 
 export class StateStore implements NodeSavedStateStore {
-  constructor(private db: Database) {}
-  async get(key: string): Promise<NodeSavedState | undefined> {
-    const result = await this.db.selectFrom('auth_state').selectAll().where('key', '=', key).executeTakeFirst()
-    if (!result) return
-    return JSON.parse(result.state) as NodeSavedState
-  }
-  async set(key: string, val: NodeSavedState) {
-    const state = JSON.stringify(val)
-    await this.db
-      .insertInto('auth_state')
-      .values({ key, state })
-      .onConflict((oc) => oc.doUpdateSet({ state }))
-      .execute()
-  }
-  async del(key: string) {
-    await this.db.deleteFrom('auth_state').where('key', '=', key).execute()
-  }
+    constructor(private db: PrismaClient) {}
+    async get(key: string): Promise<NodeSavedState | undefined> {
+
+        //const t1 = Date.now()
+        const result = await this.db.authState.findFirst({
+            where: {
+                key: key
+            }
+        })
+        //const t2 = Date.now()
+        //console.log("Finding auth state time", t2-t1)
+
+        if (!result) return
+        return JSON.parse(result.state) as NodeSavedState
+    }
+    async set(key: string, val: NodeSavedState) {
+        const state = JSON.stringify(val)
+        //const t1 = Date.now()
+        await this.db.authState.upsert({
+          where: { key }, 
+          update: { state },
+          create: { key, state }, 
+        })
+        //const t2 = Date.now()
+        //console.log("Creating auth state time", t2-t1)
+    }
+    async del(key: string) {
+        await this.db.authState.delete({
+            where: {
+                key: key
+            }
+        })
+    }
 }
 
 export class SessionStore implements NodeSavedSessionStore {
-  constructor(private db: Database) {}
+  constructor(private db: PrismaClient) {}
   async get(key: string): Promise<NodeSavedSession | undefined> {
-    const result = await this.db.selectFrom('auth_session').selectAll().where('key', '=', key).executeTakeFirst()
-    if (!result) return
-    return JSON.parse(result.session) as NodeSavedSession
+
+      //const t1 = Date.now()
+      const result = await this.db.authSession.findFirst({where: {key}})
+      //const t2 = Date.now()
+      //console.log("Finding auth session time", t2-t1)
+
+      if (!result) return
+      return JSON.parse(result.session) as NodeSavedSession
   }
-  async set(key: string, val: NodeSavedSession) {
-    const session = JSON.stringify(val)
-    await this.db
-      .insertInto('auth_session')
-      .values({ key, session })
-      .onConflict((oc) => oc.doUpdateSet({ session }))
-      .execute()
-  }
-  async del(key: string) {
-    await this.db.deleteFrom('auth_session').where('key', '=', key).execute()
-  }
+    async set(key: string, val: NodeSavedSession) {
+        const session = JSON.stringify(val)
+
+        //const t1 = Date.now()
+        await this.db.authSession.upsert({
+            where: { key }, 
+            update: { session },
+            create: { key, session }, 
+        })
+        //const t2 = Date.now()
+        //console.log("Creating auth session time", t2-t1)
+    }
+    async del(key: string) {
+        await this.db.authSession.delete({where: {key}})
+    }
 }
