@@ -1,0 +1,21 @@
+{
+  "lexicon": 1,
+  "id": "ar.cabildoabierto.embed.selectionQuote",
+  "description": "A quote of a text selection in a record. Start is inclusive, end is exclusive",
+  "defs": {
+    "main": {
+      "type": "object",
+      "required": [
+        "start", "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "integer"
+        },
+        "end": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

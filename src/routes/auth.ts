@@ -47,7 +47,7 @@ export default function authRoutes(ctx: AppContext) {
 
     router.post('/logout', async (req, res) => {
         const session = await getIronSession<Session>(req, res, cookieOptions)
-        await session.destroy()
+        session.destroy()
         return res.redirect('/')
     })
 

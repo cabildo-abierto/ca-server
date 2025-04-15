@@ -1,13 +1,13 @@
 {
   "lexicon": 1,
-  "id": "ar.com.cabildoabierto.dataset",
+  "id": "ar.cabildoabierto.data.dataset",
   "defs": {
     "main": {
       "type": "record",
       "key": "tid",
       "record": {
         "type": "object",
-        "required": ["id", "createdAt", "format", "columns"],
+        "required": ["id", "createdAt", "columns"],
         "properties": {
           "id": {
             "type": "string",
@@ -22,25 +22,29 @@
           "columns": {
             "type": "array",
             "items": {
-              "type": "object",
-              "required": ["name"],
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 120
-                },
-                "datatype": {
-                  "type": "string"
-                }
-              }
+              "type": "ref",
+              "ref": "ar.cabildoabierto.dataset#column"
             },
             "minLength": 1
           },
           "$type": {
             "type": "string",
-            "const": "ar.com.cabildoabierto.dataset"
+            "const": "ar.cabildoabierto.data.dataset"
           }
+        }
+      }
+    },
+    "column": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "datatype": {
+          "type": "string"
         }
       }
     }

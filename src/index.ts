@@ -12,15 +12,17 @@ import {createBidirectionalResolver, createIdResolver, BidirectionalResolver} fr
 import {PrismaClient} from '@prisma/client'
 import cors from 'cors'
 import path from 'path'
+import {createServer} from "#/lexicon-server";
+import {Server as XrpcServer} from "#/lexicon-server"
 
 
-// Application state passed to the router and elsewhere
 export type AppContext = {
     db: PrismaClient
     ingester: Firehose
     logger: pino.Logger
     oauthClient: OAuthClient
     resolver: BidirectionalResolver
+    xrpc: XrpcServer
 }
 
 export class Server {
@@ -35,26 +37,24 @@ export class Server {
 
         const logger = pino({name: 'server start'})
 
-        // Set up the SQLite database
         const db = new PrismaClient()
 
-        // Create the atproto utilities
         const oauthClient = await createClient(db)
         const baseIdResolver = createIdResolver()
         const ingester = createIngester(db, baseIdResolver)
         const resolver = createBidirectionalResolver(baseIdResolver)
+        const xrpc = createServer()
         const ctx = {
             db,
             ingester,
             logger,
             oauthClient,
             resolver,
+            xrpc
         }
 
-        // Subscribe to events on the firehose
         ingester.start()
 
-        // Create our server
         const app: Express = express()
         app.set('trust proxy', true)
         app.use(cors({
@@ -69,16 +69,14 @@ export class Server {
             credentials: true,
         }))
 
-        // Routes & middlewares
-        const router = createRouter(ctx)
         app.use(express.json())
         app.use(express.urlencoded({extended: true}))
         app.use(express.static(path.join(__dirname, 'public')))
+
+        const router = createRouter(ctx)
         app.use(router)
         app.use((_req, res) => res.sendStatus(404))
 
-
-        // Bind our server to the port
         const server = app.listen(env.PORT)
         await events.once(server, 'listening')
         logger.info(`Server (${NODE_ENV}) running on port http://${HOST}:${PORT}`)

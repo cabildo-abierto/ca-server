@@ -1,8 +1,8 @@
 import type {IncomingMessage, ServerResponse} from "node:http";
 import type {AppContext} from "#/index";
 import {getIronSession, SessionOptions} from "iron-session";
-import {Agent} from "@atproto/api";
 import express from "express";
+import {AtpBaseClient} from "#/lexicon-api";
 
 export type Session = { did: string }
 
@@ -15,10 +15,11 @@ export async function getSessionAgent(
     if (!session.did) return null
     try {
         const oauthSession = await ctx.oauthClient.restore(session.did)
-        return oauthSession ? new Agent(oauthSession) : null
+        const agent = new AtpBaseClient("http://127.0.0.1:8080")
+        return oauthSession ? agent : null
     } catch (err) {
         ctx.logger.warn({err}, 'oauth restore failed')
-        await session.destroy()
+        //await session.destroy()
         return null
     }
 }

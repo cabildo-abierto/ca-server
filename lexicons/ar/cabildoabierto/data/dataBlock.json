@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "ar.com.cabildoabierto.dataBlock",
+  "id": "ar.cabildoabierto.data.dataBlock",
   "defs": {
     "main": {
       "type": "record",
@@ -10,7 +10,8 @@
         "required": ["dataset", "createdAt", "data", "format"],
         "properties": {
           "dataset": {
-            "type": "link"
+            "type": "ref",
+            "ref": "ar.cabildoabierto.data.dataset"
           },
           "data": {
             "type": "blob"

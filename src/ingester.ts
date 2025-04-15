@@ -1,7 +1,7 @@
 import pino from 'pino'
 import {IdResolver} from '@atproto/identity'
 import {Firehose} from '@atproto/sync'
-import * as Status from '#/lexicon/types/xyz/statusphere/status'
+import * as Article from '#/lexicon-server/types/ar/cabildoabierto/feed/article'
 import {PrismaClient} from '@prisma/client'
 
 export function createIngester(db: PrismaClient, idResolver: IdResolver) {
@@ -11,16 +11,18 @@ export function createIngester(db: PrismaClient, idResolver: IdResolver) {
         handleEvent: async (evt) => {
             // Watch for write events
             if (evt.event === 'create' || evt.event === 'update') {
-                const now = new Date()
                 const record = evt.record
 
-                // If the write is a valid status update
-                if (
-                    evt.collection === 'xyz.statusphere.status' &&
-                    Status.isRecord(record) &&
-                    Status.validateRecord(record).success
-                ) {
-                    // Store the status
+                try {
+                    if (
+                        evt.collection === 'ar.cabildoabierto.article' &&
+                        Article.isRecord(record) &&
+                        Article.validateRecord(record).success
+                    ) {
+                        console.log(record.text)
+                    }
+                } catch (err){
+                    console.log(err)
                 }
             } else if (
                 evt.event === 'delete' &&
@@ -32,7 +34,7 @@ export function createIngester(db: PrismaClient, idResolver: IdResolver) {
         onError: (err) => {
             logger.error({err}, 'error on firehose ingestion')
         },
-        filterCollections: ['xyz.statusphere.status'],
+        filterCollections: ['ar.com.cabildoabierto.article'],
         excludeIdentity: true,
         excludeAccount: true,
     })
