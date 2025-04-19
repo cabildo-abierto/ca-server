@@ -16,6 +16,7 @@ import type * as AppBskyEmbedExternal from '../embed/external.js'
 import type * as AppBskyEmbedRecord from '../embed/record.js'
 import type * as AppBskyEmbedRecordWithMedia from '../embed/recordWithMedia.js'
 import type * as ComAtprotoLabelDefs from '../../../com/atproto/label/defs.js'
+import type * as ArCabildoabiertoFeedDefs from '../../../ar/cabildoabierto/feed/defs.js'
 import type * as AppBskyRichtextFacet from '../richtext/facet.js'
 import type * as AppBskyGraphDefs from '../graph/defs.js'
 
@@ -115,12 +116,14 @@ export function validateFeedViewPost<V>(v: V) {
 export interface ReplyRef {
   $type?: 'app.bsky.feed.defs#replyRef'
   root:
-    | $Typed<PostView>
+    | $Typed<ArCabildoabiertoFeedDefs.PostView>
+    | $Typed<ArCabildoabiertoFeedDefs.ArticleView>
     | $Typed<NotFoundPost>
     | $Typed<BlockedPost>
     | { $type: string }
   parent:
-    | $Typed<PostView>
+    | $Typed<ArCabildoabiertoFeedDefs.PostView>
+    | $Typed<ArCabildoabiertoFeedDefs.ArticleView>
     | $Typed<NotFoundPost>
     | $Typed<BlockedPost>
     | { $type: string }

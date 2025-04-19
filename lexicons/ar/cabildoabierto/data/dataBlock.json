@@ -28,7 +28,7 @@
           },
           "$type": {
             "type": "string",
-            "const": "ar.com.cabildoabierto.dataBlock"
+            "const": "ar.cabildoabierto.dataBlock"
           }
         }
       }

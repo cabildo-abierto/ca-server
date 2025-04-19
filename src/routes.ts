@@ -2,7 +2,10 @@ import express from 'express'
 import type {AppContext} from '#/index'
 import authRoutes from "#/routes/auth";
 import userRoutes from "#/routes/user";
-import {feedRoutes} from "#/routes/feed";
+import testRoutes from "#/routes/test";
+import feedRoutes from "#/routes/feed";
+import articleRoutes from "#/routes/article";
+import visualizationRoutes from "#/routes/visualization";
 
 
 
@@ -12,7 +15,10 @@ export const createRouter = (ctx: AppContext) => {
 
     router.use('/', authRoutes(ctx))
     router.use('/', userRoutes(ctx))
-    feedRoutes(ctx)
+    router.use('/', testRoutes(ctx))
+    router.use('/', feedRoutes(ctx))
+    router.use('/', articleRoutes(ctx))
+    router.use('/', visualizationRoutes(ctx))
 
     router.use(ctx.xrpc.xrpc.router)
 

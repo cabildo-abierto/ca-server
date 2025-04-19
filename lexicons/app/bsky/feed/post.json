@@ -35,7 +35,7 @@
               "app.bsky.embed.external",
               "app.bsky.embed.record",
               "app.bsky.embed.recordWithMedia",
-              "ar.com.cabildoabierto.embed.quote"
+              "ar.cabildoabierto.embed.quote"
             ]
           },
           "langs": {
@@ -48,8 +48,7 @@
             "type": "union",
             "description": "Self-label values for this post. Effectively content warnings.",
             "refs": [
-              "com.atproto.label.defs#selfLabels",
-              "ar.com.cabildoabierto.label.defs#selfLabels"
+              "com.atproto.label.defs#selfLabels"
             ]
           },
           "tags": {

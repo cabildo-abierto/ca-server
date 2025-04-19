@@ -15,9 +15,8 @@ import type * as AppBskyEmbedVideo from '../embed/video.js'
 import type * as AppBskyEmbedExternal from '../embed/external.js'
 import type * as AppBskyEmbedRecord from '../embed/record.js'
 import type * as AppBskyEmbedRecordWithMedia from '../embed/recordWithMedia.js'
-import type * as ArComCabildoabiertoEmbedQuote from '../../../ar/com/cabildoabierto/embed/quote.js'
+import type * as ArCabildoabiertoEmbedQuote from '../../../ar/cabildoabierto/embed/quote.js'
 import type * as ComAtprotoLabelDefs from '../../../com/atproto/label/defs.js'
-import type * as ArComCabildoabiertoLabelDefs from '../../../ar/com/cabildoabierto/label/defs.js'
 import type * as ComAtprotoRepoStrongRef from '../../../com/atproto/repo/strongRef.js'
 
 const is$typed = _is$typed,
@@ -39,14 +38,11 @@ export interface Record {
     | $Typed<AppBskyEmbedExternal.Main>
     | $Typed<AppBskyEmbedRecord.Main>
     | $Typed<AppBskyEmbedRecordWithMedia.Main>
-    | $Typed<ArComCabildoabiertoEmbedQuote.Main>
+    | $Typed<ArCabildoabiertoEmbedQuote.Main>
     | { $type: string }
   /** Indicates human language of post primary text content. */
   langs?: string[]
-  labels?:
-    | $Typed<ComAtprotoLabelDefs.SelfLabels>
-    | $Typed<ArComCabildoabiertoLabelDefs.SelfLabels>
-    | { $type: string }
+  labels?: $Typed<ComAtprotoLabelDefs.SelfLabels> | { $type: string }
   /** Additional hashtags, in addition to any included in post text and facets. */
   tags?: string[]
   /** Client-declared timestamp when this post was originally created. */

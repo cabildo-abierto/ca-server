@@ -1,11 +1,25 @@
-import {AppContext} from "#/index";
+import express from 'express'
+import type {AppContext} from '#/index'
+import {sessionAgent, handler} from "#/utils/session-agent";
+import {getFeedByKind} from "#/services/feed/feed";
+
+const router = express.Router()
 
 
-export const feedRoutes = (ctx: AppContext) => {
+export default function feedRoutes(ctx: AppContext) {
+    router.get(
+        '/feed/:kind',
+        handler(async (req, res) => {
+            const {kind} = req.params
+            const agent = await sessionAgent(req, res, ctx)
+            if(agent.hasSession()){
+                const feed = await getFeedByKind({ctx, agent, kind})
+                return res.json(feed)
+            } else {
+                return res.json({error: "No session"})
+            }
+        })
+    )
 
-    ctx.xrpc.ar.cabildoabierto.feed.getFeed({
-        handler: ({auth, params, input, req, res}) => {
-            return { encoding: 'application/json', body: { feed: [] } }
-        }
-    })
+    return router
 }

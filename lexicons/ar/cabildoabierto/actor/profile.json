@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "ar.cabildoabierto.actor.profile",
+  "id": "ar.cabildoabierto.actor.caProfile",
   "defs": {
     "main": {
       "type": "record",

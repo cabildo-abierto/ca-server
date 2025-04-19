@@ -9,6 +9,7 @@ import {
   is$typed as _is$typed,
   type OmitKey,
 } from '../../../../util'
+import type * as ComAtprotoLabelDefs from '../../../com/atproto/label/defs.js'
 
 const is$typed = _is$typed,
   validate = _validate
@@ -19,8 +20,8 @@ export interface Record {
   text: BlobRef
   format: string
   title: string
+  labels?: $Typed<ComAtprotoLabelDefs.SelfLabels> | { $type: string }
   createdAt: string
-  $type?: 'ar.cabildoabierto.feed.article'
   [k: string]: unknown
 }
 

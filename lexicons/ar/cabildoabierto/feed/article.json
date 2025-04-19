@@ -22,13 +22,16 @@
               "minLength": 1,
               "maxLength": 120
             },
+            "labels": {
+              "type": "union",
+              "description": "Self-label values for this post. Effectively content warnings.",
+              "refs": [
+                "com.atproto.label.defs#selfLabels"
+              ]
+            },
             "createdAt": {
               "type": "string",
               "format": "datetime"
-            },
-            "$type": {
-              "type": "string",
-              "const": "ar.cabildoabierto.feed.article"
             }
           }
         }

@@ -75,11 +75,11 @@
       "properties": {
         "root": {
           "type": "union",
-          "refs": ["#postView", "#notFoundPost", "#blockedPost"]
+          "refs": ["ar.cabildoabierto.feed.defs#postView", "ar.cabildoabierto.feed.defs#articleView", "#notFoundPost", "#blockedPost"]
         },
         "parent": {
           "type": "union",
-          "refs": ["#postView", "#notFoundPost", "#blockedPost"]
+          "refs": ["ar.cabildoabierto.feed.defs#postView", "ar.cabildoabierto.feed.defs#articleView", "#notFoundPost", "#blockedPost"]
         },
         "grandparentAuthor": {
           "type": "ref",

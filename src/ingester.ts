@@ -15,7 +15,7 @@ export function createIngester(db: PrismaClient, idResolver: IdResolver) {
 
                 try {
                     if (
-                        evt.collection === 'ar.cabildoabierto.article' &&
+                        evt.collection === 'ar.cabildoabierto.feed.article' &&
                         Article.isRecord(record) &&
                         Article.validateRecord(record).success
                     ) {

@@ -1,67 +1,118 @@
 import express from 'express'
-import type { AppContext } from '#/index'
-import {cookieOptions, getSessionAgent, handler, Session} from "#/utils/utils";
+import type {AppContext} from '#/index'
+import {cookieOptions, sessionAgent, handler, Session} from "#/utils/session-agent";
 import {getIronSession} from "iron-session";
+import {Prisma} from "@prisma/client";
+import {getUserById} from "#/services/user/users";
 
 const router = express.Router()
 
-export default function userRoutes(ctx: AppContext) {
 
+const fullUserQuery = {
+    did: true,
+    handle: true,
+    avatar: true,
+    banner: true,
+    displayName: true,
+    description: true,
+    email: true,
+    createdAt: true,
+    hasAccess: true,
+    inCA: true,
+    platformAdmin: true,
+    editorStatus: true,
+    seenTutorial: true,
+    usedInviteCode: {
+        select: {
+            code: true
+        }
+    },
+    subscriptionsUsed: {
+        orderBy: {
+            createdAt: "asc" as Prisma.SortOrder
+        }
+    },
+    subscriptionsBought: {
+        select: {
+            id: true,
+            price: true
+        },
+        where: {
+            price: {
+                gte: 500
+            }
+        }
+    },
+    records: {
+        select: {
+            cid: true,
+            follow: {
+                select: {
+                    userFollowedId: true
+                }
+            }
+        },
+        where: {
+            collection: "app.bsky.graph.follow",
+            follow: {
+                userFollowed: {
+                    inCA: true
+                }
+            }
+        }
+    },
+    followers: {
+        select: {
+            uri: true,
+            record: {
+                select: {
+                    authorId: true
+                }
+            }
+        }
+    },
+    messagesReceived: {
+        select: {
+            createdAt: true,
+            id: true,
+            text: true,
+            fromUserId: true,
+            toUserId: true,
+            seen: true
+        }
+    },
+    messagesSent: {
+        select: {
+            createdAt: true,
+            id: true,
+            text: true,
+            fromUserId: true,
+            toUserId: true,
+            seen: true
+        }
+    }
+}
+
+
+
+
+export default function userRoutes(ctx: AppContext) {
     router.get(
         '/user/:did?',
         handler(async (req, res) => {
             let {did} = req.params
 
             if(!did){
-                const session = await getIronSession<Session>(req, res, cookieOptions)
-                did = session.did
-            }
-
-            const user = await ctx.db.user.findUnique({
-                select: {
-                    did: true,
-                    handle: true,
-                    displayName: true,
-                    avatar: true
-                },
-                where: {
-                    did
+                const agent = await sessionAgent(req, res, ctx)
+                if(!agent.hasSession()){
+                    return res.status(200).json({error: "No session"})
+                } else {
+                    did = agent.did
                 }
-            })
-
-            return res.json(user)
-        })
-    )
-
-    router.get(
-        '/feed/:did?',
-        handler(async (req, res) => {
-            let {did} = req.params
-
-            if(!did){
-                const session = await getIronSession<Session>(req, res, cookieOptions)
-                did = session.did
             }
 
-            const agent = await getSessionAgent(req, res, ctx)
-
-            if(agent){
-                try {
-                    const feedRes = await agent.ar.cabildoabierto.feed.getFeed({feed: "discusion"})
-                    if(feedRes.success){
-                        return res.json(feedRes.data.feed)
-                    } else {
-                        console.log(feedRes)
-                        return res.json({error: "error"})
-                    }
-                } catch (err) {
-                    console.log(err)
-                    return res.json({error: "runtime error"})
-                }
-            } else {
-                return res.status(401).send('Not authorized')
-            }
-
+            const user = await getUserById(ctx, did)
+            return res.json({user})
         })
     )
 

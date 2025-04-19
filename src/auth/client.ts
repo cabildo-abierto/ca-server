@@ -13,9 +13,6 @@ export const createClient = async (db: PrismaClient) => {
       ? `${url}/client-metadata.json`
       : `http://localhost?redirect_uri=${enc(`${url}/oauth/callback`)}&scope=${enc('atproto transition:generic')}`
 
-  console.log("url:", url)
-  console.log("client id:", client_id)
-
   return new NodeOAuthClient({
     clientMetadata: {
       client_name: 'AT Protocol Express App',

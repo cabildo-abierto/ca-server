@@ -22,7 +22,7 @@ export interface Record {
   format: string
   /** Client-declared timestamp when this post was originally created. */
   createdAt: string
-  $type?: 'ar.com.cabildoabierto.dataBlock'
+  $type?: 'ar.cabildoabierto.dataBlock'
   [k: string]: unknown
 }
 

@@ -1,52 +1,245 @@
-import type {IncomingMessage, ServerResponse} from "node:http";
-import type {AppContext} from "#/index";
-import {getIronSession, SessionOptions} from "iron-session";
-import express from "express";
-import {AtpBaseClient} from "#/lexicon-api";
-
-export type Session = { did: string }
-
-export async function getSessionAgent(
-    req: IncomingMessage,
-    res: ServerResponse<IncomingMessage>,
-    ctx: AppContext
-) {
-    const session = await getIronSession<Session>(req, res, cookieOptions)
-    if (!session.did) return null
-    try {
-        const oauthSession = await ctx.oauthClient.restore(session.did)
-        const agent = new AtpBaseClient("http://127.0.0.1:8080")
-        return oauthSession ? agent : null
-    } catch (err) {
-        ctx.logger.warn({err}, 'oauth restore failed')
-        //await session.destroy()
-        return null
-    }
-}
+import {Prisma} from ".prisma/client";
+import SortOrder = Prisma.SortOrder;
+import {FeedEngagementProps} from "#/services/feed/utils";
 
 
-export const cookieOptions: SessionOptions = {
-    cookieName: 'sid',
-    password: process.env.COOKIE_SECRET || "",
-    cookieOptions: {
-        sameSite: "lax",
-        httpOnly: true,
-        secure: false,
-        path: "/"
-    }
-}
-
-
-// Helper function for defining routes
-export const handler = (fn: express.Handler) =>
-    async (
-        req: express.Request,
-        res: express.Response,
-        next: express.NextFunction
-    ) => {
-        try {
-            await fn(req, res, next)
-        } catch (err) {
-            next(err)
+export const recordQuery = {
+    uri: true,
+    cid: true,
+    rkey: true,
+    collection: true,
+    createdAt: true,
+    author: {
+        select: {
+            did: true,
+            handle: true,
+            displayName: true,
+            avatar: true,
+            inCA: true
         }
     }
+}
+
+export function addCounters(elem: any, engagement: FeedEngagementProps): any {
+    if(elem.content && elem.content.post){
+        if(elem.content.post.replyTo && elem.content.post.replyTo._count != undefined){
+            elem.content.post.replyTo = addCounters(elem.content.post.replyTo, engagement)
+        }
+        if(elem.content.post.root && elem.content.post.root._count != undefined){
+            elem.content.post.root = addCounters(elem.content.post.root, engagement)
+        }
+    }
+
+    let like: string | undefined
+    let repost: string | undefined
+
+    engagement.likes.forEach(l => {
+        if(l.likedRecordId == elem.uri){
+            like = l.uri
+        }
+    })
+    engagement.reposts.forEach(l => {
+        if(l.repostedRecordId == elem.uri){
+            repost = l.uri
+        }
+    })
+
+    const viewer = {repost, like}
+
+    return {
+        ...elem,
+        viewer
+    }
+}
+
+
+export const visualizationQuery = {
+    select: {
+        spec: true,
+        dataset: {
+            select: {
+                uri: true,
+                dataset: {
+                    select: {
+                        title: true
+                    }
+                }
+            }
+        },
+        previewBlobCid: true
+    }
+}
+
+
+export const datasetQuery = {
+    select: {
+        title: true,
+        columns: true,
+        description: true,
+        dataBlocks: {
+            select: {
+                record: {
+                    select: recordQuery
+                },
+                format: true,
+                blob: {
+                    select: {
+                        cid: true,
+                        authorId: true
+                    }
+                }
+            },
+            orderBy: {
+                record: {
+                    createdAt: "asc" as SortOrder
+                }
+            }
+        }
+    }
+}
+
+
+export const reactionsQuery = {
+    uniqueViewsCount: true,
+    _count: {
+        select: {
+            reposts: true,
+            likes: true,
+            replies: true
+        }
+    }
+}
+
+
+export const enDiscusionQuery = {
+    ...recordQuery,
+    ...reactionsQuery,
+    enDiscusion: {
+        select: {
+            uri: true
+        }
+    },
+    content: {
+        select: {
+            text: true,
+            format: true,
+            textBlob: true,
+            article: {
+                select: {
+                    title: true
+                }
+            },
+            post: {
+                select: {
+                    facets: true,
+                    embed: true,
+                    quote: true,
+                    replyTo: {
+                        select: {
+                            uri: true,
+                            author: {
+                                select: {
+                                    did: true,
+                                    handle: true,
+                                    displayName: true
+                                }
+                            }
+                        }
+                    },
+                    root: {
+                        select: {
+                            uri: true,
+                            author: {
+                                select: {
+                                    did: true,
+                                    handle: true,
+                                    displayName: true
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+}
+
+
+export const threadRepliesQuery = {
+    ...recordQuery,
+    ...reactionsQuery,
+    content: {
+        select: {
+            text: true,
+            post: {
+                select: {
+                    facets: true,
+                    embed: true,
+                    quote: true,
+                    replyTo: {
+                        select: {
+                            uri: true,
+                            collection: true,
+                            author: {
+                                select: {
+                                    handle: true,
+                                    displayName: true
+                                }
+                            },
+                            content: {
+                                select: {
+                                    text: true,
+                                    format: true,
+                                    article: {
+                                        select: {
+                                            title: true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        },
+    },
+}
+
+
+export const threadQuery = (c: string) => {
+    if(c == "app.bsky.feed.post" || c == "ar.com.cabildoabierto.quotePost"){
+
+    } else if(c == "ar.com.cabildoabierto.article"){
+        return
+    } else if(c == "ar.com.cabildoabierto.visualization"){
+        return {
+            ...recordQuery,
+            ...reactionsQuery,
+            visualization: visualizationQuery,
+        }
+    } else if(c == "ar.com.cabildoabierto.dataset"){
+        return {
+            ...recordQuery,
+            ...reactionsQuery,
+            dataset: datasetQuery,
+        }
+
+    } else {
+        throw Error("Not implemented")
+    }
+}
+
+
+export function getObjectSizeInBytes(obj: any) {
+    return new TextEncoder().encode(JSON.stringify(obj)).length;
+}
+
+
+export function logTimes(s: string, times: number[]){
+    const diffs: number[] = []
+    for(let i = 1; i < times.length; i++){
+        diffs.push(times[i]-times[i-1])
+    }
+    const sum = diffs.join(" + ")
+    console.log(s, times[times.length-1]-times[0], "=", sum)
+}

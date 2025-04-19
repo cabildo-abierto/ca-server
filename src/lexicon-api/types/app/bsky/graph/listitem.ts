@@ -12,11 +12,15 @@ import {
 
 const is$typed = _is$typed,
   validate = _validate
-const id = 'ar.cabildoabierto.actor.profile'
+const id = 'app.bsky.graph.listitem'
 
 export interface Record {
-  $type: 'ar.cabildoabierto.actor.profile'
-  createdAt?: string
+  $type: 'app.bsky.graph.listitem'
+  /** The account which is included on the list. */
+  subject: string
+  /** Reference (AT-URI) to the list record (app.bsky.graph.list). */
+  list: string
+  createdAt: string
   [k: string]: unknown
 }
 
