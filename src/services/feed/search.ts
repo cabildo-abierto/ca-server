@@ -1,49 +1,11 @@
-import {addCountersToFeed} from "./utils";
-import {getUserEngagement} from "./get-user-engagement";
 import {cleanText} from "#/utils/strings";
+import {FeedViewContent} from "#/lex-server/types/ar/cabildoabierto/feed/defs";
+import {SessionAgent} from "#/utils/session-agent";
+import {SmallTopicProps} from "#/lib/types";
+import {AppContext} from "#/index";
 
 
-export async function searchContentsNoCache(q: string, did: string): Promise<{feed?: FeedContentProps[], error?: string}>{
-
-    q = cleanText(q)
-
-    let feed: FeedContentProps[] = await ctx.db.record.findMany({
-        select: enDiscusionQuery,
-        where: {
-            collection: {
-                in: ["ar.com.cabildoabierto.quotePost", "ar.com.cabildoabierto.article", "app.bsky.feed.post"]
-            },
-            author: {
-                inCA: true
-            }
-        }
-    })
-
-    feed = feed.filter((c: FeedContentProps) => {
-        if(c.collection == "app.bsky.feed.post"){
-            if(!(c as FastPostProps).content){
-                return false
-            }
-            const text = cleanText((c as FastPostProps).content.text)
-            return text.includes(q)
-        } else if(c.collection == "ar.com.cabildoabierto.article"){
-            const text = cleanText((c as ArticleProps).content.article.title)
-            return text.includes(q)
-        } else {
-            return false
-        }
-    })
-
-    feed = feed.slice(0, 50)
-
-    const engagement = await getUserEngagement(feed, did)
-    feed = addCountersToFeed(feed, engagement)
-
-    return {feed}
-}
-
-
-export async function getFullTopicList(){
+export async function getFullTopicList(ctx: AppContext){
     const topics: SmallTopicProps[] = await ctx.db.topic.findMany({
         select: {
             id: true,
@@ -66,7 +28,7 @@ export async function getFullTopicList(){
 }
 
 
-export async function searchTopicsNoCache(q: string){
+export async function searchTopics(ctx: AppContext, q: string){
     q = cleanText(q)
 
     const getMatchScore = (topicId: string, query: string) => {
@@ -112,26 +74,43 @@ export async function searchTopicsNoCache(q: string){
     return scoredTopics.slice(0, 50).map(scored => scored.topic)
 }
 
-
-
-export async function searchTopics(q: string){
-    if(q.length == 0) return []
-    return unstable_cache(async () => {
-        return await searchTopicsNoCache(q)
-    }, ["searchTopics:"+q], {
-        tags: ["searchTopics:"+q, "searchTopics"],
-        revalidate: revalidateEverythingTime
-    })()
-}
-
-
-export async function searchContents(q: string) : Promise<{feed?: FeedContentProps[], error?: string}> {
-    const did = await getSessionDidNoRevalidate()
+export async function searchContents(ctx: AppContext, agent: SessionAgent, q: string) : Promise<{feed?: FeedViewContent[], error?: string}> {
     if(q.length == 0) return {feed: []}
-    return unstable_cache(async () => {
-        return await searchContentsNoCache(q, did)
-    }, ["searchContents:"+q], {
-        tags: ["searchContents:"+q],
-        revalidate: revalidateEverythingTime
-    })()
+    q = cleanText(q)
+
+    // TO DO
+    return {feed: []}
+    /*let feed: FeedContentProps[] = await ctx.db.record.findMany({
+        select: enDiscusionQuery,
+        where: {
+            collection: {
+                in: ["ar.com.cabildoabierto.quotePost", "ar.com.cabildoabierto.article", "app.bsky.feed.post"]
+            },
+            author: {
+                inCA: true
+            }
+        }
+    })
+
+    feed = feed.filter((c: FeedContentProps) => {
+        if(c.collection == "app.bsky.feed.post"){
+            if(!(c as FastPostProps).content){
+                return false
+            }
+            const text = cleanText((c as FastPostProps).content.text)
+            return text.includes(q)
+        } else if(c.collection == "ar.com.cabildoabierto.article"){
+            const text = cleanText((c as ArticleProps).content.article.title)
+            return text.includes(q)
+        } else {
+            return false
+        }
+    })
+
+    feed = feed.slice(0, 50)
+
+    const engagement = await getUserEngagement(feed, did)
+    feed = addCountersToFeed(feed, engagement)
+
+    return {feed}*/
 }

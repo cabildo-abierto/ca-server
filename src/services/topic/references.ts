@@ -1,8 +1,11 @@
 import {getTextFromBlob} from "./topics";
 import {cleanText} from "#/utils/strings";
+import {AppContext} from "#/index";
+import {areArraysEqual, gett} from "#/utils/arrays";
+import {decompress} from "#/utils/compression";
 
 
-function getCurrentSynonyms(topic: {id: string, versions: {synonyms?: string, content: {record: {createdAt: Date}}}[]}){
+function getCurrentSynonyms(topic: {id: string, versions: {synonyms: string | null, content: {record: {createdAt: Date}}}[]}){
     let newest = null
     for(let i = 0; i < topic.versions.length; i++){
         const v = topic.versions[i]
@@ -19,12 +22,12 @@ function getCurrentSynonyms(topic: {id: string, versions: {synonyms?: string, co
 }
 
 
-export async function getPendingSynonymsUpdates(){
+export async function getPendingSynonymsUpdates(ctx: AppContext){
     const topics: {
         id: string
-        synonyms?: string[]
+        synonyms: string[] | null
         versions: {
-            synonyms?: string
+            synonyms: string | null
             content: {
                 record: {
                     createdAt: Date
@@ -62,7 +65,7 @@ export async function getPendingSynonymsUpdates(){
             console.log("Updating synonyms for", topics[i].id, curSynonyms)
             console.log("Prev", topics[i].synonyms)
             console.log("Cur", curSynonyms)
-            updates.push(db.topic.update({
+            updates.push(ctx.db.topic.update({
                 data: {
                     synonyms: curSynonyms,
                     lastSynonymsChange: new Date()
@@ -78,14 +81,14 @@ export async function getPendingSynonymsUpdates(){
 }
 
 
-export async function getPendingSynonymsUpdatesCount(){
-    return (await getPendingSynonymsUpdates()).length
+export async function getPendingSynonymsUpdatesCount(ctx: AppContext){
+    return (await getPendingSynonymsUpdates(ctx)).length
 }
 
 
 
-export async function updateTopicsSynonyms(){
-    const updates = await getPendingSynonymsUpdates()
+export async function updateTopicsSynonyms(ctx: AppContext){
+    const updates = await getPendingSynonymsUpdates(ctx)
     const batch_size = 100
     for(let i = 0; i < updates.length; i += batch_size){
         console.log("Applying updates", i, "of", updates.length)
@@ -98,13 +101,13 @@ export async function updateTopicsSynonyms(){
 }
 
 
-async function getTopicsWithSynonyms(){
+async function getTopicsWithSynonyms(ctx: AppContext){
     const topics: {
         id: string
-        synonyms?: string[]
-        lastSynonymsChange?: Date
+        synonyms: string[] | null
+        lastSynonymsChange: Date | null
         versions: {
-            synonyms?: string
+            synonyms: string | null
             content: {
                 record: {
                     createdAt: Date
@@ -138,14 +141,14 @@ async function getTopicsWithSynonyms(){
 
 
 type ContentTextOrBlob = {
-    text?: string
-    format?: string
+    text: string | null
+    format: string | null
     uri: string
-    textBlob?: {
+    textBlob: {
         cid: string
         authorId: string
-    }
-    lastReferencesUpdate?: Date
+    } | null
+    lastReferencesUpdate: Date | null
 }
 
 
@@ -169,7 +172,7 @@ function countSynonymInText(key: string, textCleaned: string): number {
 }
 
 
-function decompressText(text: string, format?: string){
+function decompressText(text: string, format: string | null){
     if(!format || ["lexical-compressed", "markdown-compressed"].includes(format)){
         return decompress(text)
     }
@@ -178,7 +181,7 @@ function decompressText(text: string, format?: string){
 
 
 export async function getCleanedTextFromBlob(content: ContentTextOrBlob){
-    let text: string
+    let text: string | null = null
     if(content.text){
         text = content.text
     } else if(content.textBlob){
@@ -197,8 +200,10 @@ export async function getCleanedTextFromBlob(content: ContentTextOrBlob){
         null
     }
 
-    text = decompressText(text, content.format)
-    text = cleanText(text)
+    if(text){
+        text = decompressText(text, content.format)
+        text = cleanText(text)
+    }
 
     return text
 }
@@ -206,12 +211,12 @@ export async function getCleanedTextFromBlob(content: ContentTextOrBlob){
 
 async function updateReferencesForContent(
     content: ContentTextOrBlob,
-    synonymsToTopicsMap: Map<string, Set<{id: string, lastSynonymsChange?: Date}>>){
+    synonymsToTopicsMap: Map<string, Set<{id: string, lastSynonymsChange: Date | null}>>){
 
     const text = await getCleanedTextFromBlob(content)
     if(!text) return []
 
-    const referencedTopics = new Set<{id: string, lastSynonymsChange?: Date, count: number}>()
+    const referencedTopics = new Set<{id: string, lastSynonymsChange: Date | null, count: number}>()
     synonymsToTopicsMap.forEach((topics, syonynm) => {
         const count = countSynonymInText(syonynm, text)
         if(count > 0){
@@ -248,13 +253,13 @@ function getTopicCreationDate(t: {versions: {content: {record: {createdAt: Date}
 }
 
 
-function getLastSynonymsUpdate(topics: {versions: {synonyms?: string, content: {record: {createdAt: Date}}}[]}[]){
-    let last: Date = undefined
+function getLastSynonymsUpdate(topics: {versions: {synonyms: string | null, content: {record: {createdAt: Date}}}[]}[]): Date | null {
+    let last: Date | null = null
     topics.forEach((t) => {
         const creationDate = getTopicCreationDate(t)
         if(!last || last < creationDate) last = creationDate
         t.versions.forEach(version => {
-            if(version.synonyms && last < version.content.record.createdAt){
+            if(last && version.synonyms && last < version.content.record.createdAt){
                 last = version.content.record.createdAt
             }
         })
@@ -262,22 +267,22 @@ function getLastSynonymsUpdate(topics: {versions: {synonyms?: string, content: {
     return last
 }
 
-export async function updateReferences(){
+export async function updateReferences(ctx: AppContext){
     console.log("Updating references")
     const updateTime = new Date()
 
-    const topics = await getTopicsWithSynonyms()
+    const topics = await getTopicsWithSynonyms(ctx)
 
     const lastTopicUpdate = getLastSynonymsUpdate(topics)
 
-    const synonymsToTopicsMap = new Map<string, Set<{id: string, lastSynonymsChange?: Date}>>()
+    const synonymsToTopicsMap = new Map<string, Set<{id: string, lastSynonymsChange: Date | null}>>()
 
     topics.forEach((t) => {
         const synonyms = getCurrentSynonyms(t).map((s) => cleanText(s))
 
         synonyms.forEach((s) => {
             if(synonymsToTopicsMap.has(s)){
-                const cur = synonymsToTopicsMap.get(s)
+                const cur = gett(synonymsToTopicsMap, s)
                 cur.add({id: t.id, lastSynonymsChange: t.lastSynonymsChange})
                 synonymsToTopicsMap.set(s, cur)
             } else {
@@ -296,7 +301,7 @@ export async function updateReferences(){
         }
     })
 
-    contents = contents.filter((c) => (!c.lastReferencesUpdate || c.lastReferencesUpdate <= lastTopicUpdate))
+    contents = contents.filter((c) => (!c.lastReferencesUpdate || !lastTopicUpdate || c.lastReferencesUpdate <= lastTopicUpdate))
 
     let contentsWithNoRefs: string[] = []
     console.log("Contents possibly pending", contents.length)
@@ -317,13 +322,13 @@ export async function updateReferences(){
             console.log("Last content is", i, "of", contents.length)
             console.log("Got 200 after", (t2 - t1)/1000, "upd/s", 1000 * allReferenceRecords.length / (t2-t1))
             t1 = t2
-            await applyBulkReferencesUpdate(allReferenceRecords, updateTime);
+            await applyBulkReferencesUpdate(ctx, allReferenceRecords, updateTime);
             allReferenceRecords = [];
         }
     }
 
     if (allReferenceRecords.length > 0) {
-        await applyBulkReferencesUpdate(allReferenceRecords, updateTime);
+        await applyBulkReferencesUpdate(ctx, allReferenceRecords, updateTime);
     }
 
     console.log("Marking contents with no refs", contentsWithNoRefs.length)
@@ -337,7 +342,7 @@ export async function updateReferences(){
 }
 
 
-async function applyBulkReferencesUpdate(referenceRecords: { uri: string, topicId: string, type: string, count: number }[], updateTime: Date) {
+async function applyBulkReferencesUpdate(ctx: AppContext, referenceRecords: { uri: string, topicId: string, type: string, count: number }[], updateTime: Date) {
     if (referenceRecords.length === 0) return;
 
     const t1 = new Date().getTime()
@@ -398,20 +403,20 @@ async function applyBulkReferencesUpdate(referenceRecords: { uri: string, topicI
 
 
 
-export async function getPendingReferenceUpdatesCount(){
-    const topics = await getTopicsWithSynonyms()
+export async function getPendingReferenceUpdatesCount(ctx: AppContext){
+    const topics = await getTopicsWithSynonyms(ctx)
 
     const lastTopicUpdate = getLastSynonymsUpdate(topics)
     console.log("last topic update", lastTopicUpdate)
 
-    const synonymsToTopicsMap = new Map<string, Set<{id: string, lastSynonymsChange?: Date}>>()
+    const synonymsToTopicsMap = new Map<string, Set<{id: string, lastSynonymsChange: Date | null}>>()
 
     topics.forEach((t) => {
         const synonyms = getCurrentSynonyms(t).map((s) => cleanText(s))
 
         synonyms.forEach((s) => {
             if(synonymsToTopicsMap.has(s)){
-                const cur = synonymsToTopicsMap.get(s)
+                const cur = gett(synonymsToTopicsMap, s)
                 cur.add({id: t.id, lastSynonymsChange: t.lastSynonymsChange})
                 synonymsToTopicsMap.set(s, cur)
             } else {
@@ -430,13 +435,13 @@ export async function getPendingReferenceUpdatesCount(){
         }
     })
 
-    contents = contents.filter((c) => (!c.lastReferencesUpdate || new Date(c.lastReferencesUpdate).getTime() <= new Date(lastTopicUpdate).getTime()))
+    contents = contents.filter((c) => (!c.lastReferencesUpdate || !lastTopicUpdate || new Date(c.lastReferencesUpdate).getTime() <= new Date(lastTopicUpdate).getTime()))
 
     return contents.length
 }
 
 
-export async function resetUpdateReferenceTimestamps(){
+export async function resetUpdateReferenceTimestamps(ctx: AppContext){
     await ctx.db.topic.updateMany({
         data: {
             lastSynonymsChange: null
@@ -450,15 +455,15 @@ export async function resetUpdateReferenceTimestamps(){
 }
 
 
-function getSynonymsToTopicsMap(topics: {id: string, synonyms: string[], lastSynonymsChange: Date}[]){
-    const synonymsToTopicsMap = new Map<string, Set<{id: string, lastSynonymsChange?: Date}>>()
+function getSynonymsToTopicsMap(topics: {id: string, synonyms: string[], lastSynonymsChange: Date | null}[]){
+    const synonymsToTopicsMap = new Map<string, Set<{id: string, lastSynonymsChange: Date | null}>>()
 
     topics.forEach((t) => {
         const synonyms = [...t.synonyms, t.id].map((s) => cleanText(s))
 
         synonyms.forEach((s) => {
             if(synonymsToTopicsMap.has(s)){
-                const cur = synonymsToTopicsMap.get(s)
+                const cur = gett(synonymsToTopicsMap, s)
                 cur.add({id: t.id, lastSynonymsChange: t.lastSynonymsChange})
                 synonymsToTopicsMap.set(s, cur)
             } else {
@@ -470,7 +475,7 @@ function getSynonymsToTopicsMap(topics: {id: string, synonyms: string[], lastSyn
 }
 
 
-export async function applyReferencesUpdateToContent(uri: string){
+export async function applyReferencesUpdateToContent(ctx: AppContext, uri: string){
     const updateTime = new Date()
 
     const content = await ctx.db.content.findUnique({
@@ -485,6 +490,7 @@ export async function applyReferencesUpdateToContent(uri: string){
             uri: uri
         }
     })
+    if(!content) return
 
     const topics = await ctx.db.topic.findMany({
         select: {
@@ -498,6 +504,6 @@ export async function applyReferencesUpdateToContent(uri: string){
 
     const updates = await updateReferencesForContent(content, synonymsToTopicsMap)
 
-    await applyBulkReferencesUpdate(updates, updateTime)
-    await revalidateUri(uri)
+    await applyBulkReferencesUpdate(ctx, updates, updateTime)
+    // await revalidateUri(uri)
 }

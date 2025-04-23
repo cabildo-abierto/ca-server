@@ -1,77 +1,32 @@
-"use server"
-import {ThreadViewPost} from "@atproto/api/src/client/types/app/bsky/feed/defs";
-import {ArticleProps, FastPostProps, FeedContentProps, ThreadProps, ThreadReplyProps,} from "@/lib/definitions";
-import {getSessionAgent, getSessionDidNoRevalidate} from "../auth";
-import {reactionsQuery, recordQuery, threadQuery} from "../utils";
-import {isCAUser} from "../user/users";
-import {db} from "@/db";
-import {getTextFromBlob} from "../topic/topics";
-import {addViewerEngagementToFeed} from "../feed/get-user-engagement";
-import {getCollectionFromUri, getDidFromUri, getRkeyFromUri, isArticle, isPost, isQuotePost} from "@/utils/uri";
-import {getFeed} from "@/server-actions/feed/feed";
-import {FeedSkeleton} from "@/server-actions/feed/profile/main";
-import {rootCreationDateSortKey} from "@/server-actions/feed/utils";
+import {ThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {AppContext} from "#/index";
+import {SessionAgent} from "#/utils/session-agent";
+import {getCollectionFromUri} from "#/utils/uri";
+import {FeedSkeleton} from "#/services/feed/feed";
+import {
+    fetchHydrationData,
+    hydrateThreadViewContent,
+    HydrationData, joinHydrationData, ThreadSkeleton
+} from "#/services/hydration/hydrate";
+import {unique} from "#/utils/arrays";
+import {isThreadViewPost} from "#/lex-server/types/app/bsky/feed/defs";
 
 
-function threadViewPostToThread(thread: ThreadViewPost): {thread: ThreadProps} {
-    const record = thread.post.record as {createdAt: string, text: string, facets?: any, embed?: any}
+async function getThreadRepliesSkeletonForPost(ctx: AppContext, agent: SessionAgent, uri: string){
+    const {data} = await agent.bsky.getPostThread({uri})
 
-    const post: FastPostProps = {
-        uri: thread.post.uri,
-        cid: thread.post.cid,
-        author: thread.post.author,
-        collection: "app.bsky.feed.post",
-        createdAt: new Date(record.createdAt),
-        rkey: getRkeyFromUri(thread.post.uri),
-        content: {
-            text: record.text,
-            post: {
-                facets: record.facets ? JSON.stringify(record.facets) : undefined,
-                embed: record.embed ? JSON.stringify(record.embed) : undefined
-            }
-        },
-        replyCount: thread.post.replyCount,
-        repostCount: thread.post.repostCount,
-        likeCount: thread.post.likeCount
-    }
+    const thread = isThreadViewPost(data.thread) ? data.thread : null
 
-    const replies: FastPostProps[] = thread.replies ? thread.replies.map((r) => {
-        if("notFound" in r && r.notFound || "blocked" in r && r.blocked) return null
-        const replyThread = r as ThreadViewPost
-        if(replyThread.$type == "app.bsky.feed.defs#threadViewPost"){
-            return threadViewPostToThread(replyThread).thread.post as FastPostProps
-        } else {
-            return null
-        }
-    }).filter((r) => (r != null)) : []
+    const bskySkeleton = thread && thread.replies ? thread.replies
+        .map(r => isThreadViewPost(r) ? {post: r.post.uri} : null)
+        .filter(x => x != null) : []
 
-    return {thread: {post, replies}}
+    return unique(bskySkeleton, (x => x.post))
 }
 
 
-export async function getThreadFromATProto(uri: string): Promise<{thread?: ThreadProps, error?: string}> {
-    const {agent} = await getSessionAgent()
-
-    try {
-        const {data} = await agent.getPostThread({
-            uri
-        })
-        if(!("notFound" in data && data.notFound) && !("blocked" in data && data.blocked)){
-            const thread = data.thread as ThreadViewPost
-
-            return threadViewPostToThread(thread)
-        } else {
-            return {error: "No se encontró el post."}
-        }
-    } catch (err) {
-        console.error(err)
-        return {error: "Ocurrió un error al obtener el hilo."}
-    }
-}
-
-
-export async function getThreadRepliesSkeleton(uri: string): Promise<FeedSkeleton> {
-    return await db.record.findMany({
+export async function getThreadRepliesSkeletonForArticle(ctx: AppContext, agent: SessionAgent, uri: string): Promise<FeedSkeleton> {
+    return (await ctx.db.record.findMany({
         select: {
             uri: true
         },
@@ -82,66 +37,43 @@ export async function getThreadRepliesSkeleton(uri: string): Promise<FeedSkeleto
                 }
             }
         }
-    })
+    })).map(x => ({post: x.uri}))
 }
 
 
-export async function getThreadReplies(uri: string): Promise<ThreadReplyProps[]> {
-    const {feed} = await getFeed({
-        getSkeleton: async () => {return await getThreadRepliesSkeleton(uri)},
-        sortKey: rootCreationDateSortKey
-    })
+export async function getThreadRepliesSkeleton(ctx: AppContext, agent: SessionAgent, uri: string): Promise<FeedSkeleton> {
+    const collection = getCollectionFromUri(uri)
 
-    return feed as ThreadReplyProps[]
-}
-
-export async function getThreadContent(uri: string): Promise<FeedContentProps> {
-    const content = (await getFeed({
-        getSkeleton: async () => {return [{uri}]},
-        sortKey: () => null
-    })).feed[0]
-
-    if(content.collection == "ar.com.cabildoabierto.article" && content.content.textBlob){
-        content.content.text = await getTextFromBlob(content.content.textBlob)
+    if(collection == "app.bsky.feed.post"){
+        return await getThreadRepliesSkeletonForPost(ctx, agent, uri)
+    } else if(collection == "ar.cabildoabierto.feed.article"){
+        return await getThreadRepliesSkeletonForArticle(ctx, agent, uri)
+    } else {
+        throw Error("Replies skeleton not implemented for:" + collection)
     }
-
-    return content
 }
 
 
-export async function getThread(uri: string): Promise<{thread?: ThreadProps, error?: string}> {
-    const did = await getSessionDidNoRevalidate()
+export async function getThreadHydrationData(ctx: AppContext, agent: SessionAgent, skeleton: ThreadSkeleton): Promise<HydrationData> {
+    const [repliesData, mainContentData] = await Promise.all([
+        skeleton.replies ? fetchHydrationData(ctx, agent, skeleton.replies) : {},
+        fetchHydrationData(ctx, agent, [{post: skeleton.post}])
+    ])
 
-    try {
-        const mainPostQ = getThreadContent(uri)
+    return joinHydrationData(repliesData, mainContentData)
+}
 
-        const repliesQ = getThreadReplies(uri)
 
-        let [mainPost, replies] = await Promise.all([mainPostQ, repliesQ])
+export const getThread = async (ctx: AppContext, agent: SessionAgent, uri: string): Promise<{
+    thread?: ThreadViewContent,
+    error?: string
+}> => {
+    const replies = await getThreadRepliesSkeleton(ctx, agent, uri)
+    const skeleton: ThreadSkeleton = {post: uri, replies}
+    const data = await getThreadHydrationData(ctx, agent, skeleton)
 
-        if(isArticle(mainPost.collection)){
-            for(let i = 0; i < replies.length; i++){
-                if(replies[i].collection == "ar.com.cabildoabierto.quotePost"){
-                    replies[i].content.post.replyTo.text = (mainPost as ArticleProps).content.text
-                }
-            }
-        }
+    const thread = hydrateThreadViewContent({post: uri, replies}, data, true)
 
-        mainPost = (await addViewerEngagementToFeed(did, [mainPost]))[0]
-
-        if(!mainPost){
-            return {error: "El contenido no existe."}
-        }
-
-        return {
-            thread: {
-                post: mainPost,
-                replies: replies
-            }
-        }
-    } catch(err) {
-        console.error(err)
-        return {error: "No se pudo obtener el contenido."}
-    }
+    return thread ? {thread} : {error: "Ocurrió un error al obtener el contenido."}
 }
 

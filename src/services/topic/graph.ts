@@ -1,7 +1,10 @@
 import {getCategories} from "./topics";
+import {AppContext} from "#/index";
+import {TopicsGraph} from "#/lib/types";
+import {logTimes} from "#/utils/utils";
 
 
-export async function updateCategoriesGraph(){
+export async function updateCategoriesGraph(ctx: AppContext){
     let topics = await ctx.db.topic.findMany({
         select: {
             id: true,
@@ -33,8 +36,9 @@ export async function updateCategoriesGraph(){
         const cats = topics[i].categories.map(({categoryId}) => (categoryId))
         topicToCategoriesMap.set(topics[i].id, cats)
         cats.forEach((c) => {
-            if(!categories.has(c)) categories.set(c, 1)
-            else categories.set(c, categories.get(c)+1)
+            const y = categories.get(c)
+            if(!y) categories.set(c, 1)
+            else categories.set(c, y+1)
         })
     }
 
@@ -42,11 +46,15 @@ export async function updateCategoriesGraph(){
     for(let i = 0; i < topics.length; i++) {
         const yId = topics[i].id
         const catsY = topicToCategoriesMap.get(yId)
+        if(!catsY) continue
 
         for(let j = 0; j < topics[i].referencedBy.length; j++){
             if(topics[i].referencedBy[j].referencingContent.topicVersion){
-                const xId = topics[i].referencedBy[j].referencingContent.topicVersion.topicId
+                const v = topics[i].referencedBy[j].referencingContent.topicVersion
+                if(!v) continue
+                const xId = v.topicId
                 const catsX = topicToCategoriesMap.get(xId)
+                if(!catsX) continue
 
                 catsX.forEach((catX) => {
                     catsY.forEach((catY) => {
@@ -60,19 +68,19 @@ export async function updateCategoriesGraph(){
     }
 
     await ctx.db.$transaction([
-        db.categoryLink.deleteMany(),
-        db.categoryLink.createMany({
+        ctx.db.categoryLink.deleteMany(),
+        ctx.db.categoryLink.createMany({
             data: edges.map(e => ({
                 idCategoryA: e.x,
                 idCategoryB: e.y
             }))
         })
     ])
-    revalidateTag("categoriesgraph")
+    // revalidateTag("categoriesgraph")
 }
 
 
-export async function getCategoriesGraphNoCache(): Promise<TopicsGraph> {
+export async function getCategoriesGraph(ctx: AppContext): Promise<TopicsGraph> {
 
     const links = await ctx.db.categoryLink.findMany({
         select: {
@@ -81,7 +89,7 @@ export async function getCategoriesGraphNoCache(): Promise<TopicsGraph> {
         }
     })
 
-    const categories = await getCategories()
+    const categories = await getCategories(ctx)
 
     const nodeIds = categories.map(cat => cat.category)
 
@@ -103,20 +111,7 @@ export async function getCategoriesGraphNoCache(): Promise<TopicsGraph> {
 }
 
 
-export async function getCategoriesGraph(): Promise<TopicsGraph> {
-    return await unstable_cache(async () => {
-            return await getCategoriesGraphNoCache()
-        },
-        ["categoriesgraph"],
-        {
-            tags: ["categoriesgraph"],
-            revalidate: revalidateEverythingTime
-        }
-    )()
-}
-
-
-export async function getCategoryGraphNoCache(cat: string): Promise<TopicsGraph> {
+export async function getCategoryGraph(ctx: AppContext, cat: string): Promise<TopicsGraph> {
     const t1 = Date.now()
     let topics = await ctx.db.topic.findMany({
         select: {
@@ -151,7 +146,9 @@ export async function getCategoryGraphNoCache(cat: string): Promise<TopicsGraph>
 
         for(let j = 0; j < topics[i].referencedBy.length; j++){
             if(topics[i].referencedBy[j].referencingContent.topicVersion){
-                const xId = topics[i].referencedBy[j].referencingContent.topicVersion.topicId
+                const v = topics[i].referencedBy[j].referencingContent.topicVersion
+                if(!v) continue
+                const xId = v.topicId
                 if(!topicIdsSet.has(xId)) continue
 
                 edges.push({
@@ -168,18 +165,4 @@ export async function getCategoryGraphNoCache(cat: string): Promise<TopicsGraph>
         nodeIds: topics.slice(0, 500).map(t => t.id),
         edges: edges.slice(0, 100)
     }
-}
-
-
-export const getCategoryGraph = async (c: string) => {
-    return await unstable_cache(
-        async () => {
-            return await getCategoryGraphNoCache(c)
-        },
-        ["categorygraph:"+c],
-        {
-            tags: ["categorygraph:"+c, "categorygraph"],
-            revalidate: revalidateEverythingTime
-        }
-    )()
 }

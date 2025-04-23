@@ -1,6 +1,5 @@
 import {Prisma} from ".prisma/client";
 import SortOrder = Prisma.SortOrder;
-import {FeedEngagementProps} from "#/services/feed/utils";
 
 
 export const recordQuery = {
@@ -17,38 +16,6 @@ export const recordQuery = {
             avatar: true,
             inCA: true
         }
-    }
-}
-
-export function addCounters(elem: any, engagement: FeedEngagementProps): any {
-    if(elem.content && elem.content.post){
-        if(elem.content.post.replyTo && elem.content.post.replyTo._count != undefined){
-            elem.content.post.replyTo = addCounters(elem.content.post.replyTo, engagement)
-        }
-        if(elem.content.post.root && elem.content.post.root._count != undefined){
-            elem.content.post.root = addCounters(elem.content.post.root, engagement)
-        }
-    }
-
-    let like: string | undefined
-    let repost: string | undefined
-
-    engagement.likes.forEach(l => {
-        if(l.likedRecordId == elem.uri){
-            like = l.uri
-        }
-    })
-    engagement.reposts.forEach(l => {
-        if(l.repostedRecordId == elem.uri){
-            repost = l.uri
-        }
-    })
-
-    const viewer = {repost, like}
-
-    return {
-        ...elem,
-        viewer
     }
 }
 
@@ -114,11 +81,7 @@ export const reactionsQuery = {
 export const enDiscusionQuery = {
     ...recordQuery,
     ...reactionsQuery,
-    enDiscusion: {
-        select: {
-            uri: true
-        }
-    },
+    enDiscusion: true,
     content: {
         select: {
             text: true,

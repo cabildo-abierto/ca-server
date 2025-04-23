@@ -12,8 +12,8 @@ import {createBidirectionalResolver, createIdResolver, BidirectionalResolver} fr
 import {PrismaClient} from '@prisma/client'
 import cors from 'cors'
 import path from 'path'
-import {createServer} from "#/lexicon-server";
-import {Server as XrpcServer} from "#/lexicon-server"
+import {createServer} from "src/lex-server";
+import {Server as XrpcServer} from "src/lex-server"
 
 
 export type AppContext = {

@@ -1,23 +1,18 @@
-"use server"
-import {getSessionAgent} from "../auth";
-import {db} from "@/db";
 import {processCreateRecordFromRefAndRecord} from "../sync/process-event";
-import {revalidateTags} from "../admin";
-import {union} from "@/utils/arrays";
+import {SessionAgent} from "#/utils/session-agent";
+import {AppContext} from "#/index";
 
 
-export async function createDatasetATProto(title: string, columns: string[], description: string, formData: FormData, format: string){
+export async function createDatasetATProto(agent: SessionAgent, title: string, columns: string[], description: string, formData: FormData, format: string){
     const data = Object.fromEntries(formData);
 
     let f = data.data as File
-
-    const {agent, did} = await getSessionAgent()
 
     const headers: Record<string, string> = {
         "Content-Length": f.size.toString()
     }
 
-    const res = await agent.uploadBlob(f, {headers})
+    const res = await agent.bsky.uploadBlob(f, {headers})
     if(res.success){
         const blob = res.data.blob
         const curDate = new Date().toISOString()
@@ -32,8 +27,8 @@ export async function createDatasetATProto(title: string, columns: string[], des
 
         let datasetLink = null
         try {
-            const {data: datasetData} = await agent.com.atproto.repo.createRecord({
-                repo: did,
+            const {data: datasetData} = await agent.bsky.com.atproto.repo.createRecord({
+                repo: agent.did,
                 collection: "ar.com.cabildoabierto.dataset",
                 record: datasetRecord
             })
@@ -52,8 +47,8 @@ export async function createDatasetATProto(title: string, columns: string[], des
                 "$type": "ar.com.cabildoabierto.dataBlock"
             }
 
-            const {data: blockData} = await agent.com.atproto.repo.createRecord({
-                repo: did,
+            const {data: blockData} = await agent.bsky.com.atproto.repo.createRecord({
+                repo: agent.did,
                 collection: "ar.com.cabildoabierto.dataBlock",
                 record: blockRecord
             })
@@ -73,21 +68,20 @@ export async function createDatasetATProto(title: string, columns: string[], des
 }
 
 
-export async function createDataset(title: string, columns: string[], description: string, formData: FormData, format: string): Promise<{error?: string}>{
-    const {error, datasetRecord, datasetRef, blockRecord, blockRef} = await createDatasetATProto(title, columns, description, formData, format)
-    if(error) return {error}
+export async function createDataset(ctx: AppContext, agent: SessionAgent, title: string, columns: string[], description: string, formData: FormData, format: string): Promise<{error?: string}>{
+    const {error, datasetRecord, datasetRef, blockRecord, blockRef} = await createDatasetATProto(agent, title, columns, description, formData, format)
+    if(error || !datasetRef || !blockRef) return {error}
 
-
-    const r1 = await processCreateRecordFromRefAndRecord(datasetRef, datasetRecord)
-    const r2 = await processCreateRecordFromRefAndRecord(blockRef, blockRecord)
+    const r1 = await processCreateRecordFromRefAndRecord(ctx, datasetRef, datasetRecord)
+    const r2 = await processCreateRecordFromRefAndRecord(ctx, blockRef, blockRecord)
 
     const updates = [
         ...r1.updates,
         ...r2.updates
     ]
 
-    await db.$transaction(updates)
-    await revalidateTags(Array.from(union(r1.tags, r2.tags)))
+    await ctx.db.$transaction(updates)
+    // await revalidateTags(Array.from(union(r1.tags, r2.tags)))
 
     return {}
 }

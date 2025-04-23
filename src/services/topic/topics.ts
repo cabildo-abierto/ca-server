@@ -1,28 +1,13 @@
 import {fetchBlob} from "../blob";
 import {unique} from "#/utils/arrays";
 import {getDidFromUri} from "#/utils/uri";
-import { AppContext } from "#/index";
-import {TopicProps} from "#/lib/types";
+import {AppContext} from "#/index";
+import {SmallTopicProps, TopicHistoryProps, TopicProps, TopicSortOrder} from "#/lib/types";
 import {logTimes} from "#/utils/utils";
 
 
-export async function getTrendingTopics(categories: string[],
-                                        sortedBy: "popular" | "recent",
-                                        limit: number){
-    return await unstable_cache(
-        async () => {
-            return await getTrendingTopicsNoCache(categories, sortedBy, limit)
-        },
-        ["tt:"+categories.join("-")+":"+sortedBy+":"+limit],
-        {
-            tags: ["topics"],
-            revalidate: revalidateEverythingTime,
-        }
-    )()
-}
-
-
-export async function getTrendingTopicsNoCache(
+export async function getTrendingTopics(
+    ctx: AppContext,
     categories: string[],
     sortedBy: "popular" | "recent",
     limit: number): Promise<{
@@ -31,7 +16,7 @@ export async function getTrendingTopicsNoCache(
 }> {
     const where = {
         AND: categories.map((c) => {
-            if(c == "Sin categoría"){
+            if (c == "Sin categoría") {
                 return {categories: {none: {}}}
             } else {
                 return {categories: {some: {categoryId: c}}}
@@ -53,7 +38,7 @@ export async function getTrendingTopicsNoCache(
         }
     }
 
-    if(sortedBy == "popular"){
+    if (sortedBy == "popular") {
         const topics = await ctx.db.topic.findMany({
             select,
             where: {
@@ -67,11 +52,17 @@ export async function getTrendingTopicsNoCache(
             },
             take: limit
         })
-        return {topics}
+        return {
+            topics: topics.map(t => ({
+                ...t,
+                popularityScore: t.popularityScore ?? undefined,
+                lastEdit: t.lastEdit ?? undefined
+            } as SmallTopicProps))
+        }
     } else {
         const where = {
             AND: categories.map((c) => {
-                if(c == "Sin categoría"){
+                if (c == "Sin categoría") {
                     return {categories: {none: {}}}
                 } else {
                     return {categories: {some: {categoryId: c}}}
@@ -94,25 +85,18 @@ export async function getTrendingTopicsNoCache(
             },
             take: limit
         })
-        return {topics}
+        return {
+            topics: topics.map(t => ({
+                ...t,
+                popularityScore: t.popularityScore ?? undefined,
+                lastEdit: t.lastEdit ?? undefined
+            } as SmallTopicProps))
+        }
     }
 }
 
-
-export async function getCategories() {
-    return await unstable_cache(async () => {
-        return await getCategoriesNoCache()
-    },
-        ["categories"],
-        {
-            tags: ["categories"],
-            revalidate: revalidateEverythingTime
-        }
-    )()
-}
-
-export async function getCategoriesNoCache() {
-    const categoriesP = db.topicCategory.findMany({
+export async function getCategories(ctx: AppContext) {
+    const categoriesP = ctx.db.topicCategory.findMany({
         select: {
             id: true,
             _count: {
@@ -123,7 +107,7 @@ export async function getCategoriesNoCache() {
         }
     })
 
-    const noCategoryCountP = db.topic.count({
+    const noCategoryCountP = ctx.db.topic.count({
         where: {
             categories: {
                 none: {}
@@ -141,12 +125,12 @@ export async function getCategoriesNoCache() {
 }
 
 
-export async function getTextFromBlob(blob: {cid: string, authorId: string}){
+export async function getTextFromBlob(blob: { cid: string, authorId: string }) {
     try {
         const response = await fetchBlob(blob)
-        if(!response || !response.ok) return null
+        if (!response || !response.ok) return null
         const responseBlob = await response.blob()
-        if(!responseBlob) return null
+        if (!responseBlob) return null
         return await responseBlob.text()
     } catch (e) {
         console.error("Error getting text from blob", blob)
@@ -156,85 +140,80 @@ export async function getTextFromBlob(blob: {cid: string, authorId: string}){
 }
 
 
-export async function getTopicHistory(id: string): Promise<{topicHistory?: TopicHistoryProps, error?: string}> {
+export async function getTopicHistory(ctx: AppContext, id: string): Promise<{
+    topicHistory?: TopicHistoryProps,
+    error?: string
+}> {
     try {
-        const topicHistory = await unstable_cache(
-            async () => {
-                const versions = await ctx.db.record.findMany({
+        const versions = await ctx.db.record.findMany({
+            select: {
+                uri: true,
+                cid: true,
+                collection: true,
+                createdAt: true,
+                author: {
                     select: {
-                        uri: true,
-                        cid: true,
-                        collection: true,
-                        createdAt: true,
-                        author: {
-                            select: {
-                                did: true,
-                                handle: true,
-                                displayName: true,
-                                avatar: true
-                            }
-                        },
-                        content: {
-                            select: {
-                                textBlob: true,
-                                text: true,
-                                topicVersion: {
-                                    select: {
-                                        charsAdded: true,
-                                        charsDeleted: true,
-                                        accCharsAdded: true,
-                                        contribution: true,
-                                        diff: true,
-                                        message: true,
-                                        categories: true,
-                                        synonyms: true,
-                                        title: true
-                                    }
-                                }
-                            }
-                        },
-                        accepts: {
-                            select: {
-                                uri: true
-                            }
-                        },
-                        rejects: {
-                            select: {
-                                uri: true
-                            }
-                        }
-                    },
-                    where: {
-                        content: {
-                            topicVersion: {
-                                topicId: id
-                            }
-                        }
-                    },
-                    orderBy: {
-                        createdAt: "asc"
+                        did: true,
+                        handle: true,
+                        displayName: true,
+                        avatar: true
                     }
-                })
-
-                return {
-                    id,
-                    versions: versions.map(v => ({
-                        ...v,
-                        uniqueAccepts: unique(v.accepts.map(a => getDidFromUri(a.uri))).length,
-                        uniqueRejects: unique(v.rejects.map(a => getDidFromUri(a.uri))).length,
-                        content: {
-                            ...v.content,
-                            hasText: v.content.textBlob != null || v.content.text != null
+                },
+                content: {
+                    select: {
+                        textBlob: true,
+                        text: true,
+                        topicVersion: {
+                            select: {
+                                charsAdded: true,
+                                charsDeleted: true,
+                                accCharsAdded: true,
+                                contribution: true,
+                                diff: true,
+                                message: true,
+                                categories: true,
+                                synonyms: true,
+                                title: true
+                            }
                         }
-                    }))
+                    }
+                },
+                accepts: {
+                    select: {
+                        uri: true
+                    }
+                },
+                rejects: {
+                    select: {
+                        uri: true
+                    }
                 }
             },
-            ["topicHistory:"+id],
-            {
-                tags: ["topicHistory", "topicHistory:"+id, "topic:"+id, "topics"],
-                revalidate: revalidateEverythingTime
+            where: {
+                content: {
+                    topicVersion: {
+                        topicId: id
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: "asc"
             }
-        )()
+        })
+
+        const topicHistory = {
+            id,
+            versions: versions.map(v => ({
+                ...v,
+                uniqueAccepts: unique(v.accepts.map(a => getDidFromUri(a.uri))).length,
+                uniqueRejects: unique(v.rejects.map(a => getDidFromUri(a.uri))).length,
+                content: {
+                    ...v.content,
+                    hasText: v.content != null && (v.content.textBlob != null || v.content.text != null)
+                }
+            }))
+        } as TopicHistoryProps // TO DO
+
         return {topicHistory}
     } catch (e) {
         console.error("Error getting topic " + id)
@@ -244,7 +223,7 @@ export async function getTopicHistory(id: string): Promise<{topicHistory?: Topic
 }
 
 
-export async function getTopicById(ctx: AppContext, id: string): Promise<{topic?: TopicProps, error?: string}>{
+export async function getTopicById(ctx: AppContext, id: string): Promise<{ topic?: TopicProps, error?: string }> {
     const t1 = Date.now()
     const topic = await ctx.db.topic.findUnique({
         select: {
@@ -303,8 +282,8 @@ export async function getTopicById(ctx: AppContext, id: string): Promise<{topic?
 
     if (!topic || topic._count.versions == 0) return {error: "No se encontró el tema " + id + "."}
 
-    if(topic.currentVersion && !topic.currentVersion.content.text){
-        if(topic.currentVersion.content.textBlob){
+    if (topic.currentVersion && !topic.currentVersion.content.text) {
+        if (topic.currentVersion.content.textBlob) {
             topic.currentVersion.content.text = await getTextFromBlob(
                 topic.currentVersion.content.textBlob
             )
@@ -318,7 +297,7 @@ export async function getTopicById(ctx: AppContext, id: string): Promise<{topic?
 }
 
 
-export async function getTopicVersion(ctx: AppContext, uri: string){
+export async function getTopicVersion(ctx: AppContext, uri: string) {
     try {
         const topicVersion = await ctx.db.record.findUnique({
             select: {
@@ -337,12 +316,12 @@ export async function getTopicVersion(ctx: AppContext, uri: string){
                 uri: uri
             }
         })
-        if(!topicVersion){
+        if (!topicVersion) {
             return {error: "No se encontró el contenido."}
         }
 
-        if(topicVersion.content && !topicVersion.content.text){
-            if(topicVersion.content.textBlob){
+        if (topicVersion.content && !topicVersion.content.text) {
+            if (topicVersion.content.textBlob) {
                 topicVersion.content.text = await getTextFromBlob(
                     topicVersion.content.textBlob
                 )
@@ -434,7 +413,10 @@ function showAuthors(topic: TopicHistoryProps, topicVersion: TopicVersionProps) 
  */
 
 
-export async function getTopicVersionAuthors(uri: string): Promise<{topicVersionAuthors?: {text: string}, error?: string}> {
+export async function getTopicVersionAuthors(uri: string): Promise<{
+    topicVersionAuthors?: { text: string },
+    error?: string
+}> {
     return {
         topicVersionAuthors: {
             text: "Sin implementar"
@@ -444,68 +426,14 @@ export async function getTopicVersionAuthors(uri: string): Promise<{topicVersion
 }
 
 
-export async function getTopicVersionChanges(uri: string): Promise<{topicVersionChanges?: {text: string}, error?: string}> {
+export async function getTopicVersionChanges(uri: string): Promise<{
+    topicVersionChanges?: { text: string },
+    error?: string
+}> {
     return {
         topicVersionChanges: {
             text: "Sin implementar"
         },
         error: undefined
     }
-}
-
-
-
-export async function getTopicsByCategoriesNoCache(sortedBy: TopicSortOrder){
-
-    const t1 = Date.now()
-    const categoriesWithSize = await getCategories()
-    const t2 = Date.now()
-
-    const sizeMap = new Map<string, number>(categoriesWithSize.map(({category, size}) => ([category, size])))
-
-    const categories = categoriesWithSize.map(({category}) => (category))
-
-    const categoriesMap = new Map<string, SmallTopicProps[]>()
-
-    const t3 = Date.now()
-    const promises: Promise<{error?: string, topics?: SmallTopicProps[]}>[] = []
-    for(let i = 0; i < categories.length; i++){
-        const c = categories[i]
-        promises.push(getTrendingTopics([c], sortedBy, 5))
-    }
-    const tt = await Promise.all(promises)
-    const t4 = Date.now()
-
-    for(let i = 0; i < categories.length; i++) {
-        categoriesMap.set(categories[i], tt[i].topics)
-    }
-
-    const cats = Array.from(categoriesMap)
-
-    const res: {c: string, topics: string[], size: number}[] = []
-    for(let i = 0; i < cats.length; i++) {
-        res.push({
-            c: cats[i][0],
-            topics: cats[i][1].slice(0, 5).map(t => t.id),
-            size: sizeMap.get(cats[i][0])
-        })
-    }
-    const t5 = Date.now()
-    logTimes("topics by categories time", [t1, t2, t3, t4, t5])
-
-    return res
-}
-
-
-export async function getTopicsByCategories(sortedBy: TopicSortOrder){
-    return await unstable_cache(
-        async () => {
-            return await getTopicsByCategoriesNoCache(sortedBy)
-        },
-        ["bycategories:"+sortedBy],
-        {
-            tags: ["topics"],
-            revalidate: revalidateEverythingTime
-        }
-    )()
 }

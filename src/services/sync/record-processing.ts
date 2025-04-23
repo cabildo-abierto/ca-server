@@ -273,7 +273,7 @@ export function processTopic(ctx: AppContext, r: SyncRecordProps) {
     if(isNewCurrentVersion && record.categories){
         updates = [
             ...updates,
-            ...setTopicCategories(record.id, JSON.parse(record.categories))
+            ...setTopicCategories(ctx, record.id, JSON.parse(record.categories))
         ]
     }
 

@@ -1,42 +1,35 @@
-import {getFeed} from "#/services/feed/feed";
+import {FeedSkeleton, GetSkeletonProps} from "#/services/feed/feed";
+import {concat} from "#/utils/arrays";
+import {AppContext} from "#/index";
+import {SessionAgent} from "#/utils/session-agent";
+import {getSkeletonFromTimeline} from "#/services/feed/inicio/following";
 
 
-export async function getMainProfileFeedSkeletonBsky(did: string): Promise<FeedSkeleton> {
-    const {agent} = await getSessionAgent()
-    const feed = await agent.getAuthorFeed({actor: did, filter: "posts_and_author_threads"})
+export async function getMainProfileFeedSkeletonBsky(agent: SessionAgent, did: string): Promise<FeedSkeleton> {
+    const feed = await agent.bsky.getAuthorFeed({actor: did, filter: "posts_and_author_threads"})
 
-    return removeRepeatedInSkeleton(feed.data.feed.map(skeletonElementFromFeedViewPost))
+    return getSkeletonFromTimeline(feed.data.feed, false)
 }
 
 
-export async function getMainProfileFeedSkeletonCA(did: string): Promise<FeedSkeleton> {
-    const res = await ctx.db.record.findMany({
+export async function getMainProfileFeedSkeletonCA(ctx: AppContext, did: string): Promise<FeedSkeleton> {
+    return (await ctx.db.record.findMany({
         select: {
-            uri: true,
-            lastInThreadId: true,
-            secondToLastInThreadId: true
+            uri: true
         },
         where: {
             authorId: did,
-            collection: "ar.com.cabildoabierto.article"
+            collection: "ar.cabildoabierto.feed.article"
         }
-    })
-
-    return res
+    })).map(({uri}) => ({post: uri}))
 }
 
 
-export async function getMainProfileFeedSkeleton(did: string): Promise<FeedSkeleton> {
-    return concat(await Promise.all([
-        getMainProfileFeedSkeletonBsky(did),
-        getMainProfileFeedSkeletonCA(did)
-    ]))
-}
-
-
-export async function getMainProfileFeed(did: string){
-    return await getFeed({
-        getSkeleton: async () => {return await getMainProfileFeedSkeleton(did)},
-        sortKey: rootCreationDateSortKey
-    })
+export const getMainProfileFeedSkeleton = (did: string) : GetSkeletonProps => {
+    return async (ctx, agent) => {
+        return concat(await Promise.all([
+            getMainProfileFeedSkeletonBsky(agent, did),
+            getMainProfileFeedSkeletonCA(ctx, did)
+        ]))
+    }
 }

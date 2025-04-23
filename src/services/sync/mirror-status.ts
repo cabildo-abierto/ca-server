@@ -1,28 +1,20 @@
 import {$Enums} from ".prisma/client";
 import MirrorStatus = $Enums.MirrorStatus;
+import {AppContext} from "#/index";
 
-export async function getUserMirrorStatus(did: string){
-    return (await unstable_cache(
-        async () => {
-            return await ctx.db.user.findUnique({
-                select: {
-                    mirrorStatus: true
-                },
-                where: {
-                    did
-                }
-            })
+export async function getUserMirrorStatus(ctx: AppContext, did: string){
+    return (await ctx.db.user.findUnique({
+        select: {
+            mirrorStatus: true
         },
-        ["mirrorStatus:"+did],
-        {
-            tags: ["mirrorStatus:"+did, "user:"+did],
-            revalidate: revalidateEverythingTime
+        where: {
+            did
         }
-    )()).mirrorStatus
+    }))?.mirrorStatus ?? null
 }
 
 
-export async function getDirtyUsers(){
+export async function getDirtyUsers(ctx: AppContext){
     return (await ctx.db.user.findMany({
         select: {
             did: true
@@ -35,13 +27,13 @@ export async function getDirtyUsers(){
 }
 
 
-export async function setMirrorStatus(did: string, mirrorStatus: MirrorStatus){
+export async function setMirrorStatus(ctx: AppContext, did: string, mirrorStatus: MirrorStatus){
     await ctx.db.user.update({
         data: {
             mirrorStatus
         },
         where: {did}
     })
-    revalidateTag("dirtyUsers")
-    revalidateTag("mirrorStatus:"+did)
+    // revalidateTag("dirtyUsers")
+    // revalidateTag("mirrorStatus:"+did)
 }

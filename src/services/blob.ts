@@ -1,4 +1,6 @@
 import {DidResolver} from "@atproto/identity";
+import {SessionAgent} from "#/utils/session-agent";
+import {ImagePayload} from "#/routes/post";
 
 
 export async function getServiceEndpointForDid(did: string){
@@ -40,4 +42,29 @@ export async function fetchBlob(blob: {cid: string, authorId: string}) {
     return null
 }
 
+
+export async function uploadStringBlob(agent: SessionAgent, s: string){
+    const encoder = new TextEncoder()
+    const uint8 = encoder.encode(s)
+    const res = await agent.bsky.uploadBlob(uint8)
+    return res.data.blob
+}
+
+
+export async function uploadImageSrcBlob(agent: SessionAgent, src: string){
+    const response = await fetch(src)
+    const arrayBuffer = await response.arrayBuffer();
+    const uint8 = new Uint8Array(arrayBuffer);
+    const res = await agent.bsky.uploadBlob(uint8)
+    return res.data.blob
+}
+
+
+export async function uploadImageBlob(agent: SessionAgent, image: ImagePayload){
+    if(image.$type == "url") {
+        return await uploadStringBlob(agent, image.src)
+    } else {
+        return await uploadImageSrcBlob(agent, image.image)
+    }
+}
 

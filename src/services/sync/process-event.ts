@@ -23,13 +23,12 @@ import {deleteRecords} from "#/services/admin";
 
 
 export async function processEvent(ctx: AppContext, e: JetstreamEvent){
-
     if(e.kind == "commit"){
         const c = e as CommitEvent
 
         if(c.commit.collection == "ar.com.cabildoabierto.profile" && c.commit.rkey == "self"){
             await newUser(ctx, e.did, true)
-            const status = await getUserMirrorStatus(e.did)
+            const status = await getUserMirrorStatus(ctx, e.did)
 
             if(status == "Dirty" || status == "Failed"){
                 await syncUser(ctx, e.did)

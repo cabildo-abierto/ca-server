@@ -1,30 +1,16 @@
-import {addCountersToFeed} from "./utils";
-import {getUserEngagement} from "./get-user-engagement";
+import {AppContext} from "#/index";
+import {FeedContentProps} from "#/lib/types";
 
 
-export async function getTopicFeed(id: string): Promise<{feed?: {mentions: FeedContentProps[], replies: FeedContentProps[], topics: string[]}, error?: string}> {
-    const did = await getSessionDidNoRevalidate()
-
-    return await unstable_cache(
-        async () => {
-            return await getTopicFeedNoCache(id, did)
-        },
-        ["topic-feed:"+id],
-        {
-            tags: ["topic:"+id, "topics"],
-            revalidate: 5
-        }
-    )()
-}
-
-
-export async function getTopicFeedNoCache(id: string, did: string): Promise<{feed?: {mentions: FeedContentProps[], replies: FeedContentProps[], topics: string[]}, error?: string}> {
-
+export async function getTopicFeed(ctx: AppContext, id: string, did: string): Promise<{feed?: {mentions: FeedContentProps[], replies: FeedContentProps[], topics: string[]}, error?: string}> {
+    // TO DO
+    return {feed: {mentions: [], replies: [], topics: []}}
+    /*
     id = decodeURIComponent(id)
 
     try {
 
-        const getReplies = db.record.findMany({
+        const getReplies = ctx.db.record.findMany({
             select: threadRepliesQuery,
             where: {
                 OR: [
@@ -49,7 +35,7 @@ export async function getTopicFeedNoCache(id: string, did: string): Promise<{fee
             }
         })
 
-        const getMentions = db.record.findMany({
+        const getMentions = ctx.db.record.findMany({
             select: {
                 ...recordQuery,
                 ...reactionsQuery,
@@ -114,7 +100,7 @@ export async function getTopicFeedNoCache(id: string, did: string): Promise<{fee
         })
 
         // TO DO: Solo mostrar versiones actuales.
-        const getTopicMentions = db.content.findMany({
+        const getTopicMentions = ctx.db.content.findMany({
             select: {
                 topicVersion: {
                     select: {
@@ -153,4 +139,5 @@ export async function getTopicFeedNoCache(id: string, did: string): Promise<{fee
         console.error(e)
         return {error: "Ocurrió un error al obtener el feed del tema " + id}
     }
+    */
 }

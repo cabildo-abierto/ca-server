@@ -30,7 +30,7 @@ export async function syncAllUsers(ctx: AppContext, mustUpdateCollections?: stri
             return {error}
         }
     } else {
-        users = await getDirtyUsers()
+        users = await getDirtyUsers(ctx)
     }
 
     for(let i = 0; i < users.length; i++) {
@@ -121,7 +121,7 @@ export async function syncUser(ctx: AppContext, did: string, collectionsMustUpda
 
     await deleteRecords({ctx, uris, atproto: false})
 
-    await setMirrorStatus(did, "Sync")
+    await setMirrorStatus(ctx, did, "Sync")
 }
 
 

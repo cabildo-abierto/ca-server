@@ -16,6 +16,35 @@
           "type": "integer"
         }
       }
+    },
+    "view": {
+      "type": "object",
+      "required": ["start", "end", "quotedText", "quotedContent", "quotedContentAuthor"],
+      "properties": {
+        "start": {
+          "type": "integer"
+        },
+        "end": {
+          "type": "integer"
+        },
+        "quotedText": {
+          "type": "string"
+        },
+        "quotedTextFormat": {
+          "type": "string"
+        },
+        "quotedContent": {
+          "type": "string",
+          "format": "at-uri"
+        },
+        "quotedContentAuthor": {
+          "type": "ref",
+          "ref": "app.bsky.actor.defs#profileViewBasic"
+        },
+        "quotedContentTitle": {
+          "type": "string"
+        }
+      }
     }
   }
 }

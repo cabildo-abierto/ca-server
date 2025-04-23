@@ -3,7 +3,7 @@ import {CreateArticleProps} from "#/routes/article";
 import {SessionAgent} from "#/utils/session-agent";
 import {splitUri} from "#/utils/uri";
 import {processCreateRecord} from "#/services/sync/process-event";
-import * as Article from '#/lexicon-server/types/ar/cabildoabierto/feed/article'
+import {uploadStringBlob} from "#/services/blob";
 
 
 export async function createArticle(ctx: AppContext, agent: SessionAgent, article: CreateArticleProps){
@@ -11,10 +11,7 @@ export async function createArticle(ctx: AppContext, agent: SessionAgent, articl
     const text = article.text
 
     try {
-        const encoder = new TextEncoder()
-        const uint8 = encoder.encode(text)
-        const res = await agent.bsky.uploadBlob(uint8)
-        const blobRef = res.data.blob
+        const blobRef = await uploadStringBlob(agent, text)
 
         const record = {
             "$type": "ar.cabildoabierto.feed.article",

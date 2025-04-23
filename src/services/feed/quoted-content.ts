@@ -1,7 +1,7 @@
 import {getTextFromBlob} from "../topic/topics";
 
 
-export async function getQuotedContentNoCache({did, rkey}: {did: string, rkey: string}): Promise<QuotedContent> {
+/*export async function getQuotedContentNoCache({did, rkey}: {did: string, rkey: string}): Promise<QuotedContent> {
     try {
         const q = await ctx.db.record.findMany({
             select: {
@@ -72,4 +72,4 @@ export async function getQuotedContent({did, rkey}: {did: string, rkey: string})
             tags: ["record:"+did+":"+rkey, "quotedContent"],
             revalidate: revalidateEverythingTime
         })()
-}
+}*/

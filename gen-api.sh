@@ -10,6 +10,10 @@
   ./lexicons/com/atproto/label/* \
   ./lexicons/com/atproto/server/* \
   ./lexicons/com/atproto/moderation/* \
+  ./lexicons/com/atproto/lexicon/* \
+  ./lexicons/com/atproto/sync/* \
+  ./lexicons/com/atproto/temp/* \
+  ./lexicons/com/atproto/admin/* \
   ./lexicons/app/bsky/feed/* \
   ./lexicons/app/bsky/embed/* \
   ./lexicons/app/bsky/graph/* \

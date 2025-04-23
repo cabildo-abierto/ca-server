@@ -1,33 +1,17 @@
+import {GetSkeletonProps} from "#/services/feed/feed";
 
 
-export async function getEditsProfileFeed(userId: string): Promise<{feed?: FeedContentProps[], error?: string}>{
-    const edits: FeedContentProps[] = await ctx.db.record.findMany({
-        select: {
-            ...recordQuery,
-            content: {
-                select: {
-                    topicVersion: {
-                        select: {
-                            topic: {
-                                select: {
-                                    id: true,
-                                    versions: {
-                                        select: {
-                                            title: true,
-                                            categories: true
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+
+export const getEditsProfileFeedSkeleton = (did: string) : GetSkeletonProps => {
+    return async (ctx, agent) => {
+        return (await ctx.db.record.findMany({
+            select: {
+                uri: true
+            },
+            where: {
+                collection: "ar.cabildoabierto.feed.topic",
+                authorId: did
             }
-        },
-        where: {
-            authorId: userId,
-            collection: "ar.com.cabildoabierto.topic"
-        }
-    })
-    return {feed: edits}
+        })).map(({uri}) => ({post: uri}))
+    }
 }

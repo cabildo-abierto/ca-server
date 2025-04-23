@@ -1,13 +1,32 @@
+import {AppContext} from "#/index";
 
 
+export function currentCategories(topic: {
+    versions: { categories: string | null, content: { record: { createdAt: Date } } }[]
+}) {
+    let last = null
+    for (let i = 0; i < topic.versions.length; i++) {
+        if (topic.versions[i].categories != null) {
+            const date = new Date(topic.versions[i].content.record.createdAt).getTime()
+            if (last == null || new Date(topic.versions[last].content.record.createdAt).getTime() < date) {
+                last = i
+            }
+        }
+    }
+    if (last == null) return []
 
-export function setTopicCategories(topicId: string, categories: string[]){
+    const lastCat = topic.versions[last].categories
+    return lastCat ? (JSON.parse(lastCat) as string[]) : []
+}
+
+
+export function setTopicCategories(ctx: AppContext, topicId: string, categories: string[]){
     let updates = []
-    updates.push(db.topicToCategory.deleteMany({
+    updates.push(ctx.db.topicToCategory.deleteMany({
         where: { topicId: topicId }
     }))
 
-    updates.push(db.topic.update({
+    updates.push(ctx.db.topic.update({
         where: { id: topicId },
         data: {
             categories: {
@@ -26,9 +45,8 @@ export function setTopicCategories(topicId: string, categories: string[]){
 }
 
 
-export function setTopicSynonyms(topicId: string, synonyms: string[]){
-
-    return [db.topic.update({
+export function setTopicSynonyms(ctx: AppContext, topicId: string, synonyms: string[]){
+    return [ctx.db.topic.update({
         data: {
             synonyms
         },

@@ -45,10 +45,6 @@
             "createdAt": {
               "type": "string",
               "format": "datetime"
-            },
-            "$type": {
-              "type": "string",
-              "const": "ar.cabildoabierto.wiki.topicVersion"
             }
           }
         }

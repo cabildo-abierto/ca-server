@@ -1,86 +1,38 @@
-"use server"
-import {EngagementProps, FeedContentProps, VisualizationProps} from "@/lib/definitions";
-import {unstable_cache} from "next/cache";
-import {db} from "@/db";
-import {
-    addCounters,
-    enDiscusionQuery,
-    reactionsQuery,
-    recordQuery,
-    revalidateEverythingTime,
-    visualizationQuery
-} from "../utils";
-import {getSessionDidNoRevalidate} from "../auth";
 import {getUserEngagement} from "../feed/get-user-engagement";
-import {addCountersToFeed} from "../feed/utils";
+import {AppContext} from "#/index";
+import {enDiscusionQuery, reactionsQuery, recordQuery, visualizationQuery} from "#/utils/utils";
+import {SessionAgent} from "#/utils/session-agent";
+import {VisualizationProps} from "#/lib/types";
 
 
-export async function getVisualizations(){
-    let v: FeedContentProps[] = await unstable_cache(
-        async () => {
-            return await db.record.findMany({
-                select: {
-                    ...enDiscusionQuery,
-                    visualization: visualizationQuery
-                },
-                where: {
-                    collection: "ar.com.cabildoabierto.visualization",
-                    visualization: {
-                        isNot: null
-                    }
-                },
-                orderBy: {
-                    createdAt: "desc"
-                }
-            })
+export async function getVisualizations(ctx: AppContext, agent: SessionAgent){
+    let v = await ctx.db.record.findMany({
+        select: {
+            ...enDiscusionQuery,
+            visualization: visualizationQuery
         },
-        ["visualizations"],
-        {
-            tags: ["visualizations"],
-            revalidate: revalidateEverythingTime
-        }
-    )()
-
-    const did = await getSessionDidNoRevalidate()
-    const engagement = await getUserEngagement(v, did)
-
-    v = addCountersToFeed(v, engagement)
-
-    return v
-}
-
-
-export async function getVisualization(uri: string): Promise<{visualization?: VisualizationProps, error?: string}> {
-
-    try {
-        const getVisualization = unstable_cache(
-            async () => {
-                return await getVisualizationNoCache(uri)
-            },
-            [uri],
-            {
-                tags: [uri, "visualization"],
-                revalidate: revalidateEverythingTime
+        where: {
+            collection: "ar.com.cabildoabierto.visualization",
+            visualization: {
+                isNot: null
             }
-        )()
+        },
+        orderBy: {
+            createdAt: "desc"
+        }
+    })
 
-        const did = await getSessionDidNoRevalidate()
-        const [{visualization, error}, engagement] = await Promise.all([getVisualization, getUserEngagement([{uri}], did)])
+    const did = agent.did
+    const engagement = await getUserEngagement(ctx, v.map(x => x.uri), did)
 
-        if(error) return {error}
-
-        return {visualization: addCounters(visualization, engagement)}
-    } catch (error) {
-        console.error("Error getting visualization", uri)
-        console.error(error)
-        return {error}
-    }
+    // TO DO: return addViewerToFeed(v, engagement)
 }
 
 
-export async function getVisualizationNoCache(uri: string): Promise<{visualization?: VisualizationProps & EngagementProps, error?: string}> {
+export async function getVisualization(ctx: AppContext, agent: SessionAgent, uri: string): Promise<{visualization?: VisualizationProps, error?: string}> {
+
     try {
-        const v: VisualizationProps = await db.record.findUnique({
+        const getVisualization = await ctx.db.record.findUnique({
             select: {
                 ...recordQuery,
                 ...reactionsQuery,
@@ -91,8 +43,13 @@ export async function getVisualizationNoCache(uri: string): Promise<{visualizati
             }
         })
 
-        return {visualization: v}
-    } catch (e) {
-        return {error: "Error al obtener la visualización"}
+        const did = agent.did
+        const [visualization, engagement] = await Promise.all([getVisualization, getUserEngagement(ctx, [uri], did)])
+
+        return {visualization: visualization as VisualizationProps} // TO DO: addViewer(visualization, engagement)}
+    } catch (error) {
+        console.error("Error getting visualization", uri)
+        console.error(error)
+        return {error: "Ocurrió un error al obtener la visualización."}
     }
 }

@@ -2,7 +2,7 @@ import type {IncomingMessage, ServerResponse} from "node:http";
 import type {AppContext} from "#/index";
 import {getIronSession, SessionOptions} from "iron-session";
 import express from "express";
-import {AtpBaseClient} from "#/lexicon-api";
+import {AtpBaseClient} from "src/lex-api";
 import {Agent as BskyAgent} from "@atproto/api";
 
 export type Session = { did: string }

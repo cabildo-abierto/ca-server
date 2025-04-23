@@ -1,4 +1,6 @@
-
+import {gett} from "#/utils/arrays";
+import {AppContext} from "#/index";
+import {getDidFromUri} from "#/utils/uri";
 
 
 type ContentInteractions = {
@@ -18,8 +20,8 @@ function getAllContentInteractions(uri: string,
                                    m: Map<string, ContentInteractions>,
                                    immediateInteractions: Map<string, Set<string>>
 ){
-    const c = m.get(uri)
-    const s = immediateInteractions.get(uri)
+    const c = gett(m, uri)
+    const s = gett(immediateInteractions, uri)
 
     c.replies.forEach((r) => {
         const rInteractions = getAllContentInteractions(r.uri, m, immediateInteractions)
@@ -34,7 +36,7 @@ function countTopicInteractions(topic: {id: string, referencedBy: {referencingCo
     const s = new Set<string>()
 
     topic.referencedBy.forEach(({referencingContentId}) => {
-        const cInteractions = contentInteractions.get(referencingContentId)
+        const cInteractions = gett(contentInteractions, referencingContentId)
 
         cInteractions.forEach((did) => {
             s.add(did)
@@ -42,7 +44,7 @@ function countTopicInteractions(topic: {id: string, referencedBy: {referencingCo
     })
 
     topic.versions.forEach((v) => {
-        const cInteractions = contentInteractions.get(v.uri)
+        const cInteractions = gett(contentInteractions, v.uri)
 
         cInteractions.forEach((did) => {
             s.add(did)
@@ -61,50 +63,45 @@ function countTopicInteractions(topic: {id: string, referencedBy: {referencingCo
 }
 
 
-export async function computeTopicsPopularityScore(): Promise<{
+export async function computeTopicsPopularityScore(ctx: AppContext): Promise<{
     id: string, score: number}[]>{
-    try {
-        const contentInteractionsPromise = getContentInteractions()
-        const topicsPromise = db.topic.findMany({
-            select: {
-                id: true,
-                referencedBy: {
-                    select: {
-                        referencingContentId: true
-                    }
-                },
-                versions: {
-                    select: {
-                        uri: true
-                    }
+    const contentInteractionsPromise = getContentInteractions(ctx)
+    const topicsPromise = ctx.db.topic.findMany({
+        select: {
+            id: true,
+            referencedBy: {
+                select: {
+                    referencingContentId: true
+                }
+            },
+            versions: {
+                select: {
+                    uri: true
                 }
             }
-        })
-
-        const [contentInteractions, topics] = await Promise.all([contentInteractionsPromise, topicsPromise])
-
-        const contentInteractionsMap = new Map<string, Set<string>>()
-        contentInteractions.map(({uri, interactions}) => {
-            contentInteractionsMap.set(uri, new Set<string>(interactions))
-        })
-
-        const topicScores = new Map<string, number>()
-        for(let i = 0; i < topics.length; i++){
-            const score = countTopicInteractions(topics[i], contentInteractionsMap)
-            topicScores.set(topics[i].id, score)
         }
+    })
 
-        return Array.from(topicScores.entries()).map(([id, score]) => {
-            return {id, score}
-        })
-    } catch (err) {
-        console.error("Error", err)
-        return null
+    const [contentInteractions, topics] = await Promise.all([contentInteractionsPromise, topicsPromise])
+
+    const contentInteractionsMap = new Map<string, Set<string>>()
+    contentInteractions.map(({uri, interactions}) => {
+        contentInteractionsMap.set(uri, new Set<string>(interactions))
+    })
+
+    const topicScores = new Map<string, number>()
+    for(let i = 0; i < topics.length; i++){
+        const score = countTopicInteractions(topics[i], contentInteractionsMap)
+        topicScores.set(topics[i].id, score)
     }
+
+    return Array.from(topicScores.entries()).map(([id, score]) => {
+        return {id, score}
+    })
 }
 
 
-export async function getContentInteractions() : Promise<{uri: string, interactions: string[]}[]> {
+export async function getContentInteractions(ctx: AppContext) : Promise<{uri: string, interactions: string[]}[]> {
     const contents: ContentInteractions[] = await ctx.db.record.findMany({
         select: {
             uri: true,
@@ -180,8 +177,8 @@ export async function getContentInteractions() : Promise<{uri: string, interacti
 }
 
 
-export async function updateTopicPopularityScores() {
-    const scores: { id: string, score: number }[] = (await computeTopicsPopularityScore()).map(
+export async function updateTopicPopularityScores(ctx: AppContext) {
+    const scores: { id: string, score: number }[] = (await computeTopicsPopularityScore(ctx)).map(
         ({ id, score }) => ({
             id: id,
             score: score

@@ -1,3 +1,14 @@
+import {handleToDid} from "#/services/user/users";
+import {SessionAgent} from "#/utils/session-agent";
+
+export async function getValidUri(agent: SessionAgent, userId: string, shortCollection: string, rkey: string){
+    const did = await handleToDid(agent, userId)
+    const collection = shortCollectionToCollection(shortCollection)
+
+    return getUri(did, collection, rkey)
+}
+
+
 export function getUri(did: string, collection: string, rkey: string) {
     return "at://" + did + "/" + collection + "/" + rkey
 }
@@ -22,13 +33,13 @@ export function getRkeyFromUri(uri: string) {
 
 export function shortCollectionToCollection(collection: string) {
     if (collection == "article") {
-        return "ar.com.cabildoabierto.article"
+        return "ar.cabildoabierto.feed.article"
     }
     if (collection == "post") {
         return "app.bsky.feed.post"
     }
     if (collection == "visualization") {
-        return "ar.com.cabildoabierto.visualization"
+        return "ar.cabildoabierto.data.visualization"
     }
     return collection
 }

@@ -1,16 +1,11 @@
-"use server"
-import {unstable_cache} from "next/cache";
-import {datasetQuery, enDiscusionQuery, recordQuery, revalidateEverythingTime} from "../utils";
-import {DatasetProps, FeedContentProps} from "@/lib/definitions";
-import {db} from "@/db";
 import JSZip from "jszip";
 import Papa from 'papaparse';
-import {getSessionDidNoRevalidate} from "../auth";
-import {getUserEngagement} from "../feed/get-user-engagement";
-import {addCountersToFeed} from "../feed/utils";
 import {fetchBlob} from "../blob";
-import {compress, decompress} from "@/utils/compression";
-import {getDidFromUri, getRkeyFromUri} from "@/utils/uri";
+import {compress, decompress} from "#/utils/compression";
+import {DatasetProps} from "#/lib/types";
+import {AppContext} from "#/index";
+import {datasetQuery, recordQuery} from "#/utils/utils";
+import {gett} from "#/utils/arrays";
 
 
 function compressData(data: any[]){
@@ -19,7 +14,7 @@ function compressData(data: any[]){
 }
 
 
-function decompressDataset(dataset: {dataset?: DatasetProps, data?: string}){
+function decompressDataset(dataset: {dataset: DatasetProps, data: string}){
     const decompressedData = decompress(dataset.data)
     const res = JSON.parse(decompressedData)
 
@@ -27,18 +22,11 @@ function decompressDataset(dataset: {dataset?: DatasetProps, data?: string}){
 }
 
 
-export async function getDataset(uri: string): Promise<{dataset: DatasetProps, data: any[]}> {
+/*export async function getDataset(ctx: AppContext, uri: string): Promise<{dataset?: {dataset: DatasetProps, data: any[]}, error?: string}> {
     const did = getDidFromUri(uri)
     const rkey = getRkeyFromUri(uri)
-    const compressedDataset = await unstable_cache(async () => {
-            return await getCompressedDataset(uri)
-        },
-        ["dataset:"+did+":"+rkey],
-        {
-            tags: ["dataset:"+did+":"+rkey, "dataset"],
-            revalidate: revalidateEverythingTime
-        }
-    )()
+    const compressedDataset = await getCompressedDataset(ctx, uri)
+    if(!compressedDataset.dataset) return {error: compressedDataset.error}
 
     const dataset = decompressDataset(compressedDataset)
 
@@ -61,36 +49,34 @@ export async function getDataset(uri: string): Promise<{dataset: DatasetProps, d
     } else {
         return dataset
     }
-}
+}*/
 
 
-export async function getCompressedDataset(uri: string): Promise<{dataset?: DatasetProps, data?: string, error?: string}> {
+export async function getCompressedDataset(ctx: AppContext, uri: string): Promise<{dataset?: {dataset: DatasetProps, data: string}, error?: string}> {
 
-    let dataset: DatasetProps
-    try {
-        dataset = await db.record.findUnique({
-            select: {
-                ...recordQuery,
-                dataset: datasetQuery,
-                visualizationsUsing: {
-                    select: {
-                        uri: true
-                    }
+    const dataset = await ctx.db.record.findUnique({
+        select: {
+            ...recordQuery,
+            dataset: datasetQuery,
+            visualizationsUsing: {
+                select: {
+                    uri: true
                 }
-            },
-            where: {
-                uri: uri
             }
-        })
-    } catch (err) {
-        return {error: "Ocurrió un error al obtener el dataset."}
-    }
+        },
+        where: {
+            uri: uri
+        }
+    })
+
+    if(!dataset || !dataset.dataset) {return {error: "No se pudo obtener el dataset."}}
 
     let acumSize = 0
-    let data = []
+    let data: any[] = []
     const blocks = dataset.dataset.dataBlocks
     for(let i = 0; i < blocks.length; i++){
         const blob = blocks[i].blob
+        if(!blob) return {error: "No se pudo obtener el dataset."}
 
         const uint8Array = await fetchBlob(blob)
         if(!uint8Array || !uint8Array.ok){
@@ -136,7 +122,7 @@ export async function getCompressedDataset(uri: string): Promise<{dataset?: Data
     for(let i = 0; i < data.length; i++){
         for(let j = 0; j < dataset.dataset.columns.length; j++){
             const c = dataset.dataset.columns[j]
-            columnValues.get(c).add(data[i][c])
+            gett(columnValues, c).add(data[i][c])
         }
     }
 
@@ -154,13 +140,13 @@ export async function getCompressedDataset(uri: string): Promise<{dataset?: Data
             ...dataset.dataset,
             columnValues: setValuesToListValues(columnValues)
         }
-    }
+    } as DatasetProps // TO DO
 
-    return {dataset: datasetWithColumnValues, data: compressData(data)}
+    return {dataset: {dataset: datasetWithColumnValues, data: compressData(data)}}
 }
 
 
-export async function getDatasets(): Promise<FeedContentProps[]>{
+/*export async function getDatasets(): Promise<FeedContentProps[]>{
     const did = await getSessionDidNoRevalidate()
 
     let datasets: DatasetProps[] = await unstable_cache(
@@ -194,4 +180,4 @@ export async function getDatasets(): Promise<FeedContentProps[]>{
     })
 
     return addCountersToFeed(datasets, engagement)
-}
+}*/

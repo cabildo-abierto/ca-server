@@ -20,10 +20,6 @@
             "value": {
               "type": "string",
               "description": "Valid values are 'accept' and 'reject'."
-            },
-            "$type": {
-              "type": "string",
-              "const": "ar.cabildoabierto.wiki.vote"
             }
           }
         }

@@ -19,3 +19,13 @@ export const enDiscusionFeedPipeline: FeedPipelineProps = {
     getSkeleton: getEnDiscusionSkeleton,
     sortKey: rootCreationDateSortKey
 }
+
+
+export async function addToEnDiscusion(uri: string){
+    // TO DO
+}
+
+
+export async function removeFromEnDiscusion(uri: string){
+    // TO DO
+}

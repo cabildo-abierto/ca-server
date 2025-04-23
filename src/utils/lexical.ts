@@ -93,7 +93,7 @@ export function editorStateFromJSON(text: string) {
     return res
 }
 
-export function charCount(state: EditorState | undefined) {
+export function charCount(state: EditorState) {
     let count = state.read(() => {
         const root = $getRoot()
         return root.getTextContentSize()

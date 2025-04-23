@@ -1,5 +1,27 @@
 import {setTopicCategories, setTopicSynonyms} from "./utils";
 import {getTopicHistory} from "./topics";
+import {TopicHistoryProps, TopicProps} from "#/lib/types";
+import {max, unique} from "#/utils/arrays";
+import {AppContext} from "#/index";
+import {getDidFromUri} from "#/utils/uri";
+
+
+export function getCurrentContentVersion(topic: {versions: {content: {hasText: boolean}, uniqueRejects: number}[]}, version?: number){
+    if(version == null) version = topic.versions.length-1
+    let lastContent = 0
+    for(let i = 0; i <= version; i++){
+        if(topic.versions[i].content.hasText && topic.versions[i].uniqueRejects == 0){
+            lastContent = i
+        }
+    }
+    return lastContent
+}
+
+
+export function getTopicLastEditFromVersions(topic: {versions: {content: {record: {createdAt: Date}}}[]}){
+    const dates = topic.versions.map(v => v.content.record.createdAt)
+    return max(dates)
+}
 
 
 function getTopicCategoriesFromVersions(topic: TopicHistoryProps){
@@ -29,7 +51,7 @@ function arraysEqual<T>(a: T[], b: T[]): boolean{
 }
 
 
-export async function deleteTopicVersion(topic: TopicProps, topicHistory: TopicHistoryProps, index: number){
+export async function deleteTopicVersion(ctx: AppContext, topic: TopicProps, topicHistory: TopicHistoryProps, index: number){
     const prevCategories = topic.categories.map(c => (c.categoryId))
     const prevSynonyms = topic.synonyms
 
@@ -46,18 +68,18 @@ export async function deleteTopicVersion(topic: TopicProps, topicHistory: TopicH
 
     const changedCategories = !arraysEqual(prevCategories, newCategories)
 
-    let updates = []
+    let updates: any[] = []
     if(changedCategories){
-        updates = setTopicCategories(topic.id, newCategories)
+        updates = setTopicCategories(ctx, topic.id, newCategories)
     }
 
     if(!arraysEqual(prevSynonyms, newSynonyms)){
-        updates = [...updates, ...setTopicSynonyms(topic.id, newSynonyms)]
+        updates = [...updates, ...setTopicSynonyms(ctx, topic.id, newSynonyms)]
     }
 
     updates = [
         ...updates,
-        db.topic.update({
+        ctx.db.topic.update({
             where: {
                 id: topic.id,
             },
@@ -70,11 +92,11 @@ export async function deleteTopicVersion(topic: TopicProps, topicHistory: TopicH
 
     await ctx.db.$transaction(updates)
 
-    await revalidateTags(["topic:"+topic.id, "topics", ...(changedCategories ? ["categories"] : [])])
+    // await revalidateTags(["topic:"+topic.id, "topics", ...(changedCategories ? ["categories"] : [])])
 }
 
 
-export async function updateTopicsLastEdit() {
+export async function updateTopicsLastEdit(ctx: AppContext) {
     const topics = await ctx.db.topic.findMany({
         select: {
             id: true,
@@ -118,8 +140,10 @@ export async function updateTopicsLastEdit() {
 }
 
 
-export async function updateTopicCurrentVersion(id: string){
-    const {topicHistory: topic} = await getTopicHistory(id)
+export async function updateTopicCurrentVersion(ctx: AppContext, id: string){
+    const {topicHistory: topic, error} = await getTopicHistory(ctx, id)
+
+    if(!topic) return {error}
 
     const currentVersion = getCurrentContentVersion(topic)
     const uri = topic.versions[currentVersion].uri
@@ -132,10 +156,12 @@ export async function updateTopicCurrentVersion(id: string){
             id
         }
     })
+
+    return {}
 }
 
 
-export async function updateTopicsCurrentVersion() {
+export async function updateTopicsCurrentVersion(ctx: AppContext) {
     let topics = (await ctx.db.topic.findMany({
         select: {
             id: true,
@@ -199,17 +225,12 @@ export async function updateTopicsCurrentVersion() {
 
     if (updates.length === 0) return;
 
-    // Construct a single SQL query with fully parameterized values
-    const updateQuery = `
+    await ctx.db.$executeRawUnsafe(`
         UPDATE "Topic" AS t
         SET "currentVersionId" = c."uri"
         FROM (VALUES ${updates.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(", ")}) AS c(id, uri)
         WHERE t.id = c.id;
-    `;
-
-    const queryParams = updates.flatMap(({ id, currentVersionId }) => [id, currentVersionId]);
-
-    await ctx.db.$executeRawUnsafe(updateQuery, ...queryParams)
+    `, ...updates.flatMap(({ id, currentVersionId }) => [id, currentVersionId]))
 }
 
 

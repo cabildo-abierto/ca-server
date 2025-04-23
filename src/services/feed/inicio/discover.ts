@@ -1,5 +1,5 @@
 import {AppContext} from "#/index";
-import {FeedViewContent} from "#/lexicon-server/types/ar/cabildoabierto/feed/defs";
+import {FeedViewContent} from "#/lex-server/types/ar/cabildoabierto/feed/defs";
 import {SessionAgent} from "#/utils/session-agent";
 import {FeedPipelineProps} from "#/services/feed/feed";
 

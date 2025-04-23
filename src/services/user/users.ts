@@ -1,12 +1,12 @@
 import {AppContext} from "#/index";
 import {ProfileView, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {Prisma} from "@prisma/client";
-import {MentionProps, SmallUserProps, UserProps, UserStats} from "#/lib/types";
+import {Account, MentionProps, Profile, Session, SmallUserProps, UserStats} from "#/lib/types";
 import { SessionAgent } from "#/utils/session-agent";
 import {getDidFromUri, getRkeyFromUri } from "#/utils/uri";
 import {deleteRecords} from "#/services/admin";
-import {supportDid} from "#/utils/auth";
 import {cleanText} from "#/utils/strings";
+import {logTimes} from "#/utils/utils";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -242,52 +242,6 @@ const fullUserQuery = {
 }
 
 
-// TO DO: Devolver un solo objeto
-export const getFullProfileById = async (ctx: AppContext, agent: SessionAgent, userId: string): Promise<{
-    user?: UserProps,
-    atprotoProfile?: ProfileViewDetailed,
-    error?: string
-}> => {
-    const promiseATProtoProfile = getATProtoUserById(agent, userId)
-    const promiseCAUser = getUserById(ctx, userId)
-    const [CAUser, ATProtoProfile] = await Promise.all([promiseCAUser, promiseATProtoProfile])
-
-    if (!CAUser || !CAUser.handle) {
-        return {atprotoProfile: ATProtoProfile.profile}
-    }
-
-    let following = undefined
-    for (let i = 0; i < CAUser.followers.length; i++) {
-        const f = CAUser.followers[i]
-        if (f.record.authorId == userId) {
-            following = f.uri
-        }
-    }
-
-    let followed: string | null = null
-    for (let i = 0; i < CAUser.records.length; i++) {
-        const r = CAUser.records[i]
-        if (r.follow && r.follow.userFollowedId == userId) {
-            followed = r.cid
-        }
-    }
-
-    return {
-        user: {
-            ...CAUser,
-            handle: CAUser.handle,
-            followersCount: CAUser.followers.length,
-            followsCount: CAUser.records.length,
-            viewer: {
-                following,
-                followed: followed ?? undefined
-            }
-        } as UserProps,
-        atprotoProfile: ATProtoProfile.profile ? ATProtoProfile.profile : undefined
-    }
-}
-
-
 // TO DO: Eliminar esta función, está repetida
 export function createRecord({ctx, uri, cid, createdAt, collection}: {
     ctx: AppContext
@@ -358,28 +312,101 @@ export async function unfollow(ctx: AppContext, agent: SessionAgent, followUri: 
     }
 }
 
+type GetUserByIdOutProps = {
+    profile?: Profile,
+    error?: string
+}
 
-export async function getUser(ctx: AppContext, agent: SessionAgent) {
-    return await getUserById(ctx, agent.did)
+export async function getProfile(ctx: AppContext, agent: SessionAgent, handleOrDid: string): Promise<GetUserByIdOutProps>{
+    const t1 = Date.now()
+    const did = await handleToDid(agent, handleOrDid)
+    const t2 = Date.now()
+
+    try {
+        const [bskyProfile, caProfile, caFollowsCount, caFollowersCount] = await Promise.all([
+            agent.bsky.getProfile({actor: did}),
+            ctx.db.user.findUnique({
+                select: {
+                    inCA: true,
+                    editorStatus: true
+                },
+                where: {did}
+            }),
+            ctx.db.follow.count({
+                where: {
+                    record: {
+                        authorId: did
+                    },
+                    userFollowed: {
+                        inCA: true
+                    }
+                }
+            }),
+            ctx.db.follow.count({
+                where: {
+                    userFollowedId: did
+                }
+            })
+        ])
+        const t3 = Date.now()
+        logTimes("getProfile:"+handleOrDid, [t1, t2, t3])
+        return {
+            profile: {
+                bsky: bskyProfile.data,
+                ca: caProfile ? {
+                    ...caProfile,
+                    followsCount: caFollowsCount,
+                    followersCount: caFollowersCount
+                } : null
+            }
+        }
+    } catch (err) {
+        return {error: "No se encontró el usuario."}
+    }
 }
 
 
-export async function getUserById(ctx: AppContext, didOrHandle: string){
-    return ctx.db.user.findFirst(
-        {
-            select: fullUserQuery,
-            where: {
-                OR: [
-                    {
-                        did: didOrHandle
-                    },
-                    {
-                        handle: didOrHandle
-                    }
-                ]
-            }
+export async function getSession(ctx: AppContext, agent: SessionAgent): Promise<{session?: Session, error?: string}> {
+    const data = await ctx.db.user.findUnique({
+        select: {
+            platformAdmin: true,
+            editorStatus: true,
+            seenTutorial: true,
+            handle: true,
+            displayName: true,
+            avatar: true,
+            hasAccess: true
+        },
+        where: {
+            did: agent.did
         }
-    );
+    })
+    if(!data || !data.handle) return {error: "No se encontró el usuario."}
+    return {
+        session: {
+            ...data,
+            did: agent.did,
+            handle: data.handle
+        }
+    }
+}
+
+
+export async function getAccount(ctx: AppContext, agent: SessionAgent): Promise<{account?: Account, error?: string}> {
+    const data = await ctx.db.user.findUnique({
+        select: {
+            email: true
+        },
+        where: {
+            did: agent.did
+        }
+    })
+    if(!data) return {error: "No se encontró el usuario."}
+    return {
+        account: {
+            email: data.email ?? undefined
+        }
+    }
 }
 
 
@@ -499,7 +526,7 @@ export async function getUserById(ctx: AppContext, didOrHandle: string){
 }*/
 
 
-export const getSupportNotRespondedCount = async (ctx: AppContext, agent: SessionAgent) => {
+/*export const getSupportNotRespondedCount = async (ctx: AppContext, agent: SessionAgent) => {
     const user = await getUser(ctx, agent)
     if (!user || user.editorStatus != "Administrator") {
         return {error: "Sin permisos suficientes."}
@@ -532,7 +559,7 @@ export const getSupportNotRespondedCount = async (ctx: AppContext, agent: Sessio
     }
 
     return {count: c.size}
-}
+}*/
 
 
 /*export async function addDonatedSubscriptionsManually(boughtByUserId: string, amount: number, price: number, paymentId?: string){

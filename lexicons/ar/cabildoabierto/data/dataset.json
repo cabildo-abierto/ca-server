@@ -7,9 +7,9 @@
       "key": "tid",
       "record": {
         "type": "object",
-        "required": ["id", "createdAt", "columns"],
+        "required": ["name", "createdAt", "columns"],
         "properties": {
-          "id": {
+          "name": {
             "type": "string",
             "minLength": 1,
             "maxLength": 120
@@ -23,13 +23,9 @@
             "type": "array",
             "items": {
               "type": "ref",
-              "ref": "ar.cabildoabierto.dataset#column"
+              "ref": "#column"
             },
             "minLength": 1
-          },
-          "$type": {
-            "type": "string",
-            "const": "ar.cabildoabierto.data.dataset"
           }
         }
       }

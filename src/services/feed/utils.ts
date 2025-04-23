@@ -1,22 +1,6 @@
-import {
-    FeedViewPost
-} from "@atproto/api/src/client/types/app/bsky/feed/defs";
-import {addCounters} from "#/utils/utils";
-import {FeedViewContent} from "#/lexicon-api/types/ar/cabildoabierto/feed/defs";
-import {SkeletonFeedPost} from "#/lexicon-server/types/app/bsky/feed/defs";
-
-
-export type FeedEngagementProps = {
-    likes: {likedRecordId: string | null; uri: string}[]
-    reposts: {repostedRecordId: string | null; uri: string}[]
-}
-
-
-export function addCountersToFeed(feed: any[], engagement: FeedEngagementProps): FeedViewContent[] {
-    return feed.map((elem) => {
-        return addCounters(elem, engagement)
-    })
-}
+import {FeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {ThreadViewContent} from "#/lex-server/types/ar/cabildoabierto/feed/defs";
+import {isKnownContent} from "#/utils/type-utils";
 
 
 function getRootCreationDate(p: FeedViewContent): Date | null {
@@ -33,6 +17,11 @@ function getRootCreationDate(p: FeedViewContent): Date | null {
         return new Date(p.content.indexedAt)
     }
     return null
+}
+
+
+export const creationDateSortKey = (a: ThreadViewContent) => {
+    return isKnownContent(a.content) ? [new Date(a.content.indexedAt).getTime()] : [0]
 }
 
 

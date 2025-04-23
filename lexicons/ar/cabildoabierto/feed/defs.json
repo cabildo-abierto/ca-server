@@ -43,8 +43,9 @@
         "content": {
           "type": "union",
           "refs": [
-            "app.bsky.feed.defs#postView",
-            "#articleView"
+            "#postView",
+            "#articleView",
+            "#fullArticleView"
           ]
         },
         "parent": {
@@ -105,7 +106,7 @@
             "app.bsky.embed.external#view",
             "app.bsky.embed.record#view",
             "app.bsky.embed.recordWithMedia#view",
-            "ar.cabildoabierto.embed.selectionQuote"
+            "ar.cabildoabierto.embed.selectionQuote#view"
           ]
         },
         "uniqueViewsCount": {
@@ -179,7 +180,89 @@
           "type": "string",
           "maxLength": 3000,
           "maxGraphemes": 300,
-          "description": "A plain text summary of the article."
+          "description": "A summary of the article to be shown in the feed."
+        },
+        "summaryFormat":  {
+          "type": "string",
+          "maxLength": 50
+        },
+        "record": {
+          "type": "unknown"
+        },
+        "uniqueViewsCount": {
+          "type": "integer"
+        },
+        "bskyRepostCount": {
+          "type": "integer"
+        },
+        "bskyLikeCount": {
+          "type": "integer"
+        },
+        "bskyQuoteCount": {
+          "type": "integer"
+        },
+        "replyCount": {
+          "type": "integer"
+        },
+        "repostCount": {
+          "type": "integer"
+        },
+        "likeCount": {
+          "type": "integer"
+        },
+        "quoteCount": {
+          "type": "integer"
+        },
+        "indexedAt": {
+          "type": "string",
+          "format": "datetime"
+        },
+        "viewer": {
+          "type": "ref",
+          "ref": "app.bsky.feed.defs#viewerState"
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "com.atproto.label.defs#label"
+          }
+        },
+        "threadgate": {
+          "type": "ref",
+          "ref": "app.bsky.feed.defs#threadgateView"
+        }
+      }
+    },
+    "fullArticleView": {
+      "type": "object",
+      "required": [
+        "uri",
+        "cid",
+        "author",
+        "record",
+        "indexedAt"
+      ],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "format": "at-uri"
+        },
+        "cid": {
+          "type": "string",
+          "format": "cid"
+        },
+        "author": {
+          "type": "ref",
+          "ref": "app.bsky.actor.defs#profileViewBasic"
+        },
+        "text": {
+          "type": "string",
+          "description": "The full article text"
+        },
+        "textFormat":  {
+          "type": "string",
+          "maxLength": 50
         },
         "record": {
           "type": "unknown"

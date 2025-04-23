@@ -1,7 +1,9 @@
 import { Prisma } from "@prisma/client";
+import {AppContext} from "#/index";
+import {currentCategories} from "#/services/topic/utils";
 
 
-export async function updateTopicsCategories() {
+export async function updateTopicsCategories(ctx: AppContext) {
     const topics = await ctx.db.topic.findMany({
         select: {
             id: true,
@@ -40,11 +42,9 @@ export async function updateTopicsCategories() {
         return;
     }
 
-    // Step 1: Ensure all categories exist in TopicCategory
+    const values = Prisma.join(allCategoryIds.map(id => Prisma.sql`(${id})`))
     await ctx.db.$executeRaw`
-        INSERT INTO "TopicCategory" ("id")
-        VALUES ${Prisma.join(allCategoryIds.map(id => Prisma.sql`(${id})`))}
-        ON CONFLICT DO NOTHING;
+        INSERT INTO "TopicCategory" ("id") VALUES ${values} ON CONFLICT DO NOTHING;
     `;
 
     console.log("Ensured all categories exist.")

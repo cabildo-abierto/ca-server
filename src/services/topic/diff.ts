@@ -73,13 +73,13 @@ export function minMatch(nodes1: string[], nodes2: string[], common: {x: number,
     const commonNodes1 = new Set(common.map(({x}) => (x)))
     const commonNodes2 = new Set(common.map(({y}) => (y)))
     
-    let uncommonNodes1 = []
+    let uncommonNodes1: any[] = []
     nodes1.forEach((x, index) => {
         if(!commonNodes1.has(index)){
             uncommonNodes1.push({node: x, index: index})
         }
     })
-    let uncommonNodes2 = []
+    let uncommonNodes2: any[] = []
     nodes2.forEach((x, index) => {
         if(!commonNodes2.has(index)){
             uncommonNodes2.push({node: x, index: index})

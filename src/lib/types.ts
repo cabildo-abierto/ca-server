@@ -1,5 +1,6 @@
 import {EditorStatus} from "@prisma/client";
-import {ProfileViewBasic} from "#/lexicon-api/types/app/bsky/actor/defs";
+import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
+import {ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 
 
 export type Collection =
@@ -24,9 +25,33 @@ export type ATProtoStrongRef = {
 }
 
 
-export type FastPostReplyProps = {
-    parent: ATProtoStrongRef
-    root: ATProtoStrongRef
+export type Profile = {
+    bsky: ProfileViewDetailed
+    ca: CAProfile | null
+}
+
+export type CAProfile = {
+    inCA: boolean
+    followersCount: number
+    followsCount: number
+    editorStatus: EditorStatus
+}
+
+
+export type Session = {
+    platformAdmin: boolean
+    editorStatus: EditorStatus
+    seenTutorial: boolean
+    handle: string
+    displayName: string | null
+    avatar: string | null
+    did: string
+    hasAccess: boolean
+}
+
+
+export type Account = {
+    email?: string
 }
 
 
@@ -80,26 +105,26 @@ export type TopicHistoryProps = {
     id: string
     versions: {
         uri: string
-        cid: string
-        collection: "ar.com.cabildoabierto.topic"
+        cid: string | null
+        collection: "ar.cabildoabierto.wiki.topicVersion" | null
         author: {
             did: string
-            handle: string
-            displayName: string
-            avatar: string
+            handle: string | null
+            displayName: string | null
+            avatar: string | null
         }
         content: {
             hasText: boolean
             topicVersion: {
-                charsAdded: number
-                charsDeleted: number
-                accCharsAdded: number
-                contribution: string
-                message: string
-                diff: string
-                title: string
-                categories: string
-                synonyms: string
+                charsAdded?: number | null
+                charsDeleted?: number | null
+                accCharsAdded?: number | null
+                contribution?: string | null
+                message?: string | null
+                diff?: string | null
+                title?: string | null
+                categories?: string | null
+                synonyms?: string | null
             }
         }
         createdAt: Date
@@ -116,12 +141,12 @@ export type TopicVersionAuthorsProps = {
 
 export type SmallTopicProps = {
     id: string
-    popularityScore?: number
-    synonyms?: string[]
+    popularityScore: number | null
+    synonyms: string[] | null
     categories: {
         categoryId: string
     }[]
-    lastEdit?: Date
+    lastEdit: Date | null
 }
 
 
@@ -173,8 +198,8 @@ export type ContributionsProps = [string, number][]
 
 
 export type FeedEngagementProps = {
-    likes: {likedRecordId: string; uri: string}[]
-    reposts: {repostedRecordId: string; uri: string}[]
+    likes: {likedRecordId: string | null; uri: string}[]
+    reposts: {repostedRecordId: string | null; uri: string}[]
 }
 
 
@@ -329,8 +354,8 @@ export type DatasetProps = RecordProps & {
     dataset: {
         title: string
         columns: string[]
-        columnValues?: {column: string, values: any[]}[] | Map<string, any[]>
-        description?: string
+        columnValues: {column: string, values: any[]}[] | Map<string, any[]> | null
+        description: string | null
         dataBlocks: {
             record: RecordProps,
             format: string,
@@ -343,7 +368,7 @@ export type DatasetProps = RecordProps & {
     visualizationsUsing: {
         uri: string
     }[]
-} & {collection: "ar.com.cabildoabierto.dataset"}
+} & {collection: "ar.cabildoabierto.data.dataset"}
 
 
 export type PlotConfigProps = {

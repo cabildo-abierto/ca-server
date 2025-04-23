@@ -1,8 +1,9 @@
-import {db} from "@/db"
-import {getDidFromUri, getRkeyFromUri} from "@/utils/uri";
+import {getDidFromUri, getRkeyFromUri} from "#/utils/uri";
+import {AppContext} from "#/index";
 
 
-export function createRecord({uri, cid, createdAt, collection}: {
+export function createRecord({ctx, uri, cid, createdAt, collection}: {
+    ctx: AppContext,
     uri: string
     cid: string
     createdAt: Date
@@ -17,7 +18,7 @@ export function createRecord({uri, cid, createdAt, collection}: {
         collection: collection
     }
 
-    let updates: any[] = [db.record.upsert({
+    let updates: any[] = [ctx.db.record.upsert({
         create: data,
         update: data,
         where: {

@@ -1,36 +1,38 @@
 import {deleteRecords} from "../admin";
 import {processCreateRecord} from "../sync/process-event";
 import {updateTopicCurrentVersion} from "./current-version";
+import {ATProtoStrongRef} from "#/lib/types";
+import {SessionAgent} from "#/utils/session-agent";
+import {AppContext} from "#/index";
+import {getCollectionFromUri, getRkeyFromUri} from "#/utils/uri";
 
-export async function acceptEdit(topicId: string, versionRef: ATProtoStrongRef): Promise<{error?: string}>{
-    const did = await getSessionDidNoRevalidate()
+export async function acceptEdit(ctx: AppContext, agent: SessionAgent, topicId: string, versionRef: ATProtoStrongRef): Promise<{error?: string}>{
 
     const [rejects, _] = await Promise.all([
-        db.topicReject.findMany({
+        ctx.db.topicReject.findMany({
             select: {
                 uri: true
             },
             where: {
                 rejectedRecordId: versionRef.uri,
                 record: {
-                    authorId: did
+                    authorId: agent.did
                 }
             }
         }),
-        createTopicVote(topicId, versionRef, "accept")
+        createTopicVote(ctx, agent, topicId, versionRef, "accept")
     ])
 
     if(rejects.length > 0){
-        await deleteRecords({uris: rejects.map(a => a.uri), atproto: true})
+        await deleteRecords({ctx, agent, uris: rejects.map(a => a.uri), atproto: true})
     }
 
-    await updateTopicCurrentVersion(topicId)
+    await updateTopicCurrentVersion(ctx, topicId)
 
     return {}
 }
 
-export async function createTopicVote(topicId: string, versionRef: ATProtoStrongRef, value: string): Promise<{error?: string}>{
-    const {agent, did} = await getSessionAgent()
+export async function createTopicVote(ctx: AppContext, agent: SessionAgent, topicId: string, versionRef: ATProtoStrongRef, value: string): Promise<{error?: string}>{
 
     const record = {
         $type: "ar.com.cabildoabierto.topic.vote",
@@ -39,14 +41,14 @@ export async function createTopicVote(topicId: string, versionRef: ATProtoStrong
         subject: versionRef
     }
 
-    const {data} = await agent.com.atproto.repo.createRecord({
+    const {data} = await agent.bsky.com.atproto.repo.createRecord({
         record,
         collection: "ar.com.cabildoabierto.topic.vote",
-        repo: did
+        repo: agent.did
     })
 
-    let {updates, tags} = await processCreateRecord({
-        did,
+    let {updates, tags} = await processCreateRecord(ctx, {
+        did: agent.did,
         uri: data.uri,
         cid: data.cid,
         rkey: getRkeyFromUri(data.uri),
@@ -55,43 +57,42 @@ export async function createTopicVote(topicId: string, versionRef: ATProtoStrong
     })
 
     await ctx.db.$transaction(updates)
-    await revalidateTags(Array.from(tags))
+    // await revalidateTags(Array.from(tags))
 
     return {}
 }
 
-export async function cancelAcceptEdit(topicId: string, uri: string): Promise<{error?: string}>{
-    return await deleteRecords({uris: [uri], atproto: true})
+export async function cancelAcceptEdit(ctx: AppContext, agent: SessionAgent, topicId: string, uri: string): Promise<{error?: string}>{
+    return await deleteRecords({ctx, agent, uris: [uri], atproto: true})
 }
 
-export async function rejectEdit(topicId: string, versionRef: ATProtoStrongRef): Promise<{error?: string}>{
-    const did = await getSessionDidNoRevalidate()
+export async function rejectEdit(ctx: AppContext, agent: SessionAgent, topicId: string, versionRef: ATProtoStrongRef): Promise<{error?: string}>{
 
     const [accepts, _] = await Promise.all([
-        db.topicAccept.findMany({
+        ctx.db.topicAccept.findMany({
             select: {
                 uri: true
             },
             where: {
                 acceptedRecordId: versionRef.uri,
                 record: {
-                    authorId: did
+                    authorId: agent.did
                 }
             }
         }),
-        createTopicVote(topicId, versionRef, "reject")
+        createTopicVote(ctx, agent, topicId, versionRef, "reject")
     ])
 
     if(accepts.length > 0){
-        await deleteRecords({uris: accepts.map(a => a.uri), atproto: true})
+        await deleteRecords({ctx, agent, uris: accepts.map(a => a.uri), atproto: true})
     }
 
-    await updateTopicCurrentVersion(topicId)
+    await updateTopicCurrentVersion(ctx, topicId)
 
     return {}
 }
 
-export async function cancelRejectEdit(topicId: string, uri: string): Promise<{error?: string}>{
-    return await deleteRecords({uris: [uri], atproto: true})
+export async function cancelRejectEdit(ctx: AppContext, agent: SessionAgent, topicId: string, uri: string): Promise<{error?: string}>{
+    return await deleteRecords({ctx, agent, uris: [uri], atproto: true})
 }
 

@@ -5,10 +5,10 @@ import {FeedPipelineProps, FeedSkeleton} from "#/services/feed/feed";
 import {
     rootCreationDateSortKey
 } from "#/services/feed/utils";
-import {FeedViewPost, SkeletonFeedPost} from "#/lexicon-api/types/app/bsky/feed/defs";
+import {FeedViewPost, SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
 import {articleCollections, getDidFromUri} from "#/utils/uri";
-import {isPostView} from "#/lexicon-server/types/app/bsky/feed/defs";
-import {unique} from "#/utils/arrays";
+import {isPostView} from "#/lex-server/types/app/bsky/feed/defs";
+import {listOrderDesc, sortByKey, unique} from "#/utils/arrays";
 
 type RepostQueryResult = {
     author: {
@@ -80,18 +80,33 @@ function getRootUriFromPost(e: FeedViewPost): string | null {
 }
 
 
-const getSkeletonFromTimeline = (timeline: FeedViewPost[]) => {
-    // remove posts with root or parent different than author
-    timeline = timeline.filter(filterTimeline)
+function timelinePriority(a: FeedViewPost): number[] {
+    const rootUri = getRootUriFromPost(a)
+    const parentUri = getParentUriFromPost(a)
 
-    // remove posts with same root
-    timeline = unique(timeline, getRootUriFromPost, true)
+    return [new Set([rootUri, parentUri, a.post.uri].filter(x => x != null)).size, a.reason ? 0 : 1]
+}
 
-    let skeleton: FeedSkeleton = timeline.map(p => ({
+
+export const feedViewPostToSkeletonElement = (p: FeedViewPost): SkeletonFeedPost => {
+    return {
         post: p.post.uri,
         reason: p.reason,
         $type: "app.bsky.feed.defs#skeletonFeedPost"
-    }))
+    }
+}
+
+
+export const getSkeletonFromTimeline = (timeline: FeedViewPost[], sameAuthorOnly: boolean = true) => {
+    // remove posts with root or parent different than author
+    if(sameAuthorOnly){
+        timeline = timeline.filter(filterTimeline)
+    }
+
+    // remove posts with same root
+    timeline = unique(sortByKey(timeline, timelinePriority, listOrderDesc), getRootUriFromPost, true)
+
+    let skeleton: FeedSkeleton = timeline.map(feedViewPostToSkeletonElement)
 
     return skeleton
 }

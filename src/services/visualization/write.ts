@@ -1,16 +1,18 @@
-"use server"
-import {VisualizationSpec} from "vega-embed";
-import {getSessionAgent} from "../auth";
 import {BlobRef} from "@atproto/lexicon";
-import {db} from "@/db";
-import {ATProtoStrongRef} from "@/lib/definitions";
-import {VisualizationSpecWithMetadata} from "@/components/visualizations/editor/get-spec";
 import {processCreateRecordFromRefAndRecord} from "../sync/process-event";
-import {revalidateTags} from "../admin";
+import {ATProtoStrongRef} from "#/lib/types";
+import {SessionAgent} from "#/utils/session-agent";
+import {AppContext} from "#/index";
 
+type VisualizationSpec = {
+    // TO DO
+}
 
-export async function createVisualizationATProto(spec: VisualizationSpec, preview: FormData): Promise<{error?: string, ref?: ATProtoStrongRef, record?: any}> {
-    const {agent, did} = await getSessionAgent()
+type VisualizationSpecWithMetadata = {
+    // TO DO
+}
+
+export async function createVisualizationATProto(agent: SessionAgent, spec: VisualizationSpec, preview: FormData): Promise<{error?: string, ref?: ATProtoStrongRef, record?: any}> {
 
     try {
 
@@ -23,7 +25,7 @@ export async function createVisualizationATProto(spec: VisualizationSpec, previe
 
         let blob: BlobRef
         try {
-            const res = await agent.uploadBlob(f, {headers})
+            const res = await agent.bsky.uploadBlob(f, {headers})
             blob = res.data.blob
         } catch {
             console.error("Error uploading preview")
@@ -41,8 +43,8 @@ export async function createVisualizationATProto(spec: VisualizationSpec, previe
             },
         }
 
-        const {data: ref} = await agent.com.atproto.repo.createRecord({
-            repo: did,
+        const {data: ref} = await agent.bsky.com.atproto.repo.createRecord({
+            repo: agent.did,
             collection: "ar.com.cabildoabierto.visualization",
             record: record,
         })
@@ -54,14 +56,15 @@ export async function createVisualizationATProto(spec: VisualizationSpec, previe
 }
 
 
-export async function createVisualization(spec: VisualizationSpecWithMetadata, preview: FormData){
-    const {error, record, ref} = await createVisualizationATProto(spec, preview)
+export async function createVisualization(ctx: AppContext, agent: SessionAgent, spec: VisualizationSpecWithMetadata, preview: FormData){
+    const {error, record, ref} = await createVisualizationATProto(agent, spec, preview)
     if(error){
         return {error}
     }
-    const {updates, tags} = await processCreateRecordFromRefAndRecord(ref, record)
-    await db.$transaction(updates)
-    await revalidateTags(Array.from(tags))
+    if(!ref) return {error: "Ocurrió un error al crear la visualización"}
+    const {updates} = await processCreateRecordFromRefAndRecord(ctx, ref, record)
+    await ctx.db.$transaction(updates)
+    // await revalidateTags(Array.from(tags))
 
     return {}
 }
