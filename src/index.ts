@@ -30,7 +30,8 @@ export class Server {
         public app: express.Application,
         public server: http.Server,
         public ctx: AppContext
-    ) {}
+    ) {
+    }
 
     static async create() {
         const {NODE_ENV, HOST, PORT} = env
@@ -57,9 +58,20 @@ export class Server {
 
         const app: Express = express()
         app.set('trust proxy', true)
+
+        const allowedOrigins = [
+            'http://127.0.0.1:3000',
+            'http://localhost:3000',
+            'http://localhost:8080',
+            'http://127.0.0.1:8080',
+            'https://cabildoabierto.ar',
+            'https://www.cabildoabierto.ar',
+            'https://ca-withered-wind.fly.dev',
+            'https://api.cabildoabierto.ar'
+        ]
+
         app.use(cors({
             origin: (origin, callback) => {
-                const allowedOrigins = ['http://127.0.0.1:3000', 'http://localhost:3000', 'http://localhost:8080', 'http://127.0.0.1:8080']
                 if (!origin || allowedOrigins.includes(origin)) {
                     callback(null, true)
                 } else {

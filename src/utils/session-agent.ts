@@ -4,6 +4,7 @@ import {getIronSession, SessionOptions} from "iron-session";
 import express from "express";
 import {AtpBaseClient} from "src/lex-api";
 import {Agent as BskyAgent} from "@atproto/api";
+import {env} from "#/lib/env";
 
 export type Session = { did: string }
 
@@ -42,7 +43,7 @@ export async function sessionAgent(
     res: ServerResponse<IncomingMessage>,
     ctx: AppContext
 ): Promise<Agent> {
-    const CAAgent = new AtpBaseClient("http://127.0.0.1:8080")
+    const CAAgent = new AtpBaseClient("http://127.0.0.1:" + env.PORT)
 
     const session = await getIronSession<Session>(req, res, cookieOptions)
     if (session.did) {
@@ -64,11 +65,11 @@ export async function sessionAgent(
 
 export const cookieOptions: SessionOptions = {
     cookieName: 'sid',
-    password: process.env.COOKIE_SECRET || "",
+    password: process.env.COOKIE_SECRET!,
     cookieOptions: {
-        sameSite: "lax",
+        sameSite: env.NODE_ENV == "production" ? "none" : "lax",
         httpOnly: true,
-        secure: false,
+        secure: env.NODE_ENV == "production",
         path: "/"
     }
 }

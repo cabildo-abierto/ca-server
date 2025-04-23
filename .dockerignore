@@ -24,10 +24,10 @@ dist-ssr
 *.sw?
 
 # package-lock.json
-fly.toml
-Dockerfile
-docker-entrypoint.js
-.dockerignore
-.github
+#fly.toml
+#Dockerfile
+#docker-entrypoint.js
+#.dockerignore
+#.github
 .nvmrc
 .vscode

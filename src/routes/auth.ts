@@ -3,6 +3,7 @@ import { getIronSession } from 'iron-session'
 import { isValidHandle } from '@atproto/syntax'
 import type { AppContext } from '#/index'
 import {cookieOptions, handler, Session} from "#/utils/session-agent";
+import {env} from "#/lib/env";
 
 const router = express.Router()
 
@@ -42,7 +43,7 @@ export default function authRoutes(ctx: AppContext) {
             ctx.logger.error({ err }, 'oauth callback failed')
             return res.redirect('/?error')
         }
-        return res.redirect('http://127.0.0.1:3000/inicio')
+        return res.redirect(env.FRONTEND_URL+'/inicio')
     })
 
     router.post('/logout', async (req, res) => {

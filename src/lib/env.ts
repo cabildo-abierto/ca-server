@@ -11,5 +11,6 @@ export const env = cleanEnv(process.env, {
   HOST: host({ devDefault: testOnly('localhost') }),
   PORT: port({ devDefault: testOnly(3000) }),
   PUBLIC_URL: str({}),
-  COOKIE_SECRET: str({ devDefault: '00000000000000000000000000000000' })
+  COOKIE_SECRET: str({ devDefault: '00000000000000000000000000000000' }),
+  FRONTEND_URL: str({ devDefault: 'http://127.0.0.1:3000' })
 })

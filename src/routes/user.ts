@@ -9,7 +9,7 @@ const router = express.Router()
 
 export default function userRoutes(ctx: AppContext) {
     router.get(
-        '/profile/:handleOrDid?',
+        '/profile/:handleOrDid',
         handler(async (req, res) => {
             let {handleOrDid} = req.params
 
