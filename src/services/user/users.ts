@@ -7,6 +7,7 @@ import {getDidFromUri, getRkeyFromUri } from "#/utils/uri";
 import {deleteRecords} from "#/services/admin";
 import {cleanText} from "#/utils/strings";
 import {logTimes} from "#/utils/utils";
+import {CAHandler} from "#/utils/handler";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -289,38 +290,30 @@ export async function createFollowDB({ctx, did, uri, cid, followedDid}: {ctx: Ap
 }
 
 
-export async function follow(ctx: AppContext, agent: SessionAgent, userToFollowId: string) {
-
+export const follow: CAHandler<{followedDid: string}, {followUri: string}> = async (ctx, agent,  {followedDid}) => {
     try {
-        const res = await agent.bsky.follow(userToFollowId)
-        await createFollowDB({ctx, did: agent.did, ...res, followedDid: userToFollowId})
+        const res = await agent.bsky.follow(followedDid)
+        await createFollowDB({ctx, did: agent.did, ...res, followedDid})
+        return {data: {followUri: res.uri}}
     } catch {
         return {error: "Error al seguir al usuario."}
     }
-
-    return {}
 }
 
 
-export async function unfollow(ctx: AppContext, agent: SessionAgent, followUri: string) {
+export const unfollow: CAHandler<{followUri: string}> = async (ctx, agent, {followUri}) => {
     try {
         await deleteRecords({ctx, agent, uris: [followUri], atproto: true})
-        return {}
+        return {data: {}}
     } catch (err) {
         console.error(err)
         return {error: "Error al dejar de seguir al usuario."}
     }
 }
 
-type GetUserByIdOutProps = {
-    profile?: Profile,
-    error?: string
-}
 
-export async function getProfile(ctx: AppContext, agent: SessionAgent, handleOrDid: string): Promise<GetUserByIdOutProps>{
-    const t1 = Date.now()
-    const did = await handleToDid(agent, handleOrDid)
-    const t2 = Date.now()
+export const getProfile: CAHandler<{params: {handleOrDid: string}}, Profile> = async (ctx, agent, {params}) => {
+    const did = await handleToDid(agent, params.handleOrDid)
 
     try {
         const [bskyProfile, caProfile, caFollowsCount, caFollowersCount] = await Promise.all([
@@ -348,10 +341,9 @@ export async function getProfile(ctx: AppContext, agent: SessionAgent, handleOrD
                 }
             })
         ])
-        const t3 = Date.now()
-        logTimes("getProfile:"+handleOrDid, [t1, t2, t3])
+
         return {
-            profile: {
+            data: {
                 bsky: bskyProfile.data,
                 ca: caProfile ? {
                     ...caProfile,
@@ -366,7 +358,7 @@ export async function getProfile(ctx: AppContext, agent: SessionAgent, handleOrD
 }
 
 
-export async function getSession(ctx: AppContext, agent: SessionAgent): Promise<{session?: Session, error?: string}> {
+export const getSession: CAHandler<{}, Session> = async (ctx, agent) => {
     const data = await ctx.db.user.findUnique({
         select: {
             platformAdmin: true,
@@ -383,7 +375,7 @@ export async function getSession(ctx: AppContext, agent: SessionAgent): Promise<
     })
     if(!data || !data.handle) return {error: "No se encontró el usuario."}
     return {
-        session: {
+        data: {
             ...data,
             did: agent.did,
             handle: data.handle
@@ -392,7 +384,7 @@ export async function getSession(ctx: AppContext, agent: SessionAgent): Promise<
 }
 
 
-export async function getAccount(ctx: AppContext, agent: SessionAgent): Promise<{account?: Account, error?: string}> {
+export const getAccount: CAHandler<{}, Account> = async (ctx, agent) => {
     const data = await ctx.db.user.findUnique({
         select: {
             email: true
@@ -403,7 +395,7 @@ export async function getAccount(ctx: AppContext, agent: SessionAgent): Promise<
     })
     if(!data) return {error: "No se encontró el usuario."}
     return {
-        account: {
+        data: {
             email: data.email ?? undefined
         }
     }

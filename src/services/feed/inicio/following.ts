@@ -168,6 +168,8 @@ export const getFollowingFeedSkeleton = async (ctx: AppContext, agent: SessionAg
 
     const [timeline, articles, articleReposts] = await Promise.all([timelineQuery, articlesQuery, articleRepostsQuery])
 
+    console.log("Timeline", timeline.data.feed)
+
     const timelineSkeleton = getSkeletonFromTimeline(timeline.data.feed)
     const articleRepostsSkeleton = articleReposts.map(skeletonFromArticleReposts)
 

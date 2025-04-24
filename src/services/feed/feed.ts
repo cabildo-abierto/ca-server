@@ -8,10 +8,12 @@ import {AppContext} from "#/index";
 import {enDiscusionFeedPipeline} from "#/services/feed/inicio/discusion";
 import {discoverFeedPipeline} from "#/services/feed/inicio/discover";
 import {SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs";
+import {CAHandler, CAHandlerOutput} from "#/utils/handler";
 
 
-export async function getFeedByKind({ctx, agent, kind}: {ctx: AppContext, agent: SessionAgent, kind: string}){
+export const getFeedByKind: CAHandler<{params: {kind: string}}, FeedViewContent[]> = async (ctx, agent, {params}) => {
     let pipeline: FeedPipelineProps
+    const {kind} = params
     if(kind == "discusion"){
         pipeline = enDiscusionFeedPipeline
     } else if(kind == "siguiendo"){
@@ -44,13 +46,7 @@ export type GetFeedProps = {
 }
 
 
-export type MaybeFeed = {
-    feed?: FeedViewContent[]
-    error?: string
-}
-
-
-export const getFeed = async ({ctx, agent, pipeline}: GetFeedProps): Promise<MaybeFeed> => {
+export const getFeed = async ({ctx, agent, pipeline}: GetFeedProps): CAHandlerOutput<FeedViewContent[]> => {
 
     const t1 = Date.now()
     const skeleton = await pipeline.getSkeleton(ctx, agent)
@@ -62,5 +58,5 @@ export const getFeed = async ({ctx, agent, pipeline}: GetFeedProps): Promise<May
     const t3 = Date.now()
 
     logTimes("get feed", [t1, t2, t3])
-    return {feed}
+    return {data: feed}
 }

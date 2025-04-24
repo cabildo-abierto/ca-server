@@ -2,8 +2,9 @@ import express from 'express'
 import { getIronSession } from 'iron-session'
 import { isValidHandle } from '@atproto/syntax'
 import type { AppContext } from '#/index'
-import {cookieOptions, handler, Session} from "#/utils/session-agent";
+import {cookieOptions, handler, Session, sessionAgent} from "#/utils/session-agent";
 import {env} from "#/lib/env";
+import {getAvailableInviteCodes} from "#/services/user/access";
 
 const router = express.Router()
 
@@ -43,13 +44,27 @@ export default function authRoutes(ctx: AppContext) {
             ctx.logger.error({ err }, 'oauth callback failed')
             return res.redirect('/?error')
         }
+        console.log("redirecting to", env.FRONTEND_URL+'/inicio')
         return res.redirect(env.FRONTEND_URL+'/inicio')
     })
 
     router.post('/logout', async (req, res) => {
-        const session = await getIronSession<Session>(req, res, cookieOptions)
-        session.destroy()
-        return res.redirect('/')
+        console.log("logging out")
+        const agent = await sessionAgent(req, res, ctx)
+        if(agent.hasSession()){
+            await ctx.oauthClient.revoke(agent.did)
+            const session = await getIronSession<Session>(req, res, cookieOptions)
+            session.destroy()
+        }
+
+        console.log("ok")
+        return res.status(200).json({})
+    })
+
+    router.get("/codes", async (req, res) => {
+        const codes = await getAvailableInviteCodes(ctx)
+
+        return {data: codes}
     })
 
     return router

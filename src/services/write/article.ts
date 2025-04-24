@@ -1,12 +1,11 @@
-import {AppContext} from "#/index";
 import {CreateArticleProps} from "#/routes/article";
-import {SessionAgent} from "#/utils/session-agent";
 import {splitUri} from "#/utils/uri";
 import {processCreateRecord} from "#/services/sync/process-event";
 import {uploadStringBlob} from "#/services/blob";
+import {CAHandler} from "#/utils/handler";
 
 
-export async function createArticle(ctx: AppContext, agent: SessionAgent, article: CreateArticleProps){
+export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, article) => {
     const did = agent.did
     const text = article.text
 

@@ -4,16 +4,19 @@ import {getDidFromUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {SmallTopicProps, TopicHistoryProps, TopicProps, TopicSortOrder} from "#/lib/types";
 import {logTimes} from "#/utils/utils";
+import {CAHandler, CAHandlerOutput} from "#/utils/handler";
+
+
+export const getTopTrendingTopics: CAHandler<{}, SmallTopicProps[]> = async (ctx, agent) => {
+    return await getTrendingTopics(ctx, [], "popular", 10)
+}
 
 
 export async function getTrendingTopics(
     ctx: AppContext,
     categories: string[],
     sortedBy: "popular" | "recent",
-    limit: number): Promise<{
-    error?: string
-    topics?: SmallTopicProps[]
-}> {
+    limit: number): CAHandlerOutput<SmallTopicProps[]> {
     const where = {
         AND: categories.map((c) => {
             if (c == "Sin categoría") {
@@ -53,7 +56,7 @@ export async function getTrendingTopics(
             take: limit
         })
         return {
-            topics: topics.map(t => ({
+            data: topics.map(t => ({
                 ...t,
                 popularityScore: t.popularityScore ?? undefined,
                 lastEdit: t.lastEdit ?? undefined
@@ -86,7 +89,7 @@ export async function getTrendingTopics(
             take: limit
         })
         return {
-            topics: topics.map(t => ({
+            data: topics.map(t => ({
                 ...t,
                 popularityScore: t.popularityScore ?? undefined,
                 lastEdit: t.lastEdit ?? undefined

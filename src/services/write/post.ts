@@ -7,6 +7,7 @@ import {RichText} from "@atproto/api";
 import {ATProtoStrongRef} from "#/lib/types";
 import {Image} from "#/lex-api/types/app/bsky/embed/images";
 import {uploadImageBlob} from "#/services/blob";
+import {CAHandler} from "#/utils/handler";
 
 async function getPostEmbed(agent: SessionAgent, post: CreatePostProps): Promise<PostRecord["embed"] | undefined> {
     if(post.selection){
@@ -61,15 +62,7 @@ export async function createPostAT({
 }
 
 
-export async function createPost({
-    ctx,
-    agent,
-    post
-}: {
-    ctx: AppContext
-    agent: SessionAgent
-    post: CreatePostProps
-}): Promise<{error?: string, ref?: {uri: string, cid: string}}> {
+export const createPost: CAHandler<CreatePostProps, ATProtoStrongRef> = async (ctx, agent, post) => {
 
     const ref = await createPostAT({
         agent, post
@@ -89,5 +82,5 @@ export async function createPost({
         // revalidateTag("topic:Inflación")
     //}
 
-    return {ref}
+    return {data: ref}
 }

@@ -1,7 +1,7 @@
 import {ThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
-import {getCollectionFromUri} from "#/utils/uri";
+import {getCollectionFromUri, getUri} from "#/utils/uri";
 import {FeedSkeleton} from "#/services/feed/feed";
 import {
     fetchHydrationData,
@@ -10,6 +10,7 @@ import {
 } from "#/services/hydration/hydrate";
 import {unique} from "#/utils/arrays";
 import {isThreadViewPost} from "#/lex-server/types/app/bsky/feed/defs";
+import {CAHandler} from "#/utils/handler";
 
 
 async function getThreadRepliesSkeletonForPost(ctx: AppContext, agent: SessionAgent, uri: string){
@@ -64,16 +65,15 @@ export async function getThreadHydrationData(ctx: AppContext, agent: SessionAgen
 }
 
 
-export const getThread = async (ctx: AppContext, agent: SessionAgent, uri: string): Promise<{
-    thread?: ThreadViewContent,
-    error?: string
-}> => {
+export const getThread: CAHandler<{params: {did: string, collection: string, rkey: string}}, ThreadViewContent> = async (ctx, agent, {params})  => {
+    const {did, collection, rkey} = params
+    const uri = getUri(did, collection, rkey)
     const replies = await getThreadRepliesSkeleton(ctx, agent, uri)
     const skeleton: ThreadSkeleton = {post: uri, replies}
     const data = await getThreadHydrationData(ctx, agent, skeleton)
 
     const thread = hydrateThreadViewContent({post: uri, replies}, data, true)
 
-    return thread ? {thread} : {error: "Ocurrió un error al obtener el contenido."}
+    return thread ? {data: thread} : {error: "Ocurrió un error al obtener el contenido."}
 }
 

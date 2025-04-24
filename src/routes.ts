@@ -8,6 +8,8 @@ import visualizationRoutes from "#/routes/visualization";
 import threadRoutes from "#/routes/thread";
 import topicRoutes from "#/routes/topic";
 import postRoutes from "#/routes/post";
+import reactionRoutes from "#/routes/reaction";
+import followRoutes from "#/routes/follow";
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -21,6 +23,8 @@ export const createRouter = (ctx: AppContext) => {
     router.use('/', threadRoutes(ctx))
     router.use('/', topicRoutes(ctx))
     router.use('/', postRoutes(ctx))
+    router.use('/', reactionRoutes(ctx))
+    router.use('/', followRoutes(ctx))
 
     router.use(ctx.xrpc.xrpc.router)
 

@@ -1,6 +1,6 @@
 import express from 'express'
 import type {AppContext} from '#/index'
-import {sessionAgent, handler} from "#/utils/session-agent";
+import {makeHandler} from "#/utils/handler";
 
 const router = express.Router()
 
@@ -8,14 +8,7 @@ const router = express.Router()
 export default function visualizationRoutes(ctx: AppContext) {
     router.get(
         '/visualizations',
-        handler(async (req, res) => {
-            const agent = await sessionAgent(req, res, ctx)
-            if(agent.hasSession()){
-                return res.json({visualizations: []})
-            } else {
-                return res.json({error: "No session"})
-            }
-        })
+        makeHandler(ctx, async () => ({data: []})),
     )
 
     return router

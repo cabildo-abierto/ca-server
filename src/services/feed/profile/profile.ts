@@ -1,5 +1,3 @@
-import {AppContext} from "#/index";
-import {SessionAgent} from "#/utils/session-agent";
 import {handleToDid} from "#/services/user/users";
 import {getMainProfileFeedSkeleton} from "#/services/feed/profile/main";
 import {getRepliesProfileFeedSkeleton} from "#/services/feed/profile/replies";
@@ -7,10 +5,11 @@ import {FeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {FeedPipelineProps, getFeed} from "#/services/feed/feed";
 import {rootCreationDateSortKey} from "#/services/feed/utils";
 import {getEditsProfileFeedSkeleton} from "#/services/feed/profile/edits";
+import {CAHandler} from "#/utils/handler";
 
 
-export async function getProfileFeed(ctx: AppContext, agent: SessionAgent, handleOrDid: string, kind: string): Promise<{error?: string, feed?: FeedViewContent[]}>{
-
+export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: string}}, FeedViewContent[]> = async (ctx, agent, {params}) => {
+    const {handleOrDid, kind} = params
     const did = await handleToDid(agent, handleOrDid)
 
     let pipeline: FeedPipelineProps

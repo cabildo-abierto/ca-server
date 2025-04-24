@@ -1,9 +1,8 @@
 import express from 'express'
 import type {AppContext} from '#/index'
-import {sessionAgent, handler} from "#/utils/session-agent";
-import {getUri, getValidUri} from "#/utils/uri";
-import {getThread} from "#/services/thread/thread";
-import {getTrendingTopics} from "#/services/topic/topics";
+import {handler} from "#/utils/session-agent";
+import {getTopTrendingTopics} from "#/services/topic/topics";
+import {makeHandler} from "#/utils/handler";
 
 const router = express.Router()
 
@@ -11,10 +10,7 @@ const router = express.Router()
 export default function topicRoutes(ctx: AppContext) {
     router.get(
         '/trending-topics',
-        handler(async (req, res) => {
-            const {error, topics} = await getTrendingTopics(ctx, [], "popular", 10)
-            return res.json({error, data: topics})
-        })
+        handler(makeHandler(ctx, getTopTrendingTopics))
     )
 
     return router

@@ -3,9 +3,7 @@ import type http from 'node:http'
 import express, {type Express} from 'express'
 import {pino} from 'pino'
 import type {OAuthClient} from '@atproto/oauth-client-node'
-import {Firehose} from '@atproto/sync'
 import {env} from '#/lib/env'
-import {createIngester} from '#/ingester'
 import {createRouter} from '#/routes'
 import {createClient} from '#/auth/client'
 import {createBidirectionalResolver, createIdResolver, BidirectionalResolver} from '#/id-resolver'
@@ -14,11 +12,11 @@ import cors from 'cors'
 import path from 'path'
 import {createServer} from "src/lex-server";
 import {Server as XrpcServer} from "src/lex-server"
+import {MirrorMachine} from "#/services/sync/mirror-machine";
 
 
 export type AppContext = {
     db: PrismaClient
-    ingester: Firehose
     logger: pino.Logger
     oauthClient: OAuthClient
     resolver: BidirectionalResolver
@@ -42,19 +40,18 @@ export class Server {
 
         const oauthClient = await createClient(db)
         const baseIdResolver = createIdResolver()
-        const ingester = createIngester(db, baseIdResolver)
         const resolver = createBidirectionalResolver(baseIdResolver)
         const xrpc = createServer()
         const ctx = {
             db,
-            ingester,
             logger,
             oauthClient,
             resolver,
             xrpc
         }
 
-        ingester.start()
+        const ingester = new MirrorMachine(ctx)
+        ingester.run()
 
         const app: Express = express()
         app.set('trust proxy', true)
@@ -67,7 +64,8 @@ export class Server {
             'https://cabildoabierto.ar',
             'https://www.cabildoabierto.ar',
             'https://ca-withered-wind.fly.dev',
-            'https://api.cabildoabierto.ar'
+            'https://api.cabildoabierto.ar',
+            'https://dev0.cabildoabierto.ar'
         ]
 
         app.use(cors({
@@ -98,7 +96,6 @@ export class Server {
 
     async close() {
         this.ctx.logger.info('sigint received, shutting down')
-        await this.ctx.ingester.destroy()
         return new Promise<void>((resolve) => {
             this.server.close(() => {
                 this.ctx.logger.info('server closed')

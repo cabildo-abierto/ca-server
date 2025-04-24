@@ -22,8 +22,6 @@ import {getAllText} from "#/services/topic/diff";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
 import {isNotFoundPost, isReasonRepost, NotFoundPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {gett, listOrderDesc, sortByKey} from "#/utils/arrays";
-import {isMain as isRecordEmbed} from "#/lex-server/types/app/bsky/embed/record"
-import {isMain as isRecordWithMediaEmbed} from "#/lex-server/types/app/bsky/embed/recordWithMedia"
 import {isMain as isSelectionQuoteEmbed, View as SelectionQuoteEmbedView, Main as SelectionQuoteEmbed} from "#/lex-server/types/ar/cabildoabierto/embed/selectionQuote"
 import {creationDateSortKey} from "#/services/feed/utils";
 
