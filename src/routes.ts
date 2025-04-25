@@ -10,7 +10,7 @@ import {env} from "#/lib/env";
 import {getAvailableInviteCodes} from "#/services/user/access";
 import {getFeedByKind} from "#/services/feed/feed";
 import {getProfileFeed} from "#/services/feed/profile/profile";
-import {follow, getAccount, getProfile, getSession, unfollow} from "#/services/user/users";
+import {follow, getAccount, getFollowers, getFollows, getProfile, getSession, unfollow} from "#/services/user/users";
 import {createPost} from "#/services/write/post";
 import {addLike, removeLike} from "#/services/reactions/like";
 import {removeRepost, repost} from "#/services/reactions/repost";
@@ -55,12 +55,10 @@ export const createRouter = (ctx: AppContext) => {
             ctx.logger.error({ err }, 'oauth callback failed')
             return res.redirect('/?error')
         }
-        console.log("redirecting to", env.FRONTEND_URL+'/inicio')
         return res.redirect(env.FRONTEND_URL+'/inicio')
     })
 
     router.post('/logout', async (req, res) => {
-        console.log("logging out")
         const agent = await sessionAgent(req, res, ctx)
         if(agent.hasSession()){
             await ctx.oauthClient.revoke(agent.did)
@@ -68,7 +66,6 @@ export const createRouter = (ctx: AppContext) => {
             session.destroy()
         }
 
-        console.log("ok")
         return res.status(200).json({})
     })
 
@@ -109,7 +106,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/search-users',
+        '/search-users/:query',
         handler(makeHandler(ctx, searchUsers))
     )
 
@@ -163,10 +160,13 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/prueba',
-        handler(async (req, res) => {
-            return res.json({hola: "mundo"})
-        })
+        '/follows/:handleOrDid',
+        makeHandler(ctx, getFollows)
+    )
+
+    router.get(
+        '/followers/:handleOrDid',
+        makeHandler(ctx, getFollowers)
     )
 
     router.use(ctx.xrpc.xrpc.router)

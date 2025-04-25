@@ -89,7 +89,7 @@ export interface PostView {
     | $Typed<AppBskyEmbedExternal.View>
     | $Typed<AppBskyEmbedRecord.View>
     | $Typed<AppBskyEmbedRecordWithMedia.View>
-    | $Typed<ArCabildoabiertoEmbedSelectionQuote.Main>
+    | $Typed<ArCabildoabiertoEmbedSelectionQuote.View>
     | { $type: string }
   uniqueViewsCount?: number
   bskyRepostCount?: number

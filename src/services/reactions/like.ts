@@ -45,7 +45,7 @@ export const addLike: CAHandler<ATProtoStrongRef, {uri: string}> = async (ctx, a
     try {
         const res = await agent.bsky.like(ref.uri, ref.cid)
         await createLikeDB({ctx, ...res, likedUri: ref.uri})
-        return {uri: res.uri}
+        return {data: {uri: res.uri}}
     } catch(err) {
         console.error("Error giving like", err)
         return {error: "No se pudo agregar el like."}
@@ -61,7 +61,7 @@ export const removeLike: CAHandler<RemoveLikeProps> = async (ctx, agent, {uri, l
     try {
         await agent.bsky.deleteLike(uri)
         await deleteLikeDB(ctx, uri, likedUri)
-        return {}
+        return {data: {}}
     } catch(err) {
         console.error("Error removing like", err)
         return {error: "No se pudo eliminar el like."}

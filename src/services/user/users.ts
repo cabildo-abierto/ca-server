@@ -1,13 +1,17 @@
 import {AppContext} from "#/index";
 import {ProfileView, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {Prisma} from "@prisma/client";
-import {Account, MentionProps, Profile, Session, SmallUserProps, UserStats} from "#/lib/types";
+import {Account, MentionProps, Profile, Session, UserStats} from "#/lib/types";
 import { SessionAgent } from "#/utils/session-agent";
 import {getDidFromUri, getRkeyFromUri } from "#/utils/uri";
 import {deleteRecords} from "#/services/admin";
 import {cleanText} from "#/utils/strings";
-import {logTimes} from "#/utils/utils";
 import {CAHandler} from "#/utils/handler";
+import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
+import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile";
+import {HydrationData} from "#/services/hydration/hydrate";
+import {listOrderDesc, sortByKey} from "#/utils/arrays";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -50,7 +54,7 @@ export async function isCAUser(ctx: AppContext, did: string) {
 }
 
 
-export const getUsers = async (ctx: AppContext): Promise<{ users?: SmallUserProps[], error?: string }> => {
+export const getUsers = async (ctx: AppContext): Promise<{ users?: CAProfileViewBasic[], error?: string }> => {
     try {
         const res = await ctx.db.user.findMany({
             select: {
@@ -66,7 +70,7 @@ export const getUsers = async (ctx: AppContext): Promise<{ users?: SmallUserProp
             }
         })
 
-        let users: SmallUserProps[] = []
+        let users: CAProfileViewBasic[] = []
 
         res.forEach(u => {
             if(u.handle){
@@ -75,7 +79,7 @@ export const getUsers = async (ctx: AppContext): Promise<{ users?: SmallUserProp
                     handle: u.handle,
                     displayName: u.displayName ?? undefined,
                     avatar: u.avatar ?? undefined,
-                    CAProfileUri: u.CAProfileUri ?? undefined
+                    caProfile: u.CAProfileUri ?? undefined
                 })
             }
         })
@@ -347,6 +351,7 @@ export const getProfile: CAHandler<{params: {handleOrDid: string}}, Profile> = a
                 bsky: bskyProfile.data,
                 ca: caProfile ? {
                     ...caProfile,
+                    inCA: caProfile.inCA,
                     followsCount: caFollowsCount,
                     followersCount: caFollowersCount
                 } : null
@@ -816,4 +821,69 @@ export async function setSeenTutorial(ctx: AppContext, agent: SessionAgent, v: b
         }
     })
     // revalidateTag("user:" + did)
+}
+
+
+export async function getCADataForUsers(ctx: AppContext, users: string[]) {
+    const data = await ctx.db.user.findMany({
+        select: {
+            did: true,
+            CAProfileUri: true,
+            displayName: true,
+            handle: true,
+            avatar: true
+        },
+        where: {
+            did: {
+                in: users
+            }
+        }
+    })
+
+    const res: CAProfileViewBasic[] = []
+
+    data.forEach(u => {
+        if (u.handle != null) res.push({
+            ...u,
+            handle: u.handle,
+            displayName: u.displayName ?? undefined,
+            avatar: u.avatar ?? undefined,
+            caProfile: u.CAProfileUri ?? undefined
+        })
+    })
+
+    return res
+}
+
+
+export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOrDid, kind}: {handleOrDid: string, kind: "follows" | "followers"}) => {
+    const did = await handleToDid(agent, handleOrDid)
+
+    const users = kind == "follows" ?
+        (await agent.bsky.getFollows({actor: did})).data.follows :
+        (await agent.bsky.getFollowers({actor: did})).data.followers
+
+    const bskyMap = new Map<string, ProfileViewBasic>(users.map(u => [u.did, {...u, $type: "app.bsky.actor.defs#profileViewBasic"}]))
+    const caData = await getCADataForUsers(ctx, users.map(u => u.did))
+    const caMap = new Map(caData.map(a => [a.did, a]))
+
+    const hData: HydrationData = {
+        bskyUsers: bskyMap,
+        caUsers: caMap
+    }
+
+    let data = users.map(u => hydrateProfileViewBasic(u.did, hData)).filter(x => x != null)
+    data = sortByKey(data, (u => [u.caProfile != null ? 1 : 0]), listOrderDesc)
+
+    return {data}
+}
+
+
+export const getFollows: CAHandler<{params: {handleOrDid: string}}, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
+    return await getFollowx(ctx, agent, {handleOrDid: params.handleOrDid, kind: "follows"})
+}
+
+
+export const getFollowers: CAHandler<{params: {handleOrDid: string}}, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
+    return await getFollowx(ctx, agent, {handleOrDid: params.handleOrDid, kind: "followers"})
 }

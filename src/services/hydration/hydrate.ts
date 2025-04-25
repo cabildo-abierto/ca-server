@@ -10,8 +10,9 @@ import {
     PostView, ThreadViewContent
 } from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {ProfileViewBasic} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs"
 import {getCollectionFromUri, isArticle} from "#/utils/uri";
-import {PostView as BskyPostView, SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
+import {PostView as BskyPostView, SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {FeedSkeleton} from "#/services/feed/feed";
 import {getUserEngagement} from "#/services/feed/get-user-engagement";
 import {SessionAgent} from "#/utils/session-agent";
@@ -537,6 +538,8 @@ export type HydrationData = {
     caContents?: Map<string, FeedElementQueryResult>
     bskyPosts?: Map<string, PostView>
     engagement?: FeedEngagementProps
+    bskyUsers?: Map<string, ProfileViewBasic>
+    caUsers?: Map<string, CAProfileViewBasic>
 }
 
 
@@ -591,3 +594,5 @@ export function hydrateThreadViewContent(skeleton: ThreadSkeleton, data: Hydrati
         replies
     }
 }
+
+

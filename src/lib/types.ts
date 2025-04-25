@@ -163,7 +163,7 @@ export type TopicsGraph = {
 export type ReasonProps = {
     createdAt: Date
     collection: Collection
-    by: SmallUserProps
+    by: ProfileViewBasic
 }
 
 
@@ -178,13 +178,11 @@ export type FeedContentProps =
 export type FeedContentPropsMaybe = FeedContentProps & {blocked?: boolean, notFound?: boolean}
 
 
-export type MentionProps = SmallUserProps & {
-    value: string
-}
-
-
-export type SmallUserProps = ProfileViewBasic & {
-    CAProfileUri?: string
+export type MentionProps = {
+    did: string
+    handle: string
+    displayName?: string
+    avatar?: string
 }
 
 
@@ -304,7 +302,7 @@ export type FastPostProps = RecordProps & EngagementProps & {
             embed?: string
             replyTo?: (FeedContentPropsMaybe | ATProtoStrongRef) & {collection?: string, uri: string, notFound?: boolean}
             root?: (FeedContentPropsMaybe | ATProtoStrongRef) & {collection?: string, uri: string, notFound?: boolean}
-            grandparentAuthor?: SmallUserProps
+            grandparentAuthor?: ProfileViewBasic
             quote?: string
             visualization?: VisualizationProps
         }

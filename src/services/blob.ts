@@ -1,6 +1,6 @@
 import {DidResolver} from "@atproto/identity";
 import {SessionAgent} from "#/utils/session-agent";
-import {ImagePayload} from "#/routes/post";
+import {ImagePayload} from "#/services/write/post";
 
 
 export async function getServiceEndpointForDid(did: string){

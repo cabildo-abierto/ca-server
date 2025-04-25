@@ -1,4 +1,4 @@
-./node_modules/.bin/lex gen-api --yes ./src/lexicon-api \
+./node_modules/.bin/lex gen-api --yes ./src/lex-api \
   ./lexicons/ar/cabildoabierto/actor/* \
   ./lexicons/ar/cabildoabierto/data/* \
   ./lexicons/ar/cabildoabierto/embed/* \

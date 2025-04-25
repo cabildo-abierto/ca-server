@@ -44,7 +44,7 @@ export const repost: CAHandler<ATProtoStrongRef, {uri: string}> = async (ctx, ag
     try {
         const res = await agent.bsky.repost(ref.uri, ref.cid)
         await createRepostDB({ctx, ...res, repostedUri: ref.uri})
-        return {uri: res.uri}
+        return {data: {uri: res.uri}}
     } catch(err) {
         console.error("Error reposting", err)
         console.error("uri", ref.uri)
@@ -63,7 +63,7 @@ export const removeRepost: CAHandler<RemoveRepostProps> = async (ctx, agent, {ur
     try {
         await agent.bsky.deleteRepost(uri)
         await deleteRepostDB(ctx, uri, repostedUri)
-        return {}
+        return {data: {}}
     } catch(err) {
         console.error("Error eliminando el repost", err)
         return {error: "No se pudo eliminar la republicación."}
