@@ -1,8 +1,6 @@
 import {processCreateRecordFromRefAndRecord} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
-import {AppContext} from "#/index";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
-import {CreatePostProps} from "#/routes/post";
 import {RichText} from "@atproto/api";
 import {ATProtoStrongRef} from "#/lib/types";
 import {Image} from "#/lex-api/types/app/bsky/embed/images";
@@ -60,6 +58,23 @@ export async function createPostAT({
 
     return data
 }
+
+
+export type FastPostReplyProps = {
+    parent: ATProtoStrongRef
+    root: ATProtoStrongRef
+}
+
+export type ImagePayload = {src: string, $type: "url"} | {image: string, $type: "str"}
+
+export type CreatePostProps = {
+    text: string
+    reply?: FastPostReplyProps
+    selection?: [number, number]
+    images?: ImagePayload[]
+    enDiscusion?: boolean
+}
+
 
 
 export const createPost: CAHandler<CreatePostProps, ATProtoStrongRef> = async (ctx, agent, post) => {

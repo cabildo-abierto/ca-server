@@ -1,9 +1,13 @@
-import {CreateArticleProps} from "#/routes/article";
 import {splitUri} from "#/utils/uri";
 import {processCreateRecord} from "#/services/sync/process-event";
 import {uploadStringBlob} from "#/services/blob";
 import {CAHandler} from "#/utils/handler";
 
+export type CreateArticleProps = {
+    title: string
+    format: string
+    text: string
+}
 
 export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, article) => {
     const did = agent.did
@@ -40,10 +44,10 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
         })
 
         await ctx.db.$transaction(updates)
+        return {data: {}}
     } catch (err){
         console.error("Error", err)
         return {error: "Ocurrió un error al publicar el artículo."}
     }
 
-    return {}
 }
