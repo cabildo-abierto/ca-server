@@ -111,6 +111,25 @@ model Topic {
   lastEdit           DateTime?
 }
 
+model TopicVersion {
+  uri              String  @id
+  content          Content @relation(fields: [uri], references: [uri])
+  title            String?
+  topic            Topic   @relation(fields: [topicId], references: [id])
+  topicId          String
+  message          String  @default("")
+  synonyms         String?
+  categories       String?
+  authorship       Boolean @default(true)
+  currentVersionOf Topic?  @relation("currentVersion")
+  charsAdded       Int?
+  charsDeleted     Int?
+  accCharsAdded    Int?
+  contribution     String?
+  diff             String?
+  props            Json?
+}
+
 model TopicCategory {
   id     String            @id
   topics TopicToCategory[]
@@ -238,24 +257,6 @@ model TopicReject {
   record           Record  @relation(fields: [uri], references: [uri])
   rejectedRecordId String?
   rejectedRecord   Record? @relation("rejects", fields: [rejectedRecordId], references: [uri])
-}
-
-model TopicVersion {
-  uri              String  @id
-  content          Content @relation(fields: [uri], references: [uri])
-  title            String?
-  topic            Topic   @relation(fields: [topicId], references: [id])
-  topicId          String
-  message          String  @default("")
-  synonyms         String?
-  categories       String?
-  authorship       Boolean @default(true)
-  currentVersionOf Topic?  @relation("currentVersion")
-  charsAdded       Int?
-  charsDeleted     Int?
-  accCharsAdded    Int?
-  contribution     String?
-  diff             String?
 }
 
 model Article {

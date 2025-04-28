@@ -1,4 +1,4 @@
-import {deleteRecords} from "../admin";
+import {deleteRecords} from "../delete";
 import {processCreateRecord} from "../sync/process-event";
 import {updateTopicCurrentVersion} from "./current-version";
 import {ATProtoStrongRef} from "#/lib/types";
@@ -27,7 +27,7 @@ export async function acceptEdit(ctx: AppContext, agent: SessionAgent, topicId: 
         await deleteRecords({ctx, agent, uris: rejects.map(a => a.uri), atproto: true})
     }
 
-    await updateTopicCurrentVersion(ctx, topicId)
+    await updateTopicCurrentVersion(ctx, agent, topicId)
 
     return {}
 }
@@ -87,7 +87,7 @@ export async function rejectEdit(ctx: AppContext, agent: SessionAgent, topicId: 
         await deleteRecords({ctx, agent, uris: accepts.map(a => a.uri), atproto: true})
     }
 
-    await updateTopicCurrentVersion(ctx, topicId)
+    await updateTopicCurrentVersion(ctx, agent, topicId)
 
     return {}
 }

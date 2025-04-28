@@ -125,7 +125,7 @@ export function isQuotePost(c: string) {
 }
 
 export function isTopicVersion(c: string){
-    return c == "ar.com.cabildoabierto.topic"
+    return c == "ar.cabildoabierto.wiki.topicVersion" || c == "ar.com.cabildoabierto.topic"
 }
 
 export function isDataset(c: string){

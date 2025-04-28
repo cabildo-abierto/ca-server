@@ -420,7 +420,7 @@ export async function getCAFeedContents(ctx: AppContext, uris: string[]): Promis
     await fetchArticleBlobs(m)
     const t3 = Date.now()
 
-    logTimes("get feed ca contents", [t1, t2, t3])
+    // logTimes("get feed ca contents", [t1, t2, t3])
 
     return m
 }
@@ -525,7 +525,7 @@ export async function fetchHydrationData(ctx: AppContext, agent: SessionAgent, s
     const t3 = Date.now()
     let bskyMap = new Map([...bskyPostsMap, ...bskyRepliesMap])
 
-    logTimes("fetch feed data", [t1, t2, t3])
+    // logTimes("fetch feed data", [t1, t2, t3])
     return {
         caContents,
         bskyPosts: bskyMap,

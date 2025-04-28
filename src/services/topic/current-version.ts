@@ -1,21 +1,9 @@
-import {setTopicCategories, setTopicSynonyms} from "./utils";
-import {getTopicHistory} from "./topics";
-import {TopicHistoryProps, TopicProps} from "#/lib/types";
+import {getTopicHistory, getTopicVersion} from "./topics";
 import {max, unique} from "#/utils/arrays";
 import {AppContext} from "#/index";
 import {getDidFromUri} from "#/utils/uri";
-
-
-export function getCurrentContentVersion(topic: {versions: {content: {hasText: boolean}, uniqueRejects: number}[]}, version?: number){
-    if(version == null) version = topic.versions.length-1
-    let lastContent = 0
-    for(let i = 0; i <= version; i++){
-        if(topic.versions[i].content.hasText && topic.versions[i].uniqueRejects == 0){
-            lastContent = i
-        }
-    }
-    return lastContent
-}
+import {SessionAgent} from "#/utils/session-agent";
+import {TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 
 
 export function getTopicLastEditFromVersions(topic: {versions: {content: {record: {createdAt: Date}}}[]}){
@@ -24,68 +12,33 @@ export function getTopicLastEditFromVersions(topic: {versions: {content: {record
 }
 
 
-function getTopicCategoriesFromVersions(topic: TopicHistoryProps){
-    let categories = undefined
-    for(let i = topic.versions.length - 1; i >= 0; i--){
-        if(topic.versions[i].content.topicVersion.categories){
-            categories = topic.versions[i].content.topicVersion.categories
-        }
-    }
-    return categories ? JSON.parse(categories) : []
-}
+export async function deleteTopicVersion(ctx: AppContext, agent: SessionAgent, uri: string){
+    const {data: topicVersion} = await getTopicVersion(ctx, agent, uri)
+    if(!topicVersion) return {error: "Ocurrió un error al borrar la versión."}
+    const {data: topicHistory} = await getTopicHistory(ctx, agent, {params: {id: topicVersion.id}})
+    if(!topicHistory) return {error: "Ocurrió un error al borrar la versión."}
 
+    const currentVersion = getTopicCurrentVersion(topicHistory.versions)
+    if(!currentVersion) return {error: "Ocurrió un error al borrar la versión."}
 
-function getTopicSynonymsFromVersions(topic: TopicHistoryProps){
-    let categories = undefined
-    for(let i = topic.versions.length - 1; i >= 0; i--){
-        if(topic.versions[i].content.topicVersion.synonyms){
-            categories = topic.versions[i].content.topicVersion.synonyms
-        }
-    }
-    return categories ? JSON.parse(categories) : []
-}
+    const index = topicHistory.versions.findIndex(v => v.uri == uri)
 
+    const newCurrentVersionIndex = getTopicCurrentVersion(topicHistory.versions.toSpliced(index, 1))
 
-function arraysEqual<T>(a: T[], b: T[]): boolean{
-    return a.length === b.length && a.every((val, index) => val === b[index])
-}
+    const currentVersionId = newCurrentVersionIndex != null ? topicHistory.versions[newCurrentVersionIndex].uri : undefined
+    console.log("setting new current version", currentVersionId)
 
-
-export async function deleteTopicVersion(ctx: AppContext, topic: TopicProps, topicHistory: TopicHistoryProps, index: number){
-    const prevCategories = topic.categories.map(c => (c.categoryId))
-    const prevSynonyms = topic.synonyms
-
-    const wasCurrentVersion = topic.currentVersion.uri == topicHistory.versions[index].uri
-
-
-    topicHistory.versions = [...topicHistory.versions.slice(0, index), ...topicHistory.versions.slice(index+1)]
-    const newCategories = getTopicCategoriesFromVersions(topicHistory)
-    const newSynonyms = getTopicSynonymsFromVersions(topicHistory)
-    let newCurrentVersionId
-    if(wasCurrentVersion && topicHistory.versions.length > 0){
-        newCurrentVersionId = topicHistory.versions[getCurrentContentVersion(topicHistory)].uri
-    }
-
-    const changedCategories = !arraysEqual(prevCategories, newCategories)
-
-    let updates: any[] = []
-    if(changedCategories){
-        updates = setTopicCategories(ctx, topic.id, newCategories)
-    }
-
-    if(!arraysEqual(prevSynonyms, newSynonyms)){
-        updates = [...updates, ...setTopicSynonyms(ctx, topic.id, newSynonyms)]
-    }
-
-    updates = [
-        ...updates,
+    const updates = [
+        ctx.db.topicVersion.delete({where: {uri}}),
+        ctx.db.content.delete({where: {uri}}),
+        ctx.db.record.delete({where: {uri}}),
         ctx.db.topic.update({
             where: {
-                id: topic.id,
+                id: topicVersion.id,
             },
             data: {
                 lastEdit: new Date(),
-                currentVersionId: wasCurrentVersion ? newCurrentVersionId : undefined
+                currentVersionId
             }
         })
     ]
@@ -140,13 +93,31 @@ export async function updateTopicsLastEdit(ctx: AppContext) {
 }
 
 
-export async function updateTopicCurrentVersion(ctx: AppContext, id: string){
-    const {topicHistory: topic, error} = await getTopicHistory(ctx, id)
+export function isVersionAccepted(status?: TopicVersionStatus){
+    return true // TO DO
+}
+
+
+export function getTopicCurrentVersion(versions: {status?: TopicVersionStatus}[]): number | null {
+    for(let i = versions.length-1; i >= 0; i--){
+        if(isVersionAccepted(versions[i].status)){
+            return i
+        }
+    }
+    return null
+}
+
+
+export async function updateTopicCurrentVersion(ctx: AppContext, agent: SessionAgent, id: string){
+    const {data: topic, error} = await getTopicHistory(ctx, agent, {params: {id}})
 
     if(!topic) return {error}
 
-    const currentVersion = getCurrentContentVersion(topic)
-    const uri = topic.versions[currentVersion].uri
+    console.log("history", topic)
+    const currentVersion = getTopicCurrentVersion(topic.versions)
+    console.log("current version", currentVersion)
+
+    const uri = currentVersion != null ? topic.versions[currentVersion].uri : null
 
     await ctx.db.topic.update({
         data: {
@@ -216,10 +187,12 @@ export async function updateTopicsCurrentVersion(ctx: AppContext) {
         }
     })
 
-    const updates = topics
+    throw Error("Sin implementar.")
+
+    /*const updates = topics
         .map(t => ({
             id: t.id,
-            currentVersionId: t.versions[getCurrentContentVersion(t)]?.uri || null
+            currentVersionId: t.versions[getTopicCurrentVersion(t)]?.uri || null
         }))
         .filter(t => t.currentVersionId !== null);
 
@@ -231,8 +204,9 @@ export async function updateTopicsCurrentVersion(ctx: AppContext) {
         FROM (VALUES ${updates.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(", ")}) AS c(id, uri)
         WHERE t.id = c.id;
     `, ...updates.flatMap(({ id, currentVersionId }) => [id, currentVersionId]))
-}
 
+     */
+}
 
 
 

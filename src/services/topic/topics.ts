@@ -1,13 +1,14 @@
 import {fetchBlob} from "../blob";
-import {unique} from "#/utils/arrays";
-import {getDidFromUri} from "#/utils/uri";
+import {getDidFromUri, getUri, splitUri} from "#/utils/uri";
 import {AppContext} from "#/index";
-import {SmallTopicProps, TopicHistoryProps, TopicProps, TopicSortOrder} from "#/lib/types";
-import {logTimes} from "#/utils/utils";
 import {CAHandler, CAHandlerOutput} from "#/utils/handler";
+import {TopicHistory, TopicView, VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion";
+import {getTopicCurrentVersion} from "#/services/topic/current-version";
+import {SessionAgent} from "#/utils/session-agent";
 
 
-export const getTopTrendingTopics: CAHandler<{}, SmallTopicProps[]> = async (ctx, agent) => {
+export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
     return await getTrendingTopics(ctx, [], "popular", 10)
 }
 
@@ -16,7 +17,7 @@ export async function getTrendingTopics(
     ctx: AppContext,
     categories: string[],
     sortedBy: "popular" | "recent",
-    limit: number): CAHandlerOutput<SmallTopicProps[]> {
+    limit: number): CAHandlerOutput<TopicViewBasic[]> {
     const where = {
         AND: categories.map((c) => {
             if (c == "Sin categoría") {
@@ -41,8 +42,17 @@ export async function getTrendingTopics(
         }
     }
 
+    let topics: {
+        id: string
+        popularityScore: number | null
+        lastEdit: Date | null
+        categories: {
+            categoryId: string
+        }[]
+    }[]
+
     if (sortedBy == "popular") {
-        const topics = await ctx.db.topic.findMany({
+        topics = await ctx.db.topic.findMany({
             select,
             where: {
                 ...where,
@@ -55,13 +65,6 @@ export async function getTrendingTopics(
             },
             take: limit
         })
-        return {
-            data: topics.map(t => ({
-                ...t,
-                popularityScore: t.popularityScore ?? undefined,
-                lastEdit: t.lastEdit ?? undefined
-            } as SmallTopicProps))
-        }
     } else {
         const where = {
             AND: categories.map((c) => {
@@ -75,7 +78,7 @@ export async function getTrendingTopics(
                 some: {}
             }
         }
-        const topics = await ctx.db.topic.findMany({
+        topics = await ctx.db.topic.findMany({
             select,
             where: {
                 ...where,
@@ -88,17 +91,34 @@ export async function getTrendingTopics(
             },
             take: limit
         })
-        return {
-            data: topics.map(t => ({
-                ...t,
-                popularityScore: t.popularityScore ?? undefined,
-                lastEdit: t.lastEdit ?? undefined
-            } as SmallTopicProps))
-        }
+    }
+
+    return {
+        data: topics.map(t => ({
+            ...t,
+            popularity: t.popularityScore ? [t.popularityScore] : undefined,
+            lastEdit: t.lastEdit?.toISOString() ?? undefined,
+            props: [
+                {name: "Categorías", value: JSON.stringify(t.categories.map(({categoryId}) => categoryId)), dataType: "string[]"}
+            ]
+        }))
     }
 }
 
-export async function getCategories(ctx: AppContext) {
+
+export const getTopicsHandler: CAHandler<{params: {sort: string}, query: {c: string[] | string}}, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
+    const {sort} = params
+    const {c} = query
+    const categories = Array.isArray(c) ? c : c ? [c] : []
+
+    if(sort != "popular" && sort != "recent") return {error: `Criterio de ordenamiento inválido: ${sort}`}
+
+    return await getTrendingTopics(ctx, categories, sort, 50)
+}
+
+
+export const getCategories: CAHandler<{}, {category: string, size: number}[]> = async (ctx, agent, {}) => {
+
     const categoriesP = ctx.db.topicCategory.findMany({
         select: {
             id: true,
@@ -124,7 +144,7 @@ export async function getCategories(ctx: AppContext) {
 
     const res = categories.map(({id, _count}) => ({category: id, size: _count.topics}))
     res.push({category: "Sin categoría", size: noCategoryCount})
-    return res
+    return {data: res}
 }
 
 
@@ -143,16 +163,24 @@ export async function getTextFromBlob(blob: { cid: string, authorId: string }) {
 }
 
 
-export async function getTopicHistory(ctx: AppContext, id: string): Promise<{
-    topicHistory?: TopicHistoryProps,
-    error?: string
-}> {
+export function dbUserToProfileViewBasic(author: {did: string, handle: string | null, displayName: string | null, avatar: string | null}){
+    if(!author.handle) return null
+    return {
+        did: author.did,
+        handle: author.handle,
+        displayName: author.displayName ?? undefined,
+        avatar: author.avatar ?? undefined,
+    }
+}
+
+
+export const getTopicHistory: CAHandler<{params: {id: string}}, TopicHistory> = async (ctx, agent, {params}) => {
+    const {id} = params
     try {
         const versions = await ctx.db.record.findMany({
             select: {
                 uri: true,
                 cid: true,
-                collection: true,
                 createdAt: true,
                 author: {
                     select: {
@@ -197,6 +225,9 @@ export async function getTopicHistory(ctx: AppContext, id: string): Promise<{
                     topicVersion: {
                         topicId: id
                     }
+                },
+                cid: {
+                    not: null
                 }
             },
             orderBy: {
@@ -204,20 +235,54 @@ export async function getTopicHistory(ctx: AppContext, id: string): Promise<{
             }
         })
 
-        const topicHistory = {
+        const topicHistory: TopicHistory = {
             id,
-            versions: versions.map(v => ({
-                ...v,
-                uniqueAccepts: unique(v.accepts.map(a => getDidFromUri(a.uri))).length,
-                uniqueRejects: unique(v.rejects.map(a => getDidFromUri(a.uri))).length,
-                content: {
-                    ...v.content,
-                    hasText: v.content != null && (v.content.textBlob != null || v.content.text != null)
-                }
-            }))
-        } as TopicHistoryProps // TO DO
+            versions: versions.map(v => {
+                if(!v.content || !v.content.topicVersion || !v.cid) return null
 
-        return {topicHistory}
+                let accept: string | undefined
+                let reject: string | undefined
+
+                v.accepts.forEach(a => {
+                    const did = getDidFromUri(a.uri)
+                    if(did == agent.did){
+                        accept = a.uri
+                    }
+                })
+
+                v.rejects.forEach(a => {
+                    const did = getDidFromUri(a.uri)
+                    if(did == agent.did){
+                        reject = a.uri
+                    }
+                })
+
+                const author = dbUserToProfileViewBasic(v.author)
+                if(!author) return null
+
+                const view: VersionInHistory = {
+                    $type: "ar.cabildoabierto.wiki.topicVersion#versionInHistory",
+                    uri: v.uri,
+                    cid: v.cid,
+                    author,
+                    message: v.content.topicVersion.message,
+                    viewer: {
+                        accept,
+                        reject
+                    },
+                    status: {
+                        voteCounts: []
+                    },
+                    addedChars: v.content.topicVersion.charsAdded ?? undefined,
+                    removedChars: v.content.topicVersion.charsDeleted ?? undefined,
+                    props: [],
+                    createdAt: v.createdAt.toISOString()
+                }
+                return view
+            }).filter(v => v != null)
+        }
+
+        return {data: topicHistory}
     } catch (e) {
         console.error("Error getting topic " + id)
         console.error(e)
@@ -226,127 +291,136 @@ export async function getTopicHistory(ctx: AppContext, id: string): Promise<{
 }
 
 
-export async function getTopicById(ctx: AppContext, id: string): Promise<{ topic?: TopicProps, error?: string }> {
-    const t1 = Date.now()
-    const topic = await ctx.db.topic.findUnique({
+export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{data?: TopicView, error?: string}> => {
+    const res = await ctx.db.topic.findUnique({
         select: {
-            id: true,
-            protection: true,
-            synonyms: true,
-            categories: {
+            currentVersionId: true
+        },
+        where: {
+            id
+        }
+    })
+
+    let uri: string
+    if(!res || !res.currentVersionId){
+        console.log(`Warning: Current version not set for topic ${id}.`)
+        const {data: history} = await getTopicHistory(ctx, agent, {params: {id}})
+
+        if(!history) return {error: "No se encontró el tema " + id + "."}
+
+        const index = getTopicCurrentVersion(history.versions)
+        if(index == null) return {error: "No se encontró el tema " + id + "."}
+        uri = history.versions[index].uri
+    } else {
+        uri = res.currentVersionId
+    }
+
+    return await getTopicVersion(ctx, agent, uri)
+}
+
+
+export const getTopicHandler: CAHandler<{params: {id: string}}, TopicView> = async (ctx, agent, {params: {id}}) => {
+    return getTopic(ctx, agent, id)
+}
+
+
+export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri: string): Promise<{data?: TopicView, error?: string}> => {
+    console.log("getting topic version", uri)
+    const {did, rkey} = splitUri(uri)
+    const topic = await ctx.db.record.findFirst({
+        select: {
+            uri: true,
+            cid: true,
+            author: {
                 select: {
-                    categoryId: true,
+                    did: true,
+                    handle: true,
+                    displayName: true,
+                    avatar: true
                 }
             },
-            popularityScore: true,
-            lastEdit: true,
-            currentVersion: {
+            createdAt: true,
+            content: {
                 select: {
-                    uri: true,
-                    content: {
+                    text: true,
+                    format: true,
+                    textBlob: {
                         select: {
-                            text: true,
-                            format: true,
-                            textBlob: {
+                            cid: true,
+                            authorId: true
+                        }
+                    },
+                    topicVersion: {
+                        select: {
+                            topic: {
                                 select: {
-                                    cid: true,
-                                    authorId: true
+                                    id: true,
+                                    protection: true,
+                                    popularityScore: true,
+                                    lastEdit: true,
+                                    currentVersionId: true
                                 }
                             },
-                            record: {
-                                select: {
-                                    cid: true,
-                                    author: {
-                                        select: {
-                                            did: true,
-                                            handle: true,
-                                            displayName: true,
-                                            avatar: true
-                                        }
-                                    },
-                                    createdAt: true
-                                }
-                            }
+                            synonyms: true,
+                            categories: true
                         }
                     }
-                }
-            },
-            currentVersionId: true,
-            _count: {
-                select: {
-                    versions: true
                 }
             }
         },
         where: {
-            id: id
+            authorId: did, // cuando esté estable la collection pasamos a usar uri
+            rkey: rkey
         }
     })
 
-    if (!topic || topic._count.versions == 0) return {error: "No se encontró el tema " + id + "."}
-
-    if (topic.currentVersion && !topic.currentVersion.content.text) {
-        if (topic.currentVersion.content.textBlob) {
-            topic.currentVersion.content.text = await getTextFromBlob(
-                topic.currentVersion.content.textBlob
-            )
-        }
+    if (!topic || !topic.content || !topic.content.topicVersion) {
+        console.log("no topic")
+        return {error: "No se encontró la versión."}
     }
 
-    const t2 = Date.now()
+    let text: string | null = null
+    if (!topic.content.text) {
+        if (topic.content.textBlob) {
+            text = await getTextFromBlob(
+                topic.content.textBlob
+            )
+        }
+    } else {
+        text = topic.content.text
+    }
 
-    logTimes("getTopicById", [t1, t2])
-    return {topic: topic as TopicProps}
+    const author = dbUserToProfileViewBasic(topic.author)
+
+    const id = topic.content.topicVersion.topic.id
+
+    if(!author || !topic.cid || !topic.content.topicVersion.topic.lastEdit) {
+        console.log("missing data")
+        console.log(author != null, topic.cid != null, topic.content.topicVersion.topic.lastEdit != null)
+        return {error: "No se encontró el tema " + id + "."}
+    }
+
+    const view: TopicView = {
+        $type: "ar.cabildoabierto.wiki.topicVersion#topicView",
+        id,
+        uri: topic.uri,
+        cid: topic.cid,
+        author,
+        text: text ?? "",
+        format: text != null ? topic.content.format : "plain-text",
+        props: [],
+        createdAt: topic.createdAt.toISOString(),
+        lastEdit: topic.content.topicVersion.topic.lastEdit?.toISOString(),
+        currentVersion: topic.content.topicVersion.topic.currentVersionId ?? undefined
+    }
+
+    return {data: view}
 }
 
 
-export async function getTopicVersion(ctx: AppContext, uri: string) {
-    try {
-        const topicVersion = await ctx.db.record.findUnique({
-            select: {
-                uri: true,
-                cid: true,
-                createdAt: true,
-                content: {
-                    select: {
-                        text: true,
-                        textBlob: true,
-                        format: true
-                    }
-                }
-            },
-            where: {
-                uri: uri
-            }
-        })
-        if (!topicVersion) {
-            return {error: "No se encontró el contenido."}
-        }
-
-        if (topicVersion.content && !topicVersion.content.text) {
-            if (topicVersion.content.textBlob) {
-                topicVersion.content.text = await getTextFromBlob(
-                    topicVersion.content.textBlob
-                )
-            }
-        }
-
-        return {
-            topicVersion: {
-                ...topicVersion,
-                content: {
-                    ...topicVersion.content,
-                    record: {
-                        uri: topicVersion.uri,
-                        cid: topicVersion.cid,
-                        createdAt: topicVersion.createdAt
-                    }
-                }
-            }
-        }
-    } catch {
-        return {error: "No se encontró el tema."}
-    }
+export const getTopicVersionHandler: CAHandler<{params: {did: string, rkey: string}}, TopicView> = async (ctx, agent, {params}) => {
+    const {did, rkey} = params
+    return getTopicVersion(ctx, agent, getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey))
 }
 
 
@@ -416,27 +490,25 @@ function showAuthors(topic: TopicHistoryProps, topicVersion: TopicVersionProps) 
  */
 
 
-export async function getTopicVersionAuthors(uri: string): Promise<{
-    topicVersionAuthors?: { text: string },
-    error?: string
-}> {
+export const getTopicVersionAuthors: CAHandler<{params: {did: string, rkey: string}}> = async (ctx, agent, {params}) => {
+    const {did, rkey} = params
+
     return {
-        topicVersionAuthors: {
-            text: "Sin implementar"
-        },
-        error: undefined
+        data: {
+            text: "Sin implementar",
+            format: "markdown"
+        }
     }
 }
 
 
-export async function getTopicVersionChanges(uri: string): Promise<{
-    topicVersionChanges?: { text: string },
-    error?: string
-}> {
+export const getTopicVersionChanges: CAHandler<{params: {did: string, rkey: string}}> = async (ctx, agent, {params}) => {
+    const {did, rkey} = params
+
     return {
-        topicVersionChanges: {
-            text: "Sin implementar"
-        },
-        error: undefined
+        data: {
+            text: "Sin implementar",
+            format: "markdown"
+        }
     }
 }

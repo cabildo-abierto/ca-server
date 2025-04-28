@@ -4,7 +4,7 @@ import {Prisma} from "@prisma/client";
 import {Account, MentionProps, Profile, Session, UserStats} from "#/lib/types";
 import { SessionAgent } from "#/utils/session-agent";
 import {getDidFromUri, getRkeyFromUri } from "#/utils/uri";
-import {deleteRecords} from "#/services/admin";
+import {deleteRecords} from "#/services/delete";
 import {cleanText} from "#/utils/strings";
 import {CAHandler} from "#/utils/handler";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";

@@ -139,17 +139,6 @@ export type TopicVersionAuthorsProps = {
 }
 
 
-export type SmallTopicProps = {
-    id: string
-    popularityScore: number | null
-    synonyms: string[] | null
-    categories: {
-        categoryId: string
-    }[]
-    lastEdit: Date | null
-}
-
-
 export type TopicSortOrder = "popular" | "recent"
 
 
@@ -165,18 +154,6 @@ export type ReasonProps = {
     collection: Collection
     by: ProfileViewBasic
 }
-
-
-export type FeedContentProps =
-    (FastPostProps | ArticleProps | DatasetProps | VisualizationProps | TopicVersionOnFeedProps) &
-    Omit<RecordProps, "collection"> &
-    EngagementProps &
-    {reason?: ReasonProps}
-
-
-
-export type FeedContentPropsMaybe = FeedContentProps & {blocked?: boolean, notFound?: boolean}
-
 
 export type MentionProps = {
     did: string
@@ -265,110 +242,6 @@ export type UserStats = {
 }
 
 
-export type ArticleProps = RecordProps & EngagementProps & {
-    content: {
-        text?: string
-        textBlob?: {cid: string, authorId: string}
-        format?: string
-        numWords?: number
-        article: {
-            title: string
-        }
-        references: {
-            referencedTopicId: string
-            count: number
-        }[]
-    }
-} & {collection: "ar.com.cabildoabierto.article"}
-
-export type EngagementProps = {
-    likeCount?: number
-    repostCount?: number
-    replyCount?: number
-    viewer?: {like?: string, repost?: string}
-    participantsCount?: number
-    uniqueViewsCount?: number
-    visualizationsUsingCount?: number
-    likeCountBsky?: number
-    repostCountBsky?: number
-    quoteCountBsky?: number
-}
-
-export type FastPostProps = RecordProps & EngagementProps & {
-    content: {
-        text: string
-        post: {
-            facets?: string
-            embed?: string
-            replyTo?: (FeedContentPropsMaybe | ATProtoStrongRef) & {collection?: string, uri: string, notFound?: boolean}
-            root?: (FeedContentPropsMaybe | ATProtoStrongRef) & {collection?: string, uri: string, notFound?: boolean}
-            grandparentAuthor?: ProfileViewBasic
-            quote?: string
-            visualization?: VisualizationProps
-        }
-    }
-} & {collection: "ar.com.cabildoabierto.quotePost" | "app.bsky.feed.post"}
-
-
-export type ThreadReplyProps = FastPostProps & {
-    content: {
-        post: {
-            replyTo: {
-                text?: string
-            }
-        }
-    }
-}
-
-
-export type TopicVersionOnFeedProps = RecordProps & EngagementProps & {
-    content: {
-        numWords?: number
-        topicVersion: {
-            title?: string
-            topic: {
-                id: string
-            }
-            message?: string
-            charsAdded?: number
-            charsDeleted?: number
-        }
-    }
-} & {collection: "ar.com.cabildoabierto.topic"}
-
-export type ThreadProps = {
-    post: FeedContentProps
-    replies?: FastPostProps[]
-}
-
-export type MatchesType = {
-    matches: {x: number, y: number}[]
-    common: {x: number, y: number}[]
-    perfectMatches: {x: number, y: number}[]
-}
-
-
-export type DatasetProps = RecordProps & {
-    dataset: {
-        title: string
-        columns: string[]
-        columnValues: {column: string, values: any[]}[] | Map<string, any[]> | null
-        description: string | null
-        dataBlocks: {
-            record: RecordProps,
-            format: string,
-            blob: {
-                cid: string
-                authorId: string
-            }
-        }[]
-    }
-    visualizationsUsing: {
-        uri: string
-    }[]
-} & {collection: "ar.cabildoabierto.data.dataset"}
-
-
 export type PlotConfigProps = {
     datasetUri?: string
     filters?: FilterProps[]
@@ -396,7 +269,6 @@ export type VisualizationProps = RecordProps & {
         previewBlobCid?: string
     }
 } & {collection: "ar.com.cabildoabierto.visualization"}
-
 
 
 export type JetstreamEvent = {

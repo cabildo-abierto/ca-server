@@ -1,5 +1,5 @@
 import {processCreateRecord} from "./process-event";
-import {deleteRecords} from "../admin";
+import {deleteRecords} from "../delete";
 import {validRecord} from "./utils";
 import {getDirtyUsers, setMirrorStatus} from "./mirror-status";
 import {AppContext} from "#/index";

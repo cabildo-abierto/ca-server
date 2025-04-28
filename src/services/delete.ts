@@ -1,6 +1,8 @@
-import {getCollectionFromUri, getRkeyFromUri} from "#/utils/uri";
+import {getCollectionFromUri, getRkeyFromUri, isTopicVersion} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
+import {CAHandler} from "#/utils/handler";
+import {deleteTopicVersion} from "#/services/topic/current-version";
 
 
 export async function deleteRecordsForAuthor({ctx, agent, author, collections, atproto}: {ctx: AppContext, agent?: SessionAgent, author: string, collections?: string[], atproto: boolean}){
@@ -27,6 +29,11 @@ export async function deleteRecordsForAuthor({ctx, agent, author, collections, a
         }
     })).map((r) => (r.uri))
 
+    return await deleteRecords({ctx, agent, uris, atproto})
+}
+
+
+export const deleteRecordsHandler: CAHandler<{uris: string[], atproto: boolean}> = async (ctx, agent, {uris, atproto}) => {
     return await deleteRecords({ctx, agent, uris, atproto})
 }
 
@@ -171,4 +178,13 @@ export async function deleteUser(ctx: AppContext, did: string) {
             }
         })
     ])
+}
+
+
+export const deleteRecord: CAHandler<{uri: string}> = async (ctx, agent, {uri}) => {
+    const c = getCollectionFromUri(uri)
+    if(isTopicVersion(c)){
+        await deleteTopicVersion(ctx, agent, uri)
+    }
+    return {data: {}}
 }

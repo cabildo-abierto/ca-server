@@ -2,7 +2,7 @@ import express from 'express'
 import type {AppContext} from '#/index'
 import {cookieOptions, handler, Session, sessionAgent} from "#/utils/session-agent";
 import {makeHandler} from "#/utils/handler";
-import {searchUsers} from "#/services/search/search";
+import {searchTopics, searchUsers} from "#/services/search/search";
 import {createArticle} from "#/services/write/article";
 import {isValidHandle} from "@atproto/syntax";
 import {getIronSession} from "iron-session";
@@ -15,7 +15,20 @@ import {createPost} from "#/services/write/post";
 import {addLike, removeLike} from "#/services/reactions/like";
 import {removeRepost, repost} from "#/services/reactions/repost";
 import {getThread} from "#/services/thread/thread";
-import {getTopTrendingTopics} from "#/services/topic/topics";
+import {
+    getTopicHandler,
+    getTopicHistory,
+    getTopicVersionHandler,
+    getTopicVersionAuthors,
+    getTopicVersionChanges,
+    getTopTrendingTopics, getTrendingTopics,
+    getTopicsHandler,
+    getCategories
+} from "#/services/topic/topics";
+import {getTopicFeed} from "#/services/feed/topic";
+import {deleteRecord, deleteRecordsHandler} from "#/services/delete";
+import {getCategoriesGraph, getCategoryGraph} from "#/services/topic/graph";
+import {createTopicVersion} from "#/services/write/topic";
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -167,6 +180,76 @@ export const createRouter = (ctx: AppContext) => {
     router.get(
         '/followers/:handleOrDid',
         makeHandler(ctx, getFollowers)
+    )
+
+    router.get(
+        '/topic/:id',
+        makeHandler(ctx, getTopicHandler)
+    )
+
+    router.post(
+        '/topic-version',
+        makeHandler(ctx, createTopicVersion)
+    )
+
+    router.get(
+        '/topic-version/:did/:rkey',
+        makeHandler(ctx, getTopicVersionHandler)
+    )
+
+    router.get(
+        '/topic-feed/:id',
+        makeHandler(ctx, getTopicFeed)
+    )
+
+    router.get(
+        '/topic-history/:id',
+        makeHandler(ctx, getTopicHistory)
+    )
+
+    router.get(
+        '/topic-version-authors/:did/:rkey',
+        makeHandler(ctx, getTopicVersionAuthors)
+    )
+
+    router.get(
+        '/topic-version-changes/:did/:rkey',
+        makeHandler(ctx, getTopicVersionChanges)
+    )
+
+    router.post(
+        '/delete-records',
+        makeHandler(ctx, deleteRecordsHandler)
+    )
+
+    router.post(
+        '/delete-record',
+        makeHandler(ctx, deleteRecord)
+    )
+
+    router.get(
+        '/categories-graph',
+        makeHandler(ctx, getCategoriesGraph)
+    )
+
+    router.get(
+        '/category-graph/:c',
+        makeHandler(ctx, getCategoryGraph)
+    )
+
+    router.get(
+        '/categories',
+        makeHandler(ctx, getCategories)
+    )
+
+    router.get(
+        '/topics/:sort',
+        makeHandler(ctx, getTopicsHandler)
+    )
+
+    router.get(
+        '/search-topics/:q',
+        makeHandler(ctx, searchTopics)
     )
 
     router.use(ctx.xrpc.xrpc.router)

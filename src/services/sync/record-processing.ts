@@ -3,7 +3,7 @@ import {SyncRecordProps} from "#/lib/types";
 import {getCollectionFromUri, getDidFromUri, getRkeyFromUri} from "#/utils/uri";
 import {decompress} from "#/utils/compression";
 import {getAllText} from "#/services/topic/diff";
-import {setTopicCategories} from "#/services/topic/utils";
+import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 
 
 export function processRecord(ctx: AppContext, r: SyncRecordProps) {
@@ -248,20 +248,12 @@ export function processArticle(ctx: AppContext, r: SyncRecordProps){
 export function processTopic(ctx: AppContext, r: SyncRecordProps) {
     let updates: any[] = processContent(ctx, r)
 
-    const record = r.record as {
-        id: string
-        title?: string
-        message?: string
-        synonyms?: string
-        categories?: string
-        format?: string
-    }
+    const record = r.record as TopicVersionRecord
 
-    const isNewCurrentVersion = r.record.text != null // TO DO: esto debería depender de los permisos del usuario
+    const isNewCurrentVersion = true // TO DO: esto debería depender de los permisos del usuario
 
     const topic = {
-        id: record.id,
-        synonyms: isNewCurrentVersion && record.synonyms ? JSON.parse(record.synonyms) : undefined
+        id: record.id
     }
 
     updates.push(ctx.db.topic.upsert({
@@ -270,20 +262,10 @@ export function processTopic(ctx: AppContext, r: SyncRecordProps) {
         where: {id: record.id}
     }))
 
-    if(isNewCurrentVersion && record.categories){
-        updates = [
-            ...updates,
-            ...setTopicCategories(ctx, record.id, JSON.parse(record.categories))
-        ]
-    }
-
     const topicVersion = {
         uri: r.uri,
         topicId: record.id,
-        title: record.title ? record.title : undefined,
-        message: record.message ? record.message : undefined,
-        synonyms: record.synonyms ? record.synonyms : undefined,
-        categories: record.categories ? record.categories : undefined,
+        message: record.message ? record.message : undefined
     }
 
     updates.push(ctx.db.topicVersion.upsert({

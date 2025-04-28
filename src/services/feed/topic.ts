@@ -1,137 +1,120 @@
+import {FeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {CAHandler} from "#/utils/handler";
+import {getFeed} from "#/services/feed/feed";
 import {AppContext} from "#/index";
-import {FeedContentProps} from "#/lib/types";
+import {SessionAgent} from "#/utils/session-agent";
+import {creationDateSortKey} from "#/services/feed/utils";
 
 
-export async function getTopicFeed(ctx: AppContext, id: string, did: string): Promise<{feed?: {mentions: FeedContentProps[], replies: FeedContentProps[], topics: string[]}, error?: string}> {
-    // TO DO
-    return {feed: {mentions: [], replies: [], topics: []}}
-    /*
-    id = decodeURIComponent(id)
-
-    try {
-
-        const getReplies = ctx.db.record.findMany({
-            select: threadRepliesQuery,
-            where: {
-                OR: [
-                    {
-                        content: {
-                            post: {
-                                replyTo: {
-                                    collection: "ar.com.cabildoabierto.topic",
-                                    content: {
-                                        topicVersion: {
-                                            topicId: id
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                ]
-            },
-            orderBy: {
-                createdAt: "desc"
-            }
-        })
-
-        const getMentions = ctx.db.record.findMany({
-            select: {
-                ...recordQuery,
-                ...reactionsQuery,
-                content: {
-                    select: {
-                        text: true,
-                        textBlob: true,
-                        article: {
-                            select: {
-                                title: true
-                            }
-                        },
+const getTopicRepliesSkeleton = async (ctx: AppContext, agent: SessionAgent, id: string) => {
+    const replies = await ctx.db.record.findMany({
+        select: {uri: true},
+        where: {
+            OR: [
+                {
+                    content: {
                         post: {
-                            select: {
-                                facets: true,
-                                embed: true,
-                                quote: true,
-                                replyTo: {
-                                    select: {
-                                        uri: true,
-                                        author: {
-                                            select: {
-                                                did: true,
-                                                handle: true,
-                                                displayName: true
-                                            }
-                                        }
-                                    }
-                                },
-                                root: {
-                                    select: {
-                                        uri: true,
-                                        author: {
-                                            select: {
-                                                did: true,
-                                                handle: true,
-                                                displayName: true
-                                            }
-                                        }
+                            replyTo: {
+                                collection: "ar.com.cabildoabierto.topic",
+                                content: {
+                                    topicVersion: {
+                                        topicId: id
                                     }
                                 }
                             }
                         }
                     }
                 },
-            },
-            where: {
-                content: {
-                    references: {
-                        some: {
-                            referencedTopicId: id
-                        }
-                    }
-                },
-                collection: {
-                    in: ["ar.com.cabildoabierto.article", "ar.com.cabildoabierto.quotePost", "app.bsky.feed.post"]
-                }
-            },
-            orderBy: {
-                createdAt: "desc"
-            }
-        })
+            ]
+        },
+        orderBy: {
+            createdAt: "desc"
+        }
+    })
+    return replies.map(r => ({post: r.uri}))
+}
 
-        // TO DO: Solo mostrar versiones actuales.
-        const getTopicMentions = ctx.db.content.findMany({
-            select: {
-                topicVersion: {
-                    select: {
-                        topicId: true
-                    }
-                }
-            },
-            where: {
+
+const getTopicMentionsSkeleton = async (ctx: AppContext, agent: SessionAgent, id: string) => {
+    const mentions = await ctx.db.record.findMany({
+        select: {
+            uri: true
+        },
+        where: {
+            content: {
                 references: {
                     some: {
                         referencedTopicId: id
                     }
-                },
-                record: {
-                    collection: "ar.com.cabildoabierto.topic"
+                }
+            },
+            collection: {
+                in: ["ar.com.cabildoabierto.article", "ar.com.cabildoabierto.quotePost", "app.bsky.feed.post"]
+            }
+        },
+        orderBy: {
+            createdAt: "desc"
+        }
+    })
+    return mentions.map(r => ({post: r.uri}))
+}
+
+
+// TO DO: Solo mostrar versiones actuales.
+export async function getTopicMentionsInTopics(ctx: AppContext, id: string){
+    return ctx.db.content.findMany({
+        select: {
+            topicVersion: {
+                select: {
+                    topicId: true
                 }
             }
-        })
+        },
+        where: {
+            references: {
+                some: {
+                    referencedTopicId: id
+                }
+            },
+            record: {
+                collection: "ar.com.cabildoabierto.topic"
+            }
+        }
+    })
+}
 
-        const [replies, mentions, topicMentions] = await Promise.all([getReplies, getMentions, getTopicMentions])
 
-        const repliesEngagement = await getUserEngagement(replies, did)
-        const mentionsEngagement = await getUserEngagement(mentions, did)
-        const readyForFeedMentions = addCountersToFeed(mentions, mentionsEngagement)
-        const readyForFeedReplies = addCountersToFeed(replies, repliesEngagement)
+export const getTopicFeed: CAHandler<{ params: { id: string } }, {
+    mentions: FeedViewContent[],
+    replies: FeedViewContent[],
+    topics: string[]
+}> = async (ctx, agent, {params}) => {
+    let {id} = params
 
+    try {
+        const [replies, mentions, topicMentions] = await Promise.all([
+            getFeed({
+                ctx, agent, pipeline: {
+                    getSkeleton: (ctx, agent) => getTopicRepliesSkeleton(ctx, agent, id),
+                    sortKey: creationDateSortKey
+                }
+            }),
+            getFeed({
+                ctx, agent, pipeline: {
+                    getSkeleton: (ctx, agent) => getTopicMentionsSkeleton(ctx, agent, id),
+                    sortKey: creationDateSortKey
+                }
+            }),
+            getTopicMentionsInTopics(ctx, id)
+        ])
+
+        if(!mentions.data) return {error: mentions.error}
+        if(!replies.data) return {error: replies.error}
         return {
-            feed: {
-                mentions: readyForFeedMentions,
-                replies: readyForFeedReplies,
-                topics: topicMentions.map(t => t.topicVersion.topicId)
+            data: {
+                mentions: mentions.data,
+                replies: replies.data,
+                topics: topicMentions.map(t => t.topicVersion?.topicId).filter(x => x != null)
             }
         }
     } catch (e) {
@@ -139,5 +122,4 @@ export async function getTopicFeed(ctx: AppContext, id: string, did: string): Pr
         console.error(e)
         return {error: "Ocurrió un error al obtener el feed del tema " + id}
     }
-    */
 }

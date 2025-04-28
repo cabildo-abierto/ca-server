@@ -20,7 +20,7 @@ function getRootCreationDate(p: FeedViewContent): Date | null {
 }
 
 
-export const creationDateSortKey = (a: ThreadViewContent) => {
+export const creationDateSortKey = (a: ThreadViewContent | FeedViewContent) => {
     return isKnownContent(a.content) ? [new Date(a.content.indexedAt).getTime()] : [0]
 }
 

@@ -19,7 +19,7 @@ import {
 import {ATProtoStrongRef, CommitEvent, JetstreamEvent, SyncRecordProps} from "#/lib/types";
 import {AppContext} from "#/index";
 import {getUri, splitUri} from "#/utils/uri";
-import {deleteRecords} from "#/services/admin";
+import {deleteRecords} from "#/services/delete";
 
 
 export async function processEvent(ctx: AppContext, e: JetstreamEvent){
@@ -89,12 +89,12 @@ const recordProcessors = new Map<string, RecordProcessor>([
     ["app.bsky.feed.repost", processRepost],
     ["app.bsky.feed.post", processPost],
     ["ar.cabildoabierto.feed.article", processArticle],
-    ["ar.cabildoabierto.wiki.topicVersion", processTopic],
     ["ar.cabildoabierto.actor.profile", processCAProfile],
     ["app.bsky.actor.profile", processATProfile],
     ["ar.cabildoabierto.data.dataset", processDataset],
     ["ar.cabildoabierto.data.dataBlock", processDataBlock],
     ["ar.cabildoabierto.data.visualization", processVisualization],
+    ["ar.cabildoabierto.wiki.topicVersion", processTopic],
     ["ar.cabildoabierto.wiki.vote", processTopicVote]
 ])
 

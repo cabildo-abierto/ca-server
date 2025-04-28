@@ -1,12 +1,11 @@
 import {cleanText} from "#/utils/strings";
 import {FeedViewContent} from "#/lex-server/types/ar/cabildoabierto/feed/defs";
 import {SessionAgent} from "#/utils/session-agent";
-import {SmallTopicProps} from "#/lib/types";
 import {AppContext} from "#/index";
 
 
 export async function getFullTopicList(ctx: AppContext){
-    const topics: SmallTopicProps[] = await ctx.db.topic.findMany({
+    const topics: {}[] = await ctx.db.topic.findMany({
         select: {
             id: true,
             popularityScore: true,
@@ -27,52 +26,6 @@ export async function getFullTopicList(ctx: AppContext){
     return topics
 }
 
-
-export async function searchTopics(ctx: AppContext, q: string){
-    q = cleanText(q)
-
-    const getMatchScore = (topicId: string, query: string) => {
-        const cleanedId = cleanText(topicId);
-        const index = cleanedId.indexOf(query);
-
-        if (index === -1) {
-            return 0; // No match
-        }
-
-        const matchLength = query.length;
-        const matchPosition = index;
-
-        return 1 / (matchPosition + 1) + matchLength;
-    }
-
-    const topics: SmallTopicProps[] = await ctx.db.topic.findMany({
-        select: {
-            id: true,
-            popularityScore: true,
-            categories: {
-                select: {
-                    categoryId: true
-                }
-            },
-            lastEdit: true,
-            synonyms: true
-        },
-        where: {
-            versions: {
-                some: {}
-            }
-        }
-    })
-
-    const scoredTopics = topics.map((t) => ({
-        topic: t,
-        score: getMatchScore(t.id, q)
-    }))
-        .filter((scored) => scored.score > 0)
-        .sort((a, b) => b.score - a.score)
-
-    return scoredTopics.slice(0, 50).map(scored => scored.topic)
-}
 
 export async function searchContents(ctx: AppContext, agent: SessionAgent, q: string) : Promise<{feed?: FeedViewContent[], error?: string}> {
     if(q.length == 0) return {feed: []}

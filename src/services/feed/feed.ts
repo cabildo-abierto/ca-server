@@ -57,6 +57,6 @@ export const getFeed = async ({ctx, agent, pipeline}: GetFeedProps): CAHandlerOu
 
     const t3 = Date.now()
 
-    logTimes("get feed", [t1, t2, t3])
+    // logTimes("get feed", [t1, t2, t3])
     return {data: feed}
 }

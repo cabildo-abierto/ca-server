@@ -2,10 +2,10 @@ import JSZip from "jszip";
 import Papa from 'papaparse';
 import {fetchBlob} from "../blob";
 import {compress, decompress} from "#/utils/compression";
-import {DatasetProps} from "#/lib/types";
 import {AppContext} from "#/index";
 import {datasetQuery, recordQuery} from "#/utils/utils";
 import {gett} from "#/utils/arrays";
+import {DatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
 
 
 function compressData(data: any[]){
@@ -14,7 +14,7 @@ function compressData(data: any[]){
 }
 
 
-function decompressDataset(dataset: {dataset: DatasetProps, data: string}){
+function decompressDataset(dataset: {dataset: DatasetView, data: string}){
     const decompressedData = decompress(dataset.data)
     const res = JSON.parse(decompressedData)
 
@@ -22,7 +22,7 @@ function decompressDataset(dataset: {dataset: DatasetProps, data: string}){
 }
 
 
-/*export async function getDataset(ctx: AppContext, uri: string): Promise<{dataset?: {dataset: DatasetProps, data: any[]}, error?: string}> {
+/*export async function getDataset(ctx: AppContext, uri: string): Promise<{dataset?: {dataset: DatasetView, data: any[]}, error?: string}> {
     const did = getDidFromUri(uri)
     const rkey = getRkeyFromUri(uri)
     const compressedDataset = await getCompressedDataset(ctx, uri)
@@ -52,7 +52,7 @@ function decompressDataset(dataset: {dataset: DatasetProps, data: string}){
 }*/
 
 
-export async function getCompressedDataset(ctx: AppContext, uri: string): Promise<{dataset?: {dataset: DatasetProps, data: string}, error?: string}> {
+export async function getCompressedDataset(ctx: AppContext, uri: string): Promise<{dataset?: {dataset: DatasetView, data: string}, error?: string}> {
 
     const dataset = await ctx.db.record.findUnique({
         select: {
@@ -134,13 +134,13 @@ export async function getCompressedDataset(ctx: AppContext, uri: string): Promis
         return r
     }
 
-    const datasetWithColumnValues: DatasetProps = {
+    const datasetWithColumnValues: DatasetView = {
         ...dataset,
         dataset: {
             ...dataset.dataset,
             columnValues: setValuesToListValues(columnValues)
         }
-    } as DatasetProps // TO DO
+    } as unknown as DatasetView // TO DO
 
     return {dataset: {dataset: datasetWithColumnValues, data: compressData(data)}}
 }
@@ -149,7 +149,7 @@ export async function getCompressedDataset(ctx: AppContext, uri: string): Promis
 /*export async function getDatasets(): Promise<FeedContentProps[]>{
     const did = await getSessionDidNoRevalidate()
 
-    let datasets: DatasetProps[] = await unstable_cache(
+    let datasets: DatasetView[] = await unstable_cache(
         async () => {
             return await db.record.findMany({
                 select: {
