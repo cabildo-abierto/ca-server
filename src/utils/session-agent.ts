@@ -58,7 +58,6 @@ export async function sessionAgent(
             await session.destroy()
         }
     }
-
     return new Agent(CAAgent)
 }
 

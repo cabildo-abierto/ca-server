@@ -1,72 +1,45 @@
 import type {
-  NodeSavedSession,
-  NodeSavedSessionStore,
-  NodeSavedState,
-  NodeSavedStateStore,
-} from '@atproto/oauth-client-node'
-import { PrismaClient } from '@prisma/client'
+    NodeSavedSession,
+    NodeSavedSessionStore,
+    NodeSavedState,
+    NodeSavedStateStore,
+} from '@atproto/oauth-client-node';
+import type { RedisClientType } from 'redis';
 
 export class StateStore implements NodeSavedStateStore {
-    constructor(private db: PrismaClient) {}
+    constructor(private db: RedisClientType) {}
+
     async get(key: string): Promise<NodeSavedState | undefined> {
-
-        //const t1 = Date.now()
-        const result = await this.db.authState.findFirst({
-            where: {
-                key: key
-            }
-        })
-        //const t2 = Date.now()
-        //console.log("Finding auth state time", t2-t1)
-
-        if (!result) return
-        return JSON.parse(result.state) as NodeSavedState
+        const result = await this.db.get(`authState:${key}`);
+        if (!result) return undefined;
+        return JSON.parse(result) as NodeSavedState;
     }
+
     async set(key: string, val: NodeSavedState) {
-        const state = JSON.stringify(val)
-        //const t1 = Date.now()
-        await this.db.authState.upsert({
-          where: { key }, 
-          update: { state },
-          create: { key, state }, 
-        })
-        //const t2 = Date.now()
-        //console.log("Creating auth state time", t2-t1)
+        const state = JSON.stringify(val);
+        await this.db.set(`authState:${key}`, state);
     }
+
     async del(key: string) {
-        await this.db.authState.delete({
-            where: {
-                key: key
-            }
-        })
+        await this.db.del(`authState:${key}`);
     }
 }
 
 export class SessionStore implements NodeSavedSessionStore {
-  constructor(private db: PrismaClient) {}
-  async get(key: string): Promise<NodeSavedSession | undefined> {
+    constructor(private db: RedisClientType) {}
 
-      //const t1 = Date.now()
-      const result = await this.db.authSession.findFirst({where: {key}})
-      //const t2 = Date.now()
-      //console.log("Finding auth session time", t2-t1)
-
-      if (!result) return
-      return JSON.parse(result.session) as NodeSavedSession
-  }
-    async set(key: string, val: NodeSavedSession) {
-        const session = JSON.stringify(val)
-
-        //const t1 = Date.now()
-        await this.db.authSession.upsert({
-            where: { key }, 
-            update: { session },
-            create: { key, session }, 
-        })
-        //const t2 = Date.now()
-        //console.log("Creating auth session time", t2-t1)
+    async get(key: string): Promise<NodeSavedSession | undefined> {
+        const result = await this.db.get(`authSession:${key}`);
+        if (!result) return undefined;
+        return JSON.parse(result) as NodeSavedSession;
     }
+
+    async set(key: string, val: NodeSavedSession) {
+        const session = JSON.stringify(val);
+        await this.db.set(`authSession:${key}`, session);
+    }
+
     async del(key: string) {
-        await this.db.authSession.delete({where: {key}})
+        await this.db.del(`authSession:${key}`);
     }
 }

@@ -46,13 +46,16 @@ export const createRouter = (ctx: AppContext) => {
         if (typeof handle !== 'string' || !isValidHandle(handle)) {
             return res.status(200).send("Handle inválido.")
         }
+        console.log("login request", handle)
 
         try {
             const url = await ctx.oauthClient.authorize(handle, {
                 scope: 'atproto transition:generic',
             })
+            console.log("authorized ok")
             return res.status(200).json({ url })
         } catch (err) {
+            console.log("authorize failed", err)
             return res.status(400).send("Error al iniciar sesión.")
         }
     })

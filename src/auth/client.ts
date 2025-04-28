@@ -2,9 +2,10 @@ import { NodeOAuthClient } from '@atproto/oauth-client-node'
 import { SessionStore, StateStore } from './storage'
 import { PrismaClient } from '@prisma/client'
 import {env} from "#/lib/env";
+import {RedisClientType} from "redis";
 
 
-export const createClient = async (db: PrismaClient) => {
+export const createClient = async (db: RedisClientType) => {
   const publicUrl = env.PUBLIC_URL
   const url = publicUrl || `http://127.0.0.1:${env.PORT}`
   const enc = encodeURIComponent

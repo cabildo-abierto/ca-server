@@ -13,6 +13,10 @@ import path from 'path'
 import {createServer} from "src/lex-server";
 import {Server as XrpcServer} from "src/lex-server"
 import {MirrorMachine} from "#/services/sync/mirror-machine";
+import {createClient as createRedisClient, RedisClientType} from "redis"
+
+
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:16379'
 
 
 export type AppContext = {
@@ -38,7 +42,21 @@ export class Server {
 
         const db = new PrismaClient()
 
-        const oauthClient = await createClient(db)
+        console.log("redis url", redisUrl)
+        const redisDB: RedisClientType = createRedisClient({
+            url: redisUrl,
+            password: process.env.REDIS_PASSWORD
+        })
+        redisDB.on("error", function(err) {
+            throw err;
+        });
+        await redisDB.connect()
+        const value = await redisDB.get("asd")
+        console.log("value", value)
+
+        const oauthClient = await createClient(redisDB)
+
+
         const baseIdResolver = createIdResolver()
         const resolver = createBidirectionalResolver(baseIdResolver)
         const xrpc = createServer()
