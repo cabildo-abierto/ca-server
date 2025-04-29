@@ -42,7 +42,6 @@ export class Server {
 
         const db = new PrismaClient()
 
-        console.log("redis url", redisUrl)
         const redisDB: RedisClientType = createRedisClient({
             url: redisUrl,
             password: process.env.REDIS_PASSWORD
@@ -51,8 +50,6 @@ export class Server {
             throw err;
         });
         await redisDB.connect()
-        const value = await redisDB.get("asd")
-        console.log("value", value)
 
         const oauthClient = await createClient(redisDB)
 

@@ -29,10 +29,15 @@ import {getTopicFeed} from "#/services/feed/topic";
 import {deleteRecord, deleteRecordsHandler} from "#/services/delete";
 import {getCategoriesGraph, getCategoryGraph} from "#/services/topic/graph";
 import {createTopicVersion} from "#/services/write/topic";
+import path from "path";
 
 
 export const createRouter = (ctx: AppContext) => {
     const router = express.Router()
+
+    router.get('/client-metadata.json', (req, res) => {
+        res.sendFile(path.join(__dirname, '../../public/client-metadata.json'));
+    });
 
     router.get(
         '/client-metadata.json',
