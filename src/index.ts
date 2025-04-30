@@ -53,7 +53,6 @@ export class Server {
 
         const oauthClient = await createClient(redisDB)
 
-
         const baseIdResolver = createIdResolver()
         const resolver = createBidirectionalResolver(baseIdResolver)
         const xrpc = createServer()
@@ -96,10 +95,10 @@ export class Server {
 
         app.use(express.json())
         app.use(express.urlencoded({extended: true}))
-        app.use(express.static(path.join(__dirname, 'public')))
 
         const router = createRouter(ctx)
         app.use(router)
+        app.use(express.static('public'))
         app.use((_req, res) => res.sendStatus(404))
 
         const server = app.listen(env.PORT)

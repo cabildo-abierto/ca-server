@@ -35,32 +35,23 @@ import path from "path";
 export const createRouter = (ctx: AppContext) => {
     const router = express.Router()
 
-    router.get('/client-metadata.json', (req, res) => {
-        res.sendFile(path.join(__dirname, '../../public/client-metadata.json'));
-    });
-
-    router.get(
-        '/client-metadata.json',
-        handler((_req, res) => {
-            return res.json(ctx.oauthClient.clientMetadata)
-        })
-    )
+    router.get('/client-metadata.json', (req, res, next) => {
+        res.setHeader('Content-Type', 'application/json')
+        return res.sendFile(path.join(process.cwd(), 'public', 'client-metadata.json'))
+    })
 
     router.post('/login', async (req, res) => {
         const handle = req.body?.handle
         if (typeof handle !== 'string' || !isValidHandle(handle)) {
             return res.status(200).send("Handle inválido.")
         }
-        console.log("login request", handle)
 
         try {
             const url = await ctx.oauthClient.authorize(handle, {
                 scope: 'atproto transition:generic',
             })
-            console.log("authorized ok")
             return res.status(200).json({ url })
         } catch (err) {
-            console.log("authorize failed", err)
             return res.status(400).send("Error al iniciar sesión.")
         }
     })
