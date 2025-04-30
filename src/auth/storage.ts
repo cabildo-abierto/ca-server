@@ -3,8 +3,9 @@ import type {
     NodeSavedSessionStore,
     NodeSavedState,
     NodeSavedStateStore,
+    RuntimeLock,
 } from '@atproto/oauth-client-node';
-import type { RedisClientType } from 'redis';
+import {RedisClientType} from 'redis';
 
 export class StateStore implements NodeSavedStateStore {
     constructor(private db: RedisClientType) {}
@@ -43,3 +44,47 @@ export class SessionStore implements NodeSavedSessionStore {
         await this.db.del(`authSession:${key}`);
     }
 }
+
+
+const LOCK_TIMEOUT = 10000; // in ms
+
+export const createSessionLock = (redis: RedisClientType): RuntimeLock => {
+    return async (name, fn) => {
+        const lockKey = `sessionLock:${name}`;
+        const token = Math.random().toString(36).slice(2);
+        const expireMs = LOCK_TIMEOUT;
+        const retryDelay = 100; // ms
+        const maxRetries = 50;
+
+        let acquired = false;
+        let retries = 0;
+
+        while (!acquired && retries < maxRetries) {
+            const result = await redis.set(lockKey, token, {
+                NX: true,
+                PX: expireMs,
+            });
+
+            if (result === 'OK') {
+                acquired = true;
+                break;
+            }
+
+            await new Promise(res => setTimeout(res, retryDelay));
+            retries++;
+        }
+
+        if (!acquired) {
+            throw new Error(`Failed to acquire lock for ${name}`);
+        }
+
+        try {
+            return await fn();
+        } finally {
+            const val = await redis.get(lockKey);
+            if (val === token) {
+                await redis.del(lockKey);
+            }
+        }
+    };
+};

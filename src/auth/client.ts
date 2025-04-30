@@ -1,11 +1,10 @@
 import { NodeOAuthClient } from '@atproto/oauth-client-node'
-import { SessionStore, StateStore } from './storage'
-import { PrismaClient } from '@prisma/client'
+import {createSessionLock, SessionStore, StateStore} from './storage'
 import {env} from "#/lib/env";
 import {RedisClientType} from "redis";
 
 
-export const createClient = async (db: RedisClientType) => {
+export const createClient = async (redis: RedisClientType) => {
   const publicUrl = env.PUBLIC_URL
   const url = publicUrl || `http://127.0.0.1:${env.PORT}`
   const enc = encodeURIComponent
@@ -31,7 +30,8 @@ export const createClient = async (db: RedisClientType) => {
       tos_uri: "https://cabildoabierto.ar/tema?i=Cabildo%20Abierto:%20T%C3%A9rminos%20y%20condiciones",
       policy_uri: "https://cabildoabierto.ar/tema?i=Cabildo%20Abierto%3A%20Pol%C3%ADtica%20de%20privacidad"
     },
-    stateStore: new StateStore(db),
-    sessionStore: new SessionStore(db),
+    stateStore: new StateStore(redis),
+    sessionStore: new SessionStore(redis),
+    requestLock: createSessionLock(redis)
   })
 }
