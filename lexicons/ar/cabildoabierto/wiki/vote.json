@@ -20,6 +20,17 @@
             "value": {
               "type": "string",
               "description": "Valid values are 'accept' and 'reject'."
+            },
+            "message": {
+              "type": "string",
+              "maxGraphemes": 600,
+              "maxLength": 6000
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         }

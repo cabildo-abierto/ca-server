@@ -21,7 +21,7 @@ import {
     getTopicVersionHandler,
     getTopicVersionAuthors,
     getTopicVersionChanges,
-    getTopTrendingTopics, getTrendingTopics,
+    getTopTrendingTopics,
     getTopicsHandler,
     getCategories
 } from "#/services/topic/topics";
@@ -30,6 +30,7 @@ import {deleteRecord, deleteRecordsHandler} from "#/services/delete";
 import {getCategoriesGraph, getCategoryGraph} from "#/services/topic/graph";
 import {createTopicVersion} from "#/services/write/topic";
 import path from "path";
+import {cancelEditVote, voteEdit} from "#/services/topic/votes";
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -249,6 +250,16 @@ export const createRouter = (ctx: AppContext) => {
     router.get(
         '/search-topics/:q',
         makeHandler(ctx, searchTopics)
+    )
+
+    router.post(
+        '/vote-edit/:vote/:id/:did/:rkey/:cid',
+        makeHandler(ctx, voteEdit)
+    )
+
+    router.post(
+        '/cancel-edit-vote/:id/:rkey',
+        makeHandler(ctx, cancelEditVote)
     )
 
     router.use(ctx.xrpc.xrpc.router)

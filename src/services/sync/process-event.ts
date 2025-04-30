@@ -13,7 +13,7 @@ import {
     processLike,
     processPost, processRecord,
     processRepost,
-    processTopic, processTopicVote,
+    processTopicVersion, processTopicVote,
     processVisualization
 } from "./record-processing";
 import {ATProtoStrongRef, CommitEvent, JetstreamEvent, SyncRecordProps} from "#/lib/types";
@@ -94,7 +94,7 @@ const recordProcessors = new Map<string, RecordProcessor>([
     ["ar.cabildoabierto.data.dataset", processDataset],
     ["ar.cabildoabierto.data.dataBlock", processDataBlock],
     ["ar.cabildoabierto.data.visualization", processVisualization],
-    ["ar.cabildoabierto.wiki.topicVersion", processTopic],
+    ["ar.cabildoabierto.wiki.topicVersion", processTopicVersion],
     ["ar.cabildoabierto.wiki.vote", processTopicVote]
 ])
 

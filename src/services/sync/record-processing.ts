@@ -245,15 +245,16 @@ export function processArticle(ctx: AppContext, r: SyncRecordProps){
 }
 
 
-export function processTopic(ctx: AppContext, r: SyncRecordProps) {
+export function processTopicVersion(ctx: AppContext, r: SyncRecordProps) {
     let updates: any[] = processContent(ctx, r)
 
     const record = r.record as TopicVersionRecord
 
-    const isNewCurrentVersion = true // TO DO: esto debería depender de los permisos del usuario
+    const isNewCurrentVersion = true // TO DO: esto debería depender de los permisos del usuario, o no hacerse si preferimos esperar a un voto
 
     const topic = {
-        id: record.id
+        id: record.id,
+        lastEdit: new Date()
     }
 
     updates.push(ctx.db.topic.upsert({
@@ -262,10 +263,13 @@ export function processTopic(ctx: AppContext, r: SyncRecordProps) {
         where: {id: record.id}
     }))
 
+    const props: {name: string, value: string, dataType?: string}[] | undefined = record.props
+
     const topicVersion = {
         uri: r.uri,
         topicId: record.id,
-        message: record.message ? record.message : undefined
+        message: record.message ? record.message : undefined,
+        props
     }
 
     updates.push(ctx.db.topicVersion.upsert({

@@ -1,9 +1,10 @@
-import {getTopicHistory, getTopicVersion} from "./topics";
+import {getCachedTopicVersion, getTopicHistory, getTopicVersion} from "./topics";
 import {max, unique} from "#/utils/arrays";
 import {AppContext} from "#/index";
 import {getDidFromUri} from "#/utils/uri";
 import {SessionAgent} from "#/utils/session-agent";
 import {TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {revalidateRedis} from "#/services/cache/revalidate-redis";
 
 
 export function getTopicLastEditFromVersions(topic: {versions: {content: {record: {createdAt: Date}}}[]}){
@@ -13,7 +14,7 @@ export function getTopicLastEditFromVersions(topic: {versions: {content: {record
 
 
 export async function deleteTopicVersion(ctx: AppContext, agent: SessionAgent, uri: string){
-    const {data: topicVersion} = await getTopicVersion(ctx, agent, uri)
+    const {data: topicVersion} = await getCachedTopicVersion(ctx, agent, uri)
     if(!topicVersion) return {error: "Ocurrió un error al borrar la versión."}
     const {data: topicHistory} = await getTopicHistory(ctx, agent, {params: {id: topicVersion.id}})
     if(!topicHistory) return {error: "Ocurrió un error al borrar la versión."}
@@ -23,9 +24,10 @@ export async function deleteTopicVersion(ctx: AppContext, agent: SessionAgent, u
 
     const index = topicHistory.versions.findIndex(v => v.uri == uri)
 
-    const newCurrentVersionIndex = getTopicCurrentVersion(topicHistory.versions.toSpliced(index, 1))
+    const spliced = topicHistory.versions.toSpliced(index, 1)
+    const newCurrentVersionIndex = getTopicCurrentVersion(spliced)
 
-    const currentVersionId = newCurrentVersionIndex != null ? topicHistory.versions[newCurrentVersionIndex].uri : undefined
+    const currentVersionId = newCurrentVersionIndex != null ? spliced[newCurrentVersionIndex].uri : undefined
     console.log("setting new current version", currentVersionId)
 
     const updates = [
@@ -45,6 +47,7 @@ export async function deleteTopicVersion(ctx: AppContext, agent: SessionAgent, u
 
     await ctx.db.$transaction(updates)
 
+    await revalidateRedis(ctx, ["currentVersion:"+topicVersion.id])
     // await revalidateTags(["topic:"+topic.id, "topics", ...(changedCategories ? ["categories"] : [])])
 }
 

@@ -1,7 +1,6 @@
 import {sessionAgent, SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
 import express from "express";
-import {logTimes} from "#/utils/utils";
 
 export type CAHandlerOutput<Output> = Promise<{error?: string, data?: Output}>
 export type CAHandler<Params={}, Output={}> = (ctx: AppContext, agent: SessionAgent, params: Params) => CAHandlerOutput<Output>

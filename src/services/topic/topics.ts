@@ -2,10 +2,18 @@ import {fetchBlob} from "../blob";
 import {getDidFromUri, getUri, splitUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {CAHandler, CAHandlerOutput} from "#/utils/handler";
-import {TopicHistory, TopicView, VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {
+    CategoryVotes,
+    TopicHistory,
+    TopicProp, TopicVersionStatus,
+    TopicView,
+    VersionInHistory
+} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion";
 import {getTopicCurrentVersion} from "#/services/topic/current-version";
 import {SessionAgent} from "#/utils/session-agent";
+import {logTimes} from "#/utils/utils";
+import {TopicProps} from "#/lib/types";
 
 
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
@@ -202,8 +210,7 @@ export const getTopicHistory: CAHandler<{params: {id: string}}, TopicHistory> = 
                                 contribution: true,
                                 diff: true,
                                 message: true,
-                                categories: true,
-                                synonyms: true,
+                                props: true,
                                 title: true
                             }
                         }
@@ -243,6 +250,14 @@ export const getTopicHistory: CAHandler<{params: {id: string}}, TopicHistory> = 
                 let accept: string | undefined
                 let reject: string | undefined
 
+                const voteCounts: CategoryVotes[] = [
+                    {
+                        accepts: v.accepts.length,
+                        rejects: v.rejects.length,
+                        category: "Beginner" // TO DO
+                    }
+                ]
+
                 v.accepts.forEach(a => {
                     const did = getDidFromUri(a.uri)
                     if(did == agent.did){
@@ -260,6 +275,12 @@ export const getTopicHistory: CAHandler<{params: {id: string}}, TopicHistory> = 
                 const author = dbUserToProfileViewBasic(v.author)
                 if(!author) return null
 
+                const status: TopicVersionStatus = {
+                    voteCounts
+                }
+
+                const props: TopicProp[] = v.content.topicVersion.props as unknown as TopicProp[]
+
                 const view: VersionInHistory = {
                     $type: "ar.cabildoabierto.wiki.topicVersion#versionInHistory",
                     uri: v.uri,
@@ -270,12 +291,10 @@ export const getTopicHistory: CAHandler<{params: {id: string}}, TopicHistory> = 
                         accept,
                         reject
                     },
-                    status: {
-                        voteCounts: []
-                    },
+                    status: status,
                     addedChars: v.content.topicVersion.charsAdded ?? undefined,
                     removedChars: v.content.topicVersion.charsDeleted ?? undefined,
-                    props: [],
+                    props: props,
                     createdAt: v.createdAt.toISOString()
                 }
                 return view
@@ -290,8 +309,24 @@ export const getTopicHistory: CAHandler<{params: {id: string}}, TopicHistory> = 
     }
 }
 
+export const redisCacheEnabled = false
 
-export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{data?: TopicView, error?: string}> => {
+async function cached<T>(ctx: AppContext, key: string[], fn: () => Promise<{data?: T, error?: string}>): Promise<{data?: T, error?: string}> {
+    if(!redisCacheEnabled){
+        return await fn()
+    }
+    const strKey = key.join(":")
+    const cur = await ctx.redis.get(strKey)
+    if(cur) return {data: JSON.parse(cur) as T}
+    const res = await fn()
+    if(res.data){
+        await ctx.redis.set(strKey, JSON.stringify(res))
+    }
+    return res
+}
+
+
+export const getTopicCurrentVersionFromDB = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{data?: string | null, error?: string}> => {
     const res = await ctx.db.topic.findUnique({
         select: {
             currentVersionId: true
@@ -300,9 +335,21 @@ export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string)
             id
         }
     })
+    if(res){
+        return {data: res.currentVersionId}
+    } else {
+        return {error: `No se encontró el tema: ${id}`}
+    }
+}
+
+
+export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{data?: TopicView, error?: string}> => {
+    const t1 = Date.now()
+    const {data: currentVersionId} = await cached(ctx, ["currentVersion", id], async () => getTopicCurrentVersionFromDB(ctx, agent, id))
+    const t2 = Date.now()
 
     let uri: string
-    if(!res || !res.currentVersionId){
+    if(!currentVersionId){
         console.log(`Warning: Current version not set for topic ${id}.`)
         const {data: history} = await getTopicHistory(ctx, agent, {params: {id}})
 
@@ -312,10 +359,15 @@ export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string)
         if(index == null) return {error: "No se encontró el tema " + id + "."}
         uri = history.versions[index].uri
     } else {
-        uri = res.currentVersionId
+        uri = currentVersionId
     }
+    const t3 = Date.now()
 
-    return await getTopicVersion(ctx, agent, uri)
+    const t = await getCachedTopicVersion(ctx, agent, uri)
+    const t4 = Date.now()
+
+    logTimes("get topic", [t1, t2, t3, t4])
+    return t
 }
 
 
@@ -324,8 +376,12 @@ export const getTopicHandler: CAHandler<{params: {id: string}}, TopicView> = asy
 }
 
 
+export const getCachedTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri: string) => {
+    return cached(ctx, ["topicVersion", uri], async () => getTopicVersion(ctx, agent, uri))
+}
+
+
 export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri: string): Promise<{data?: TopicView, error?: string}> => {
-    console.log("getting topic version", uri)
     const {did, rkey} = splitUri(uri)
     const topic = await ctx.db.record.findFirst({
         select: {
@@ -361,8 +417,7 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
                                     currentVersionId: true
                                 }
                             },
-                            synonyms: true,
-                            categories: true
+                            props: true
                         }
                     }
                 }
@@ -375,7 +430,7 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
     })
 
     if (!topic || !topic.content || !topic.content.topicVersion) {
-        console.log("no topic")
+        console.log("no topic version")
         return {error: "No se encontró la versión."}
     }
 
@@ -394,9 +449,9 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
 
     const id = topic.content.topicVersion.topic.id
 
-    if(!author || !topic.cid || !topic.content.topicVersion.topic.lastEdit) {
+    if(!author || !topic.cid) {
         console.log("missing data")
-        console.log(author != null, topic.cid != null, topic.content.topicVersion.topic.lastEdit != null)
+        console.log(author != null, topic.cid != null)
         return {error: "No se encontró el tema " + id + "."}
     }
 
@@ -408,9 +463,9 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
         author,
         text: text ?? "",
         format: text != null ? topic.content.format : "plain-text",
-        props: [],
+        props: topic.content.topicVersion.props as unknown as TopicProp[],
         createdAt: topic.createdAt.toISOString(),
-        lastEdit: topic.content.topicVersion.topic.lastEdit?.toISOString(),
+        lastEdit: topic.content.topicVersion.topic.lastEdit?.toISOString() ?? topic.createdAt.toISOString(),
         currentVersion: topic.content.topicVersion.topic.currentVersionId ?? undefined
     }
 
@@ -420,7 +475,7 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
 
 export const getTopicVersionHandler: CAHandler<{params: {did: string, rkey: string}}, TopicView> = async (ctx, agent, {params}) => {
     const {did, rkey} = params
-    return getTopicVersion(ctx, agent, getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey))
+    return getCachedTopicVersion(ctx, agent, getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey))
 }
 
 

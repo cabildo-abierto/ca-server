@@ -9,7 +9,6 @@ import {createClient} from '#/auth/client'
 import {createBidirectionalResolver, createIdResolver, BidirectionalResolver} from '#/id-resolver'
 import {PrismaClient} from '@prisma/client'
 import cors from 'cors'
-import path from 'path'
 import {createServer} from "src/lex-server";
 import {Server as XrpcServer} from "src/lex-server"
 import {MirrorMachine} from "#/services/sync/mirror-machine";
@@ -25,6 +24,7 @@ export type AppContext = {
     oauthClient: OAuthClient
     resolver: BidirectionalResolver
     xrpc: XrpcServer
+    redis: RedisClientType
 }
 
 export class Server {
@@ -61,7 +61,8 @@ export class Server {
             logger,
             oauthClient,
             resolver,
-            xrpc
+            xrpc,
+            redis: redisDB
         }
 
         const ingester = new MirrorMachine(ctx)

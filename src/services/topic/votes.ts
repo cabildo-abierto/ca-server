@@ -4,46 +4,80 @@ import {updateTopicCurrentVersion} from "./current-version";
 import {ATProtoStrongRef} from "#/lib/types";
 import {SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
-import {getCollectionFromUri, getRkeyFromUri} from "#/utils/uri";
+import {getCollectionFromUri, getRkeyFromUri, getUri} from "#/utils/uri";
+import {CAHandler} from "#/utils/handler";
 
-export async function acceptEdit(ctx: AppContext, agent: SessionAgent, topicId: string, versionRef: ATProtoStrongRef): Promise<{error?: string}>{
+export const voteEdit: CAHandler<{message?: string, labels?: string[], params: {id: string, vote: string, rkey: string, did: string, cid: string}}, {acceptUri: string}> = async (ctx: AppContext, agent: SessionAgent, {message, labels, params}) => {
+    const {id, vote, rkey, did, cid} = params
 
-    const [rejects, _] = await Promise.all([
+    console.log("voting edit", vote, id, did, rkey, cid)
+
+    if(vote !== "accept" && vote !== "reject"){
+        return {error: `Voto inválido: ${vote}.`}
+    }
+
+    if(vote == "accept" && (message != null || labels != null)){
+        return {error: "Por ahora no se permiten etiquetas ni mensajes en un voto positivo."}
+    }
+
+    const uri = getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey)
+    const versionRef = {uri, cid}
+
+    const [rejects, accepts, _] = await Promise.all([
         ctx.db.topicReject.findMany({
             select: {
                 uri: true
             },
             where: {
-                rejectedRecordId: versionRef.uri,
+                rejectedRecordId: uri,
                 record: {
                     authorId: agent.did
                 }
             }
         }),
-        createTopicVote(ctx, agent, topicId, versionRef, "accept")
+        ctx.db.topicAccept.findMany({
+            select: {
+                uri: true
+            },
+            where: {
+                acceptedRecordId: uri,
+                record: {
+                    authorId: agent.did
+                }
+            }
+        }),
+        createTopicVote(ctx, agent, id, versionRef, vote, message, labels)
     ])
 
-    if(rejects.length > 0){
+    if(vote == "accept" && rejects.length > 0){
         await deleteRecords({ctx, agent, uris: rejects.map(a => a.uri), atproto: true})
+    } else if(vote == "reject" && accepts.length > 0){
+        await deleteRecords({ctx, agent, uris: accepts.map(a => a.uri), atproto: true})
     }
 
-    await updateTopicCurrentVersion(ctx, agent, topicId)
+    console.log("deleted previous votes")
+
+    await updateTopicCurrentVersion(ctx, agent, id)
+
+    console.log("updated current version")
 
     return {}
 }
 
-export async function createTopicVote(ctx: AppContext, agent: SessionAgent, topicId: string, versionRef: ATProtoStrongRef, value: string): Promise<{error?: string}>{
+export async function createTopicVote(ctx: AppContext, agent: SessionAgent, topicId: string, versionRef: ATProtoStrongRef, value: string, message: string | undefined, labels: string[] | undefined): Promise<{error?: string}>{
 
     const record = {
-        $type: "ar.com.cabildoabierto.topic.vote",
+        $type: "ar.cabildoabierto.wiki.vote",
         createdAt: new Date().toISOString(),
         value,
-        subject: versionRef
+        subject: versionRef,
+        message: message,
+        labels: labels
     }
 
     const {data} = await agent.bsky.com.atproto.repo.createRecord({
         record,
-        collection: "ar.com.cabildoabierto.topic.vote",
+        collection: "ar.cabildoabierto.wiki.vote",
         repo: agent.did
     })
 
@@ -62,37 +96,8 @@ export async function createTopicVote(ctx: AppContext, agent: SessionAgent, topi
     return {}
 }
 
-export async function cancelAcceptEdit(ctx: AppContext, agent: SessionAgent, topicId: string, uri: string): Promise<{error?: string}>{
+export const cancelEditVote: CAHandler<{params: {id: string, rkey: string}}> = async (ctx: AppContext, agent: SessionAgent, {params}) => {
+    const {id, rkey} = params
+    const uri = getUri(agent.did, "ar.cabildoabierto.wiki.vote", rkey)
     return await deleteRecords({ctx, agent, uris: [uri], atproto: true})
 }
-
-export async function rejectEdit(ctx: AppContext, agent: SessionAgent, topicId: string, versionRef: ATProtoStrongRef): Promise<{error?: string}>{
-
-    const [accepts, _] = await Promise.all([
-        ctx.db.topicAccept.findMany({
-            select: {
-                uri: true
-            },
-            where: {
-                acceptedRecordId: versionRef.uri,
-                record: {
-                    authorId: agent.did
-                }
-            }
-        }),
-        createTopicVote(ctx, agent, topicId, versionRef, "reject")
-    ])
-
-    if(accepts.length > 0){
-        await deleteRecords({ctx, agent, uris: accepts.map(a => a.uri), atproto: true})
-    }
-
-    await updateTopicCurrentVersion(ctx, agent, topicId)
-
-    return {}
-}
-
-export async function cancelRejectEdit(ctx: AppContext, agent: SessionAgent, topicId: string, uri: string): Promise<{error?: string}>{
-    return await deleteRecords({ctx, agent, uris: [uri], atproto: true})
-}
-
