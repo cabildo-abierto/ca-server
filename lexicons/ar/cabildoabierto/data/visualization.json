@@ -3,21 +3,62 @@
   "id": "ar.cabildoabierto.data.visualization",
   "defs": {
     "main": {
-      "type": "record",
-      "key": "tid",
-      "record": {
-        "type": "object",
-        "required": ["createdAt"],
-        "properties": {
+      "type": "object",
+      "required": ["createdAt", "spec"],
+      "properties": {
           "spec": {
-            "type": "string"
+            "type": "union",
+            "refs": [
+              "#datasetVisualization",
+              "#hemicycleVisualization",
+              "#topicListVisualization"
+            ]
           },
           "createdAt": {
             "type": "string",
             "format": "datetime",
             "description": "Client-declared timestamp when this post was originally created."
           }
-        }
+      }
+    },
+    "datasetVisualization": {
+      "type": "object",
+      "properties": {
+        "dataset": { "type": "string", "format": "at-uri" },
+        "spec": {
+          "type": "union",
+          "refs": [
+            "#barplot",
+            "#scatterplot",
+            "#histogram"
+          ]
+        },
+        "title": "string"
+      }
+    },
+    "hemicycleVisualization" : {
+    },
+    "topicListVisualization": {
+    },
+    "barplot": {
+      "type": "object",
+      "properties": {
+        "xlabel": "string",
+        "ylabel": "string"
+      }
+    },
+    "scatterplot": {
+      "type": "object",
+      "properties": {
+        "xlabel": "string",
+        "ylabel": "string"
+      }
+    },
+    "histogram": {
+      "type": "object",
+      "properties": {
+        "xlabel": "string",
+        "normalized": "bool"
       }
     }
   }
