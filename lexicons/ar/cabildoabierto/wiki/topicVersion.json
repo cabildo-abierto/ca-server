@@ -62,6 +62,9 @@
             "type": "string",
             "format": "at-uri"
           },
+          "record": {
+            "type": "unknown"
+          },
           "text": {
             "type": "string"
           },
@@ -207,12 +210,32 @@
             "maxLength": 50
           },
           "value": {
-            "type": "string",
-            "maxLength": 50
-          },
-          "dataType": {
-            "type": "string",
-            "maxLength": 50
+            "type": "union",
+            "refs": [
+              "#stringProp",
+              "#stringListProp"
+            ]
+          }
+        }
+      },
+      "stringProp": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "stringListProp": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

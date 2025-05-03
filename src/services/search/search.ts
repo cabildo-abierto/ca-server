@@ -1,5 +1,4 @@
 import {CAHandler} from "#/utils/handler";
-import {HydrationData} from "#/services/hydration/hydrate";
 import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
@@ -9,6 +8,9 @@ import {cleanText} from "#/utils/strings";
 import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import { Prisma } from "@prisma/client";
 import {AppContext} from "#/index";
+import { JsonObject } from "@prisma/client/runtime/library";
+import {getTopicViewBasicsHydrationData, hydrateTopicViewBasic} from "#/services/topic/topics";
+import {Dataplane, HydrationData} from "#/services/hydration/dataplane";
 
 
 export async function searchUsersInCA(ctx: AppContext, query: string): Promise<CAProfileViewBasic[]> {
@@ -53,22 +55,25 @@ export const searchUsers: CAHandler<{
         ...data.actors.map(u => u.did)
     ])
 
-    const users = userList.map(did => hydrateProfileViewBasic(did, hData))
+    const dataplane = new Dataplane(ctx, agent)
+    dataplane.data = hData // TO DO: Refactor
+
+    const users = userList.map(did => hydrateProfileViewBasic(did, dataplane))
 
     return {data: users.filter(x => x != null)}
 }
 
 
-function isJsonArray(value: Prisma.JsonValue): value is Prisma.JsonArray {
+export function isJsonArray(value: Prisma.JsonValue): value is Prisma.JsonArray {
     return Array.isArray(value);
 }
 
-function isJsonObject(value: Prisma.JsonValue): value is Prisma.JsonObject {
+export function isJsonObject(value: Prisma.JsonValue): value is Prisma.JsonObject {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 
-function isJsonArrayOfObjects(value: Prisma.JsonValue): value is Prisma.JsonObject[] {
+export function isJsonArrayOfObjects(value: Prisma.JsonValue): value is Prisma.JsonObject[] {
     return (
         Array.isArray(value) &&
         value.every(
@@ -81,26 +86,40 @@ function isJsonArrayOfObjects(value: Prisma.JsonValue): value is Prisma.JsonObje
 }
 
 
-export const searchTopics: CAHandler<{params: {q: string}}, TopicViewBasic[]> = async (ctx, agent, {params}) => {
-    let {q} = params
-    const query = cleanText(q)
+export function dbPropToTopicProp(p: JsonObject): TopicProp {
+    if(p.value && isJsonObject(p.value) && p.value.$type == "ar.cabildoabierto.wiki.topicVersion#stringProps" +
+        ""){
+        return {
+            name: p.name as string,
+            value: {
+                $type: "ar.cabildoabierto.wiki.topicVersion#stringProp",
+                value: p.value.value as string
+            }
+        }
+    } else if(p.value && isJsonObject(p.value) && p.value.$type == "ar.cabildoabierto.wiki.topicVersion#stringListProp"){
+        return {
+            name: p.name as string,
+            value: {
+                $type: "ar.cabildoabierto.wiki.topicVersion#stringProp",
+                value: p.value.value as string
+            }
+        }
+    } else if(p.value && isJsonObject(p.value) && p.value.$type){
+        return {
+            name: p.name as string,
+            value: {
+                $type: p.value.$type as string
+            }
+        }
+    } else {
+        throw Error("Propiedad inválida:", p)
+    }
+}
 
-    type TopicResult = {
-        id: string;
-        lastEdit: Date;
-        popularityScore: number;
-        props: Prisma.JsonValue;
-        categories: string
-        synonyms: string
-    };
 
-    let topics: TopicResult[] = await ctx.db.$queryRaw<TopicResult[]>`
-        SELECT t."id",
-               t."lastEdit",
-               t."popularityScore",
-               tv."props",
-               tv."categories",
-               tv."synonyms"
+export async function getSearchTopicsSkeleton(ctx: AppContext, query: string) {
+    let topics: {id: string}[]= await ctx.db.$queryRaw`
+        SELECT t."id"
         FROM "Topic" t
                  LEFT JOIN "TopicVersion" tv
                            ON t."currentVersionId" = tv."uri"
@@ -108,35 +127,17 @@ export const searchTopics: CAHandler<{params: {q: string}}, TopicViewBasic[]> = 
             LIMIT 20
     `;
 
-    const views: TopicViewBasic[] = topics.map(t => {
-        if(t.props == null || (isJsonArrayOfObjects(t.props))){
+    return topics
+}
 
-            const props: TopicProp[] = t.props ? t.props.map(p => ({name: p.name as string, value: p.value as string, dataType: p.dataType as string})) : []
 
-            if(t.categories){
-                const c: string[] = JSON.parse(t.categories)
-                props.push({name: "Categorías", value: JSON.stringify(c), dataType: "string[]"})
-            }
-            if(t.synonyms){
-                const s: string[] = JSON.parse(t.synonyms)
-                props.push({name: "Sinónimos", value: JSON.stringify(s), dataType: "string[]"})
-            }
+export const searchTopics: CAHandler<{params: {q: string}}, TopicViewBasic[]> = async (ctx, agent, {params}) => {
+    let {q} = params
+    const query = cleanText(q)
+    const skeleton = await getSearchTopicsSkeleton(ctx, query)
 
-            const view: TopicViewBasic = {
-                $type: "ar.cabildoabierto.wiki.topicVersion#topicViewBasic",
-                id: t.id,
-                lastEdit: t.lastEdit?.toISOString(),
-                popularity: [t.popularityScore],
-                props
-            }
-            return view
-        } else {
-            return null
-        }
-    }).filter(t => t != null)
+    const data = await getTopicViewBasicsHydrationData(ctx, skeleton)
 
-    return {
-        data: views
-    }
+    return {data: data.map(hydrateTopicViewBasic)}
 }
 

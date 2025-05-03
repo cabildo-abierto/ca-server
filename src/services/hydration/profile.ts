@@ -1,9 +1,9 @@
-import {HydrationData} from "#/services/hydration/hydrate";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
+import {Dataplane} from "#/services/hydration/dataplane";
 
-export function hydrateProfileViewBasic(did: string, data: HydrationData): CAProfileViewBasic | null {
-    const ca = data.caUsers?.get(did)
-    const bsky = data.bskyUsers?.get(did)
+export function hydrateProfileViewBasic(did: string, data: Dataplane): CAProfileViewBasic | null {
+    const ca = data.data.caUsers?.get(did)
+    const bsky = data.data.bskyUsers?.get(did)
 
     if(ca) {
         return ca

@@ -14,7 +14,14 @@ export const collectionsList = [
     "ar.com.cabildoabierto.dataset",
     "ar.com.cabildoabierto.dataBlock",
     "ar.com.cabildoabierto.visualization",
-    "ar.com.cabildoabierto.profile"
+    "ar.com.cabildoabierto.profile",
+    "ar.cabildoabierto.wiki.topicVersion",
+    "ar.cabildoabierto.wiki.vote",
+    "ar.cabildoabierto.actor.profile",
+    "ar.cabildoabierto.data.dataset",
+    "ar.cabildoabierto.data.visualization",
+    "ar.cabildoabierto.data.dataBlock",
+    "ar.cabildoabierto.feed.article"
 ]
 
 export function validRecord(r: SyncRecordProps){

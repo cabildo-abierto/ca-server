@@ -1,6 +1,8 @@
 import express from 'express'
 import type {AppContext} from '#/index'
 import {CAHandler, makeHandler} from "#/utils/handler";
+import {updateCategoriesGraphHandler} from "#/services/topic/graph";
+import {syncUserHandler} from "#/services/sync/sync-user";
 
 
 function isAdmin(did: string){
@@ -12,30 +14,29 @@ function isAdmin(did: string){
 }
 
 
-function makeAdminHandler<P, Q>(ctx: AppContext, handler: CAHandler<P, Q>) {
+function makeAdminHandler<P, Q>(ctx: AppContext, handler: CAHandler<P, Q>): express.Handler {
 
-    const adminHandler: CAHandler<P, Q> = async (ctx, agent, params) => {
-        if(isAdmin(agent.did)){
+    const adminOnlyHandler: CAHandler<P, Q> = async (ctx, agent, params) => {
+        if (isAdmin(agent.did)) {
             return handler(ctx, agent, params)
         } else {
             return {error: "Necesitás permisos de administrador para realizar esta acción."}
         }
     }
 
-    return makeHandler(ctx, adminHandler)
+    return makeHandler(ctx, adminOnlyHandler)
 }
 
 
 export const adminRoutes = (ctx: AppContext) => {
     const router = express.Router()
 
-    router.post("/one-time", makeAdminHandler(ctx, oneTime))
+    router.post("/update-categories-graph", makeAdminHandler(ctx, updateCategoriesGraphHandler))
+
+    router.post(
+        "/sync-user/:handleOrDid",
+        makeAdminHandler(ctx, syncUserHandler)
+    )
 
     return router
-}
-
-
-const oneTime: CAHandler<{}, {}> = async (ctx, agent, params) => {
-
-    return {data: {}}
 }

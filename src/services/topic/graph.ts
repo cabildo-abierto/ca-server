@@ -3,15 +3,21 @@ import {AppContext} from "#/index";
 import {TopicsGraph} from "#/lib/types";
 import {logTimes} from "#/utils/utils";
 import {CAHandler} from "#/utils/handler";
+import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {isJsonArray} from "#/services/search/search";
+import {getTopicCategories} from "#/services/topic/utils";
 
 
-export async function updateCategoriesGraph(ctx: AppContext) {
+
+export const updateCategoriesGraph = async (ctx: AppContext) => {
+    console.log("Getting topics.")
+
     let topics = await ctx.db.topic.findMany({
         select: {
             id: true,
-            categories: {
+            currentVersion: {
                 select: {
-                    categoryId: true
+                    props: true
                 }
             },
             referencedBy: {
@@ -34,8 +40,10 @@ export async function updateCategoriesGraph(ctx: AppContext) {
 
     const categories = new Map<string, number>()
     for (let i = 0; i < topics.length; i++) {
-        const cats = topics[i].categories.map(({categoryId}) => (categoryId))
-        topicToCategoriesMap.set(topics[i].id, cats)
+        const t = topics[i]
+        if(!t.currentVersion || !t.currentVersion.props || !isJsonArray(t.currentVersion.props)) continue
+        const cats = getTopicCategories(t.currentVersion.props as unknown as TopicProp[])
+        topicToCategoriesMap.set(t.id, cats)
         cats.forEach((c) => {
             const y = categories.get(c)
             if (!y) categories.set(c, 1)
@@ -68,6 +76,7 @@ export async function updateCategoriesGraph(ctx: AppContext) {
         }
     }
 
+    console.log("Applying changes.")
     await ctx.db.$transaction([
         ctx.db.categoryLink.deleteMany(),
         ctx.db.categoryLink.createMany({
@@ -77,7 +86,20 @@ export async function updateCategoriesGraph(ctx: AppContext) {
             }))
         })
     ])
+
+    console.log("Done.")
     // revalidateTag("categoriesgraph")
+}
+
+
+export const updateCategoriesGraphHandler: CAHandler<{}, {}> = async (ctx, agent, {}) => {
+
+    console.log("Updating categories graph queued.")
+
+    await ctx.queue.add("update-categories-graph", null)
+
+
+    return {data: {}}
 }
 
 

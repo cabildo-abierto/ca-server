@@ -2,21 +2,26 @@ import {Prisma} from ".prisma/client";
 import SortOrder = Prisma.SortOrder;
 
 
-export const recordQuery = {
-    uri: true,
-    cid: true,
-    rkey: true,
-    collection: true,
-    createdAt: true,
+export const authorQuery = {
     author: {
         select: {
             did: true,
             handle: true,
             displayName: true,
             avatar: true,
-            inCA: true
+            CAProfileUri: true
         }
     }
+}
+
+
+export const recordQuery = {
+    uri: true,
+    cid: true,
+    rkey: true,
+    collection: true,
+    createdAt: true,
+    ...authorQuery
 }
 
 
@@ -124,47 +129,6 @@ export const enDiscusionQuery = {
                 }
             }
         }
-    },
-}
-
-
-export const threadRepliesQuery = {
-    ...recordQuery,
-    ...reactionsQuery,
-    content: {
-        select: {
-            text: true,
-            post: {
-                select: {
-                    facets: true,
-                    embed: true,
-                    quote: true,
-                    replyTo: {
-                        select: {
-                            uri: true,
-                            collection: true,
-                            author: {
-                                select: {
-                                    handle: true,
-                                    displayName: true
-                                }
-                            },
-                            content: {
-                                select: {
-                                    text: true,
-                                    format: true,
-                                    article: {
-                                        select: {
-                                            title: true
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-        },
     },
 }
 

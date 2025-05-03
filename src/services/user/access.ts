@@ -4,7 +4,8 @@ import {AppContext} from "#/index";
 
 
 export async function grantAccess(ctx: AppContext, agent: SessionAgent, handle: string): Promise<{error?: string}>{
-    const did = await handleToDid(agent, handle)
+    const did = await handleToDid(ctx, agent, handle)
+    if(!did) return {error: "No se encontró el usuario."}
 
     try {
         await ctx.db.user.update({

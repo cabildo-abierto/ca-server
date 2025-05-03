@@ -93,7 +93,7 @@
         },
         "author": {
           "type": "ref",
-          "ref": "app.bsky.actor.defs#profileViewBasic"
+          "ref": "ar.cabildoabierto.actor.defs#profileViewBasic"
         },
         "record": {
           "type": "unknown"
@@ -174,7 +174,7 @@
         },
         "author": {
           "type": "ref",
-          "ref": "app.bsky.actor.defs#profileViewBasic"
+          "ref": "ar.cabildoabierto.actor.defs#profileViewBasic"
         },
         "summary": {
           "type": "string",
@@ -254,13 +254,13 @@
         },
         "author": {
           "type": "ref",
-          "ref": "app.bsky.actor.defs#profileViewBasic"
+          "ref": "ar.cabildoabierto.actor.defs#profileViewBasic"
         },
         "text": {
           "type": "string",
           "description": "The full article text"
         },
-        "textFormat":  {
+        "format":  {
           "type": "string",
           "maxLength": 50
         },

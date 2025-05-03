@@ -1,87 +1,43 @@
 import {$Typed, AppBskyEmbedRecord} from "@atproto/api";
 import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
-import {Collection, FeedEngagementProps} from "#/lib/types";
-import {logTimes, reactionsQuery, recordQuery} from "#/utils/utils";
+import {Collection} from "#/lib/types";
+import {authorQuery, reactionsQuery, recordQuery} from "#/utils/utils";
 import {
     ArticleView,
     FeedViewContent,
     FullArticleView,
     isFeedViewContent,
-    PostView, ThreadViewContent
+    PostView,
+    ThreadViewContent
 } from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {ProfileViewBasic} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs"
-import {getCollectionFromUri, isArticle} from "#/utils/uri";
-import {PostView as BskyPostView, SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs";
+import {articleCollections, getCollectionFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri";
+import {
+    isNotFoundPost,
+    isReasonRepost,
+    NotFoundPost,
+    PostView as BskyPostView,
+    SkeletonFeedPost
+} from "#/lex-server/types/app/bsky/feed/defs";
 import {FeedSkeleton} from "#/services/feed/feed";
 import {getUserEngagement} from "#/services/feed/get-user-engagement";
 import {SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
-import {getTextFromBlob} from "#/services/topic/topics";
+import {getTextFromBlob, getTopicVersion} from "#/services/topic/topics";
 import {decompress} from "#/utils/compression";
 import {getAllText} from "#/services/topic/diff";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
-import {isNotFoundPost, isReasonRepost, NotFoundPost} from "#/lex-server/types/app/bsky/feed/defs";
-import {gett, listOrderDesc, sortByKey} from "#/utils/arrays";
-import {isMain as isSelectionQuoteEmbed, View as SelectionQuoteEmbedView, Main as SelectionQuoteEmbed} from "#/lex-server/types/ar/cabildoabierto/embed/selectionQuote"
+import {gett, listOrderDesc, range, sortByKey, unique} from "#/utils/arrays";
+import {
+    isMain as isSelectionQuoteEmbed,
+    Main as SelectionQuoteEmbed,
+    View as SelectionQuoteEmbedView
+} from "#/lex-server/types/ar/cabildoabierto/embed/selectionQuote"
 import {creationDateSortKey} from "#/services/feed/utils";
-
-
-type FeedElementQueryResult = {
-    uri: string
-    cid: string
-    rkey: string
-    collection: Collection
-    createdAt: Date,
-    record: string | null
-    author: {
-        did: string
-        handle: string
-        displayName: string | null
-        avatar: string | null
-    }
-    _count: {
-        likes: number
-        reposts: number
-        replies: number
-    }
-    uniqueViewsCount: number | null
-    content: {
-        text: string | null
-        summary?: string
-        textBlob: {
-            cid: string
-        } | null
-        format: string | null
-        post: {
-            quote: string | null
-            embed: string | null
-            facets: string | null
-            replyTo: {
-                uri: string
-                cid: string | null
-                author: {
-                    did: string
-                    handle: string | null
-                    displayName: string | null
-                }
-            } | null
-            root: {
-                uri: string
-                cid: string | null
-                author: {
-                    did: string
-                    handle: string | null
-                    displayName: string | null
-                }
-            } | null
-        } | null,
-        article: {
-            title: string
-        } | null
-    } | null
-    enDiscusion: boolean | null
-}
+import {TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {getTopicTitle} from "#/services/topic/utils";
+import {markdownToPlainText} from "#/utils/lexical/transforms";
+import {Dataplane, FeedElementQueryResult} from "#/services/hydration/dataplane";
 
 
 const hydrateFeedQuery = {
@@ -137,29 +93,31 @@ const hydrateFeedQuery = {
 }
 
 
-const queryResultToProfileViewBasic = (e: FeedElementQueryResult): ProfileViewBasic => {
+const queryResultToProfileViewBasic = (e: FeedElementQueryResult["author"]): CAProfileViewBasic | null => {
+    if(!e.handle) return null
     return {
-        $type: "app.bsky.actor.defs#profileViewBasic",
-        did: e.author.did,
-        handle: e.author.handle,
-        displayName: e.author.displayName ?? undefined,
-        avatar: e.author.avatar ?? undefined,
+        $type: "ar.cabildoabierto.actor.defs#profileViewBasic",
+        did: e.did,
+        handle: e.handle,
+        displayName: e.displayName ?? undefined,
+        avatar: e.avatar ?? undefined,
+        caProfile: e.CAProfileUri ?? undefined
     }
 }
 
 
-export function hydrateViewer(uri: string, data: HydrationData) {
-    if(!data.engagement) return {}
+export function hydrateViewer(uri: string, data: Dataplane) {
+    if (!data.data.engagement) return {}
 
     let like: string | undefined
     let repost: string | undefined
 
-    data.engagement.likes.forEach(l => {
+    data.data.engagement.likes.forEach(l => {
         if (l.likedRecordId == uri) {
             like = l.uri
         }
     })
-    data.engagement.reposts.forEach(l => {
+    data.data.engagement.reposts.forEach(l => {
         if (l.repostedRecordId == uri) {
             repost = l.uri
         }
@@ -169,14 +127,16 @@ export function hydrateViewer(uri: string, data: HydrationData) {
 }
 
 
-export function hydrateFullArticleView(uri: string, data: HydrationData): {
+export function hydrateFullArticleView(uri: string, data: Dataplane): {
     data?: $Typed<FullArticleView>
     error?: string
 } {
-    const e = data.caContents?.get(uri)
+    const e = data.data.caContents?.get(uri)
     if (!e) return {error: "Ocurrió un error al cargar el contenido."}
 
     const viewer = hydrateViewer(e.uri, data)
+    const author = queryResultToProfileViewBasic(e.author)
+    if(!author) return {error: "Ocurrió un error al cargar el contenido."}
 
     return {
         data: {
@@ -184,8 +144,8 @@ export function hydrateFullArticleView(uri: string, data: HydrationData): {
             uri: e.uri,
             cid: e.cid,
             text: e.content && e.content.text ? e.content.text : undefined,
-            textFormat: e.content?.format ?? undefined,
-            author: queryResultToProfileViewBasic(e),
+            format: e.content?.format ?? undefined,
+            author,
             record: e.record ? JSON.parse(e.record) : {},
             indexedAt: e.createdAt.toISOString(),
             likeCount: e._count.likes,
@@ -198,14 +158,16 @@ export function hydrateFullArticleView(uri: string, data: HydrationData): {
 }
 
 
-export function hydrateArticleView(uri: string, data: HydrationData): {
+export function hydrateArticleView(uri: string, data: Dataplane): {
     data?: $Typed<ArticleView>
     error?: string
 } {
-    const e = data.caContents?.get(uri)
+    const e = data.data.caContents?.get(uri)
     if (!e) return {error: "Ocurrió un error al cargar el contenido."}
 
     const viewer = hydrateViewer(e.uri, data)
+    const author = queryResultToProfileViewBasic(e.author)
+    if(!author) return {error: "Ocurrió un error al cargar el contenido."}
 
     return {
         data: {
@@ -213,7 +175,8 @@ export function hydrateArticleView(uri: string, data: HydrationData): {
             uri: e.uri,
             cid: e.cid,
             summary: e.content && e.content.summary ? e.content.summary : undefined,
-            author: queryResultToProfileViewBasic(e),
+            summaryFormat: "plain-text",
+            author,
             record: e.record ? JSON.parse(e.record) : {},
             indexedAt: e.createdAt.toISOString(),
             likeCount: e._count.likes,
@@ -226,39 +189,55 @@ export function hydrateArticleView(uri: string, data: HydrationData): {
 }
 
 
-function feedElementQueryResultToProfileViewBasic(e: FeedElementQueryResult) : ProfileViewBasic {
-    return {
-        did: e.author.did,
-        handle: e.author.handle,
-        displayName: e.author.displayName ?? undefined,
-        avatar: e.author.avatar ?? undefined
-    }
-}
+function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedContent: string, data: Dataplane): $Typed<SelectionQuoteEmbedView> | null {
+    const caData = data.data.caContents?.get(quotedContent)
+    const topicView = data.data.topicViews?.get(quotedContent)
+    const article = data.data.articleViewsForSelectionQuotes?.get(quotedContent)
 
-
-function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedContent: string, data: HydrationData): $Typed<SelectionQuoteEmbedView> | null {
-    const caData = data.caContents?.get(quotedContent)
-
-    if(!caData || !caData.content || !caData.content.text) {
+    if (topicView) {
+        return {
+            $type: "ar.cabildoabierto.embed.selectionQuote#view",
+            start: embed.start,
+            end: embed.end,
+            quotedText: topicView.text,
+            quotedTextFormat: topicView.format,
+            quotedContentTitle: getTopicTitle(topicView),
+            quotedContent,
+            quotedContentAuthor: topicView.author
+        }
+    } else if (caData && caData.content && caData.content.text) {
+        const author = queryResultToProfileViewBasic(caData.author)
+        if(!author) return null
+        return {
+            $type: "ar.cabildoabierto.embed.selectionQuote#view",
+            start: embed.start,
+            end: embed.end,
+            quotedText: caData.content.text,
+            quotedTextFormat: caData.content.format ?? undefined,
+            quotedContentTitle: caData.content.article?.title,
+            quotedContent,
+            quotedContentAuthor: author
+        }
+    } else if (article) {
+        return {
+            $type: "ar.cabildoabierto.embed.selectionQuote#view",
+            start: embed.start,
+            end: embed.end,
+            quotedText: article.text,
+            quotedTextFormat: article.format,
+            quotedContentTitle: article.title,
+            quotedContent,
+            quotedContentAuthor: article.author
+        }
+    } else {
         return null
     }
-
-    return {
-        $type: "ar.cabildoabierto.embed.selectionQuote#view",
-        start: embed.start,
-        end: embed.end,
-        quotedText: caData.content.text,
-        quotedTextFormat: caData.content.format ?? undefined,
-        quotedContentTitle: caData.content.article?.title,
-        quotedContent,
-        quotedContentAuthor: feedElementQueryResultToProfileViewBasic(caData)
-    }
 }
 
 
-function hydratePostView(uri: string, data: HydrationData): { data?: $Typed<PostView>, error?: string } {
-    const post = data.bskyPosts?.get(uri)
-    const caData = data.caContents?.get(uri)
+function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView>, error?: string } {
+    const post = data.data.bskyPosts?.get(uri)
+    const caData = data.data.caContents?.get(uri)
 
     if (!post) {
         return {error: "Ocurrió un error al cargar el contenido."}
@@ -268,15 +247,25 @@ function hydratePostView(uri: string, data: HydrationData): { data?: $Typed<Post
     const embed = record.embed
 
     let embedView: PostView["embed"] = post.embed
-    if(isSelectionQuoteEmbed(embed) && record.reply){
+    if (isSelectionQuoteEmbed(embed) && record.reply) {
         const view = hydrateSelectionQuoteEmbedView(embed, record.reply.parent.uri, data)
-        if(view) embedView = view
+        if (view) {
+            embedView = view;
+        } else {
+            console.log("No se encontraron los datos para el selection quote en el post: ", uri)
+            console.log(data.data.articleViewsForSelectionQuotes)
+        }
     }
 
     return {
         data: {
-            $type: "ar.cabildoabierto.feed.defs#postView",
             ...post,
+            author: {
+                ...post.author,
+                caProfile: caData?.author.CAProfileUri ?? undefined,
+                $type: "ar.cabildoabierto.actor.defs#profileViewBasic"
+            },
+            $type: "ar.cabildoabierto.feed.defs#postView",
             embed: embedView,
             ...(caData ? {
                 uniqueViewsCount: caData.uniqueViewsCount ?? undefined,
@@ -296,7 +285,7 @@ function hydratePostView(uri: string, data: HydrationData): { data?: $Typed<Post
 }
 
 
-export function hydrateContent(uri: string, data: HydrationData, full: boolean=false): {
+export function hydrateContent(uri: string, data: Dataplane, full: boolean = false): {
     data?: $Typed<PostView> | $Typed<ArticleView> | $Typed<FullArticleView>,
     error?: string
 } {
@@ -320,11 +309,15 @@ export function notFoundPost(uri: string): $Typed<NotFoundPost> {
 }
 
 
-function hydrateFeedViewContent(e: SkeletonFeedPost, data: HydrationData): $Typed<FeedViewContent> | $Typed<NotFoundPost> {
+export function hydrateFeedViewContent(e: SkeletonFeedPost, data: Dataplane): $Typed<FeedViewContent> | $Typed<NotFoundPost> {
     const reason = e.reason
 
-    const childBsky = data.bskyPosts?.get(e.post)
+    const childBsky = data.data.bskyPosts?.get(e.post)
     const reply = childBsky ? (childBsky.record as PostRecord).reply : null
+
+    if(isPost(getCollectionFromUri(e.post)) && childBsky) {
+        console.log("Warning: No se encontró el post en Bluesky. Uri: ", e.post)
+    }
 
     const leaf = hydrateContent(e.post, data)
     const parent = reply && !isReasonRepost(reason) ? hydrateContent(reply.parent.uri, data) : null
@@ -352,15 +345,7 @@ function hydrateFeedViewContent(e: SkeletonFeedPost, data: HydrationData): $Type
 }
 
 
-export const bskyPostViewToCAPostView = (p: BskyPostView): PostView => {
-    return {
-        ...p,
-        $type: "ar.cabildoabierto.feed.defs#postView",
-    }
-}
-
-
-export async function getBskyPosts(agent: SessionAgent, uris: string[]): Promise<Map<string, PostView>> {
+export async function getBskyPosts(agent: SessionAgent, uris: string[]): Promise<Map<string, BskyPostView>> {
     const postsList = uris.filter(uri => (getCollectionFromUri(uri) == "app.bsky.feed.post"))
 
     if (postsList.length == 0) {
@@ -371,9 +356,9 @@ export async function getBskyPosts(agent: SessionAgent, uris: string[]): Promise
             batches.push(postsList.slice(i, i + 25))
         }
         const results = await Promise.all(batches.map(b => agent.bsky.getPosts({uris: b})))
-        const postViews = results.map(r => r.data.posts).reduce((acc, cur) => [...acc, ...cur]).map(bskyPostViewToCAPostView)
+        const postViews = results.map(r => r.data.posts).reduce((acc, cur) => [...acc, ...cur])
 
-        let m = new Map<string, PostView>(
+        let m = new Map<string, BskyPostView>(
             postViews.map(item => [item.uri, item])
         )
 
@@ -385,7 +370,6 @@ export async function getBskyPosts(agent: SessionAgent, uris: string[]): Promise
 
 
 export async function getCAFeedContents(ctx: AppContext, uris: string[]): Promise<Map<string, FeedElementQueryResult>> {
-    const t1 = Date.now()
     const res = await ctx.db.record.findMany({
         select: {
             ...hydrateFeedQuery,
@@ -396,7 +380,6 @@ export async function getCAFeedContents(ctx: AppContext, uris: string[]): Promis
             }
         }
     })
-    const t2 = Date.now()
 
     let contents: FeedElementQueryResult[] = []
     res.forEach(r => {
@@ -418,7 +401,6 @@ export async function getCAFeedContents(ctx: AppContext, uris: string[]): Promis
     )
 
     await fetchArticleBlobs(m)
-    const t3 = Date.now()
 
     // logTimes("get feed ca contents", [t1, t2, t3])
 
@@ -426,7 +408,7 @@ export async function getCAFeedContents(ctx: AppContext, uris: string[]): Promis
 }
 
 
-function addEmbedsToPostsMap(m: Map<string, PostView>) {
+function addEmbedsToPostsMap(m: Map<string, BskyPostView>) {
     const posts = Array.from(m.values())
 
     posts.forEach(post => {
@@ -438,7 +420,7 @@ function addEmbedsToPostsMap(m: Map<string, PostView>) {
                     ...record,
                     uri: record.uri,
                     cid: record.cid,
-                    $type: "ar.cabildoabierto.feed.defs#postView",
+                    $type: "app.bsky.feed.defs#postView",
                     author: {
                         ...record.author
                     },
@@ -453,15 +435,25 @@ function addEmbedsToPostsMap(m: Map<string, PostView>) {
 }
 
 
-function markdownToPlainText(md: string) {
-    return md // TO DO: Transformar a editor state y luego a plain text
-}
-
-
 const fetchArticleBlob = async (val: FeedElementQueryResult) => {
-    if(!val.content || !val.content.textBlob) return null
+    if (!val.content || !val.content.textBlob) return null
     const blob = val.content.textBlob
     return await getTextFromBlob({cid: blob.cid, authorId: val.author.did})
+}
+
+export function getBlobKey(blob: BlobRef) {
+    return blob.cid + ":" + blob.authorId
+}
+
+const fetchTextBlobs = async (blobs: BlobRef[]) => {
+    async function getKeyAndText(blob: BlobRef): Promise<[string, string] | null> {
+        const text = await getTextFromBlob(blob)
+        if (!text) return null
+        return [getBlobKey(blob), text]
+    }
+
+    const texts = await Promise.all(blobs.map(getKeyAndText))
+    return new Map<string, string>(texts.filter(x => x != null))
 }
 
 
@@ -475,16 +467,16 @@ const fetchArticleBlobs = async (m: Map<string, FeedElementQueryResult>) => {
 
     const texts = await Promise.all(articles.map(fetchArticleBlob))
 
-    for(let i = 0; i < texts.length; i++){
+    for (let i = 0; i < texts.length; i++) {
         const text = texts[i]
-        if(!text) continue
+        if (!text) continue
         const val = articles[i]
-        if(!val.content) continue
+        if (!val.content) continue
 
         const format = val.content.format
         let summary = ""
         if (format == "markdown") {
-            summary = markdownToPlainText(text).slice(0, 150)
+            summary = markdownToPlainText(text).slice(0, 150).replace("\n", " ")
         } else if (!format || format == "lexical-compressed") {
             const summaryJson = JSON.parse(decompress(text))
             summary = getAllText(summaryJson.root).slice(0, 150)
@@ -495,68 +487,114 @@ const fetchArticleBlobs = async (m: Map<string, FeedElementQueryResult>) => {
 }
 
 
-function getReplyUrisFromPostViews(postViews: PostView[]) {
-    return postViews.reduce((acc: string[], cur) => {
-        const record = cur.record as PostRecord
-        if (record.reply) {
-            return [...acc, cur.uri, record.reply.root.uri, record.reply.parent.uri]
-        } else {
-            return [...acc, cur.uri]
-        }
-    }, [])
-}
-
-
-export async function fetchHydrationData(ctx: AppContext, agent: SessionAgent, skeleton: FeedSkeleton): Promise<HydrationData> {
-    const uris = skeleton.map(p => p.post)
-
-    const t1 = Date.now()
-    const bskyPostsMap = await getBskyPosts(agent, uris)
-
-    const replyUris = getReplyUrisFromPostViews(Array.from(bskyPostsMap.values()))
-
-    const t2 = Date.now()
-    const [bskyRepliesMap, caContents, engagement] = await Promise.all([
-        getBskyPosts(agent, replyUris),
-        getCAFeedContents(ctx, uris),
-        getUserEngagement(ctx, uris, agent.did)
-    ])
-
-    const t3 = Date.now()
-    let bskyMap = new Map([...bskyPostsMap, ...bskyRepliesMap])
-
-    // logTimes("fetch feed data", [t1, t2, t3])
-    return {
-        caContents,
-        bskyPosts: bskyMap,
-        engagement
+export async function getTopicViews(ctx: AppContext, agent: SessionAgent, uris: string[]): Promise<Map<string, TopicView>> {
+    const topicUris = uris.filter(uri => (isTopicVersion(getCollectionFromUri(uri))))
+    if (topicUris.length == 0) {
+        return new Map()
+    } else {
+        const results = await Promise.all(topicUris.map(u => getTopicVersion(ctx, agent, u)))
+        const list: [string, TopicView | null][] = range(topicUris.length)
+            .map(i => [topicUris[i], results[i].data ? results[i].data : null])
+        const valid: [string, TopicView][] = list.filter((x: [string, TopicView | null]) => x[1] != null) as [string, TopicView][]
+        return new Map<string, TopicView>(valid)
     }
 }
 
 
-export type HydrationData = {
-    caContents?: Map<string, FeedElementQueryResult>
-    bskyPosts?: Map<string, PostView>
-    engagement?: FeedEngagementProps
-    bskyUsers?: Map<string, ProfileViewBasic>
-    caUsers?: Map<string, CAProfileViewBasic>
+export type ArticleViewForSelectionQuote = {
+    text: string
+    format: string
+    author: CAProfileViewBasic
+    createdAt: Date
+    title: string
 }
 
 
-export function joinHydrationData(a: HydrationData, b: HydrationData): HydrationData{
-    return {
-        caContents: new Map([...a.caContents ?? [], ...b.caContents ?? []]),
-        bskyPosts: new Map([...a.bskyPosts ?? [], ...b.bskyPosts ?? []]),
-        engagement: {
-            likes: [...a.engagement?.likes ?? [], ...b.engagement?.likes ?? []],
-            reposts: [...b.engagement?.reposts ?? [], ...b.engagement?.reposts ?? []]
-        }
+export type BlobRef = { cid: string, authorId: string }
+
+
+export async function getArticleViewsForSelectionQuotes(ctx: AppContext, agent: SessionAgent, uris: string[]): Promise<Map<string, ArticleViewForSelectionQuote>> {
+    const articleUris = uris.filter(uri => (isArticle(getCollectionFromUri(uri))))
+    if (articleUris.length == 0) {
+        return new Map()
+    } else {
+        const articles = await ctx.db.record.findMany({
+            select: {
+                uri: true,
+                ...authorQuery,
+                createdAt: true,
+                content: {
+                    select: {
+                        text: true,
+                        textBlobId: true,
+                        format: true,
+                        article: {
+                            select: {
+                                title: true
+                            }
+                        }
+                    }
+                }
+            },
+            where: {
+                collection: {
+                    in: articleCollections
+                },
+                uri: {
+                    in: articleUris
+                }
+            }
+        })
+
+        const blobRefs: { cid: string, authorId: string }[] = articles
+            .map(a => (a.content?.textBlobId != null ? {cid: a.content.textBlobId, authorId: a.author.did} : null))
+            .filter(x => x != null)
+
+        const blobs = await fetchTextBlobs(blobRefs)
+
+        return new Map<string, ArticleViewForSelectionQuote>(articles.map(a => {
+            if (!a.content || !a.content.article) {
+                return null
+            }
+
+            const author = queryResultToProfileViewBasic(a.author)
+            if(!author) return null
+
+
+            let text: string
+            if(!a.content?.textBlobId && a.content?.text){
+                text = a.content.text
+            } else if(a.content?.textBlobId) {
+                const blobRef = {cid: a.content.textBlobId, authorId: a.author.did}
+                if(blobs.has(getBlobKey(blobRef))){
+                    text = gett(blobs, getBlobKey(blobRef))
+                } else {
+                    return null
+                }
+            } else {
+                return null
+            }
+
+            const res: [string, ArticleViewForSelectionQuote] = [
+                a.uri,
+                {
+                    text,
+                    format: a.content.format,
+                    author,
+                    createdAt: a.createdAt,
+                    title: a.content.article.title
+                }
+            ]
+
+            return res
+        }).filter(x => x != null))
     }
 }
 
 
 export async function hydrateFeed(ctx: AppContext, agent: SessionAgent, skeleton: FeedSkeleton): Promise<$Typed<FeedViewContent>[]> {
-    const data = await fetchHydrationData(ctx, agent, skeleton)
+    const data = new Dataplane(ctx, agent)
+    await data.fetchHydrationData(skeleton)
 
     const feed = skeleton
         .map((e) => (hydrateFeedViewContent(e, data)))
@@ -571,16 +609,16 @@ export async function hydrateFeed(ctx: AppContext, agent: SessionAgent, skeleton
 
 export type ThreadSkeleton = {
     post: string
-    replies?: {post: string}[]
+    replies?: { post: string }[]
 }
 
 
-export function hydrateThreadViewContent(skeleton: ThreadSkeleton, data: HydrationData, includeReplies: boolean=false): $Typed<ThreadViewContent> | null {
+export function hydrateThreadViewContent(skeleton: ThreadSkeleton, data: Dataplane, includeReplies: boolean = false): $Typed<ThreadViewContent> | null {
     const content = hydrateContent(skeleton.post, data, true).data
-    if(!content) return null
+    if (!content) return null
 
     let replies: $Typed<ThreadViewContent>[] | undefined
-    if(includeReplies && skeleton.replies){
+    if (includeReplies && skeleton.replies) {
         replies = skeleton.replies
             .map((r) => (hydrateThreadViewContent(r, data, false)))
             .filter(x => x != null)

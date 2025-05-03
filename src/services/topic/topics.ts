@@ -5,127 +5,186 @@ import {CAHandler, CAHandlerOutput} from "#/utils/handler";
 import {
     CategoryVotes,
     TopicHistory,
-    TopicProp, TopicVersionStatus,
+    TopicProp,
+    TopicVersionStatus,
     TopicView,
     VersionInHistory
 } from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion";
 import {getTopicCurrentVersion} from "#/services/topic/current-version";
 import {SessionAgent} from "#/utils/session-agent";
-import {logTimes} from "#/utils/utils";
-import {TopicProps} from "#/lib/types";
+import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
+import { Prisma } from "@prisma/client";
 
 
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
-    return await getTrendingTopics(ctx, [], "popular", 10)
+    return await getTopics(ctx, [], "popular", 10)
+}
+
+type TopicOrder = "popular" | "recent"
+
+
+export async function getTopicsSkeleton(ctx: AppContext, categories: string[], orderBy: TopicOrder, limit: number) {
+    const jsonbArray = JSON.stringify(categories)
+    let orderByClause
+    if (orderBy === 'popular') {
+        orderByClause = `t."popularityScore" DESC`
+    } else {
+        orderByClause = `t."lastEdit" DESC`
+    }
+
+    const topics = await ctx.db.$queryRawUnsafe(`
+        SELECT t.id
+        FROM "Topic" t
+                 JOIN "TopicVersion" v ON t."currentVersionId" = v."uri"
+        WHERE t."popularityScore" IS NOT NULL
+          AND t."lastEdit" IS NOT NULL
+          AND (
+            (
+                v."props" IS NOT NULL
+                    AND jsonb_typeof(v."props") = 'array'
+                    AND EXISTS (SELECT 1
+                                FROM jsonb_array_elements(v."props") AS prop
+                                WHERE prop ->>'name' = 'Categorías'
+                    AND (prop->'value'->'value')::jsonb @> $1::jsonb)
+                )
+                OR
+            (
+                ${categories.length === 0 ? 'TRUE' : 'FALSE'}
+            )
+        )
+        ORDER BY ${orderByClause} LIMIT $2
+    `, jsonbArray, limit)
+
+    return topics as {id: string}[]
 }
 
 
-export async function getTrendingTopics(
-    ctx: AppContext,
-    categories: string[],
-    sortedBy: "popular" | "recent",
-    limit: number): CAHandlerOutput<TopicViewBasic[]> {
-    const where = {
-        AND: categories.map((c) => {
-            if (c == "Sin categoría") {
-                return {categories: {none: {}}}
-            } else {
-                return {categories: {some: {categoryId: c}}}
-            }
-        }),
-        versions: {
-            some: {}
-        }
-    }
+export type TopicQueryResultBasic = {
+    id: string
+    lastEdit: Date | null
+    popularityScore: number | null
+    categories: {categoryId: string}[]
+    synonyms: string[]
+    currentVersion: {
+        props: Prisma.JsonValue
+        categories: string | null
+        synonyms: string | null
+    } | null
+}
 
-    const select = {
-        id: true,
-        popularityScore: true,
-        lastEdit: true,
-        categories: {
-            select: {
-                categoryId: true,
-            }
-        }
-    }
 
-    let topics: {
-        id: string
-        popularityScore: number | null
-        lastEdit: Date | null
-        categories: {
-            categoryId: string
-        }[]
-    }[]
+export function hydrateTopicViewBasic(t: TopicQueryResultBasic): TopicViewBasic {
+    let props: TopicProp[] = []
 
-    if (sortedBy == "popular") {
-        topics = await ctx.db.topic.findMany({
-            select,
-            where: {
-                ...where,
-                popularityScore: {
-                    not: null
-                }
-            },
-            orderBy: {
-                popularityScore: "desc"
-            },
-            take: limit
-        })
+    if(t.currentVersion && t.currentVersion.props){
+        props = t.currentVersion.props as unknown as TopicProp[]
     } else {
-        const where = {
-            AND: categories.map((c) => {
-                if (c == "Sin categoría") {
-                    return {categories: {none: {}}}
-                } else {
-                    return {categories: {some: {categoryId: c}}}
-                }
-            }),
-            versions: {
-                some: {}
+        if(t.categories.length > 0) props.push({
+            name: "Categorías",
+            value: {
+                $type: "ar.cabildoabierto.wiki.topicVersion#stringListProp",
+                value: t.categories.map(c => c.categoryId)
             }
-        }
-        topics = await ctx.db.topic.findMany({
-            select,
-            where: {
-                ...where,
-                lastEdit: {
-                    not: null
-                }
-            },
-            orderBy: {
-                lastEdit: "desc"
-            },
-            take: limit
+        }); else if(t.currentVersion && t.currentVersion.categories) props.push({
+            name: "Categorías",
+            value: {
+                $type: "ar.cabildoabierto.wiki.topicVersion#stringListProp",
+                value: JSON.parse(t.currentVersion.categories)
+            }
+        })
+
+        props.push({
+            name: "Título",
+            value: {
+                $type: "ar.cabildoabierto.wiki.topicVersion#stringProp",
+                value: t.id
+            }
+        })
+
+        if(t.categories.length > 0) props.push({
+            name: "Sinónimos",
+            value: {
+                $type: "ar.cabildoabierto.wiki.topicVersion#stringListProp",
+                value: t.synonyms
+            }
+        }); else if(t.currentVersion && t.currentVersion.synonyms) props.push({
+            name: "Sinónimos",
+            value: {
+                $type: "ar.cabildoabierto.wiki.topicVersion#stringListProp",
+                value: JSON.parse(t.currentVersion.synonyms)
+            }
         })
     }
 
     return {
-        data: topics.map(t => ({
-            ...t,
-            popularity: t.popularityScore ? [t.popularityScore] : undefined,
-            lastEdit: t.lastEdit?.toISOString() ?? undefined,
-            props: [
-                {name: "Categorías", value: JSON.stringify(t.categories.map(({categoryId}) => categoryId)), dataType: "string[]"}
-            ]
-        }))
+        $type: "ar.cabildoabierto.wiki.topicVersion#topicViewBasic",
+        id: t.id,
+        lastEdit: t.lastEdit?.toISOString() ?? undefined,
+        popularity: t.popularityScore != null ? [t.popularityScore] : undefined,
+        props
     }
 }
 
 
-export const getTopicsHandler: CAHandler<{params: {sort: string}, query: {c: string[] | string}}, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
+export async function getTopicViewBasicsHydrationData(ctx: AppContext, skeleton: {id: string}[]){
+    const data: TopicQueryResultBasic[] = await ctx.db.topic.findMany({
+        select: {
+            id: true,
+            popularityScore: true,
+            lastEdit: true,
+            categories: {
+                select: {
+                    categoryId: true,
+                }
+            },
+            synonyms: true,
+            currentVersion: {
+                select: {
+                    props: true,
+                    synonyms: true,
+                    categories: true
+                }
+            }
+        },
+        where: {
+            id: {
+                in: skeleton.map(s => s.id)
+            }
+        }
+    })
+
+    return data
+}
+
+
+export async function getTopics(
+    ctx: AppContext,
+    categories: string[],
+    sortedBy: "popular" | "recent",
+    limit: number): CAHandlerOutput<TopicViewBasic[]> {
+
+    const skeleton = await getTopicsSkeleton(ctx, categories, sortedBy, limit)
+    const data = await getTopicViewBasicsHydrationData(ctx, skeleton)
+    return {data: data.map(hydrateTopicViewBasic)}
+}
+
+
+export const getTopicsHandler: CAHandler<{
+    params: { sort: string },
+    query: { c: string[] | string }
+}, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
     const {sort} = params
     const {c} = query
     const categories = Array.isArray(c) ? c : c ? [c] : []
 
-    if(sort != "popular" && sort != "recent") return {error: `Criterio de ordenamiento inválido: ${sort}`}
+    if (sort != "popular" && sort != "recent") return {error: `Criterio de ordenamiento inválido: ${sort}`}
 
-    return await getTrendingTopics(ctx, categories, sort, 50)
+    return await getTopics(ctx, categories, sort, 50)
 }
 
 
-export const getCategories: CAHandler<{}, {category: string, size: number}[]> = async (ctx, agent, {}) => {
+export const getCategories: CAHandler<{}, { category: string, size: number }[]> = async (ctx, agent, {}) => {
 
     const categoriesP = ctx.db.topicCategory.findMany({
         select: {
@@ -171,8 +230,13 @@ export async function getTextFromBlob(blob: { cid: string, authorId: string }) {
 }
 
 
-export function dbUserToProfileViewBasic(author: {did: string, handle: string | null, displayName: string | null, avatar: string | null}){
-    if(!author.handle) return null
+export function dbUserToProfileViewBasic(author: {
+    did: string,
+    handle: string | null,
+    displayName: string | null,
+    avatar: string | null
+}) {
+    if (!author.handle) return null
     return {
         did: author.did,
         handle: author.handle,
@@ -182,7 +246,7 @@ export function dbUserToProfileViewBasic(author: {did: string, handle: string | 
 }
 
 
-export const getTopicHistory: CAHandler<{params: {id: string}}, TopicHistory> = async (ctx, agent, {params}) => {
+export const getTopicHistory: CAHandler<{ params: { id: string } }, TopicHistory> = async (ctx, agent, {params}) => {
     const {id} = params
     try {
         const versions = await ctx.db.record.findMany({
@@ -245,7 +309,7 @@ export const getTopicHistory: CAHandler<{params: {id: string}}, TopicHistory> = 
         const topicHistory: TopicHistory = {
             id,
             versions: versions.map(v => {
-                if(!v.content || !v.content.topicVersion || !v.cid) return null
+                if (!v.content || !v.content.topicVersion || !v.cid) return null
 
                 let accept: string | undefined
                 let reject: string | undefined
@@ -260,20 +324,20 @@ export const getTopicHistory: CAHandler<{params: {id: string}}, TopicHistory> = 
 
                 v.accepts.forEach(a => {
                     const did = getDidFromUri(a.uri)
-                    if(did == agent.did){
+                    if (did == agent.did) {
                         accept = a.uri
                     }
                 })
 
                 v.rejects.forEach(a => {
                     const did = getDidFromUri(a.uri)
-                    if(did == agent.did){
+                    if (did == agent.did) {
                         reject = a.uri
                     }
                 })
 
                 const author = dbUserToProfileViewBasic(v.author)
-                if(!author) return null
+                if (!author) return null
 
                 const status: TopicVersionStatus = {
                     voteCounts
@@ -311,22 +375,28 @@ export const getTopicHistory: CAHandler<{params: {id: string}}, TopicHistory> = 
 
 export const redisCacheEnabled = false
 
-async function cached<T>(ctx: AppContext, key: string[], fn: () => Promise<{data?: T, error?: string}>): Promise<{data?: T, error?: string}> {
-    if(!redisCacheEnabled){
+async function cached<T>(ctx: AppContext, key: string[], fn: () => Promise<{ data?: T, error?: string }>): Promise<{
+    data?: T,
+    error?: string
+}> {
+    if (!redisCacheEnabled) {
         return await fn()
     }
     const strKey = key.join(":")
     const cur = await ctx.redis.get(strKey)
-    if(cur) return {data: JSON.parse(cur) as T}
+    if (cur) return {data: JSON.parse(cur) as T}
     const res = await fn()
-    if(res.data){
+    if (res.data) {
         await ctx.redis.set(strKey, JSON.stringify(res))
     }
     return res
 }
 
 
-export const getTopicCurrentVersionFromDB = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{data?: string | null, error?: string}> => {
+export const getTopicCurrentVersionFromDB = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{
+    data?: string | null,
+    error?: string
+}> => {
     const res = await ctx.db.topic.findUnique({
         select: {
             currentVersionId: true
@@ -335,7 +405,7 @@ export const getTopicCurrentVersionFromDB = async (ctx: AppContext, agent: Sessi
             id
         }
     })
-    if(res){
+    if (res) {
         return {data: res.currentVersionId}
     } else {
         return {error: `No se encontró el tema: ${id}`}
@@ -343,35 +413,35 @@ export const getTopicCurrentVersionFromDB = async (ctx: AppContext, agent: Sessi
 }
 
 
-export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{data?: TopicView, error?: string}> => {
-    const t1 = Date.now()
+export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{
+    data?: TopicView,
+    error?: string
+}> => {
     const {data: currentVersionId} = await cached(ctx, ["currentVersion", id], async () => getTopicCurrentVersionFromDB(ctx, agent, id))
-    const t2 = Date.now()
 
     let uri: string
-    if(!currentVersionId){
+    if (!currentVersionId) {
         console.log(`Warning: Current version not set for topic ${id}.`)
         const {data: history} = await getTopicHistory(ctx, agent, {params: {id}})
 
-        if(!history) return {error: "No se encontró el tema " + id + "."}
+        if (!history) {
+            return {error: "No se encontró el tema " + id + "."}
+        }
 
         const index = getTopicCurrentVersion(history.versions)
-        if(index == null) return {error: "No se encontró el tema " + id + "."}
+        if (index == null) {
+            return {error: "No se encontró el tema " + id + "."}
+        }
         uri = history.versions[index].uri
     } else {
         uri = currentVersionId
     }
-    const t3 = Date.now()
 
-    const t = await getCachedTopicVersion(ctx, agent, uri)
-    const t4 = Date.now()
-
-    logTimes("get topic", [t1, t2, t3, t4])
-    return t
+    return await getCachedTopicVersion(ctx, agent, uri)
 }
 
 
-export const getTopicHandler: CAHandler<{params: {id: string}}, TopicView> = async (ctx, agent, {params: {id}}) => {
+export const getTopicHandler: CAHandler<{ params: { id: string } }, TopicView> = async (ctx, agent, {params: {id}}) => {
     return getTopic(ctx, agent, id)
 }
 
@@ -381,7 +451,10 @@ export const getCachedTopicVersion = async (ctx: AppContext, agent: SessionAgent
 }
 
 
-export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri: string): Promise<{data?: TopicView, error?: string}> => {
+export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri: string): Promise<{
+    data?: TopicView,
+    error?: string
+}> => {
     const {did, rkey} = splitUri(uri)
     const topic = await ctx.db.record.findFirst({
         select: {
@@ -395,6 +468,7 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
                     avatar: true
                 }
             },
+            record: true,
             createdAt: true,
             content: {
                 select: {
@@ -449,11 +523,13 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
 
     const id = topic.content.topicVersion.topic.id
 
-    if(!author || !topic.cid) {
+    if (!author || !topic.cid) {
         console.log("missing data")
         console.log(author != null, topic.cid != null)
         return {error: "No se encontró el tema " + id + "."}
     }
+
+    const {text: transformedText, format: transformedFormat} = anyEditorStateToMarkdownOrLexical(text, topic.content.format)
 
     const view: TopicView = {
         $type: "ar.cabildoabierto.wiki.topicVersion#topicView",
@@ -461,19 +537,22 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
         uri: topic.uri,
         cid: topic.cid,
         author,
-        text: text ?? "",
-        format: text != null ? topic.content.format : "plain-text",
+        text: transformedText,
+        format: transformedFormat,
         props: topic.content.topicVersion.props as unknown as TopicProp[],
         createdAt: topic.createdAt.toISOString(),
         lastEdit: topic.content.topicVersion.topic.lastEdit?.toISOString() ?? topic.createdAt.toISOString(),
-        currentVersion: topic.content.topicVersion.topic.currentVersionId ?? undefined
+        currentVersion: topic.content.topicVersion.topic.currentVersionId ?? undefined,
+        record: topic.record ? JSON.parse(topic.record) : undefined
     }
 
     return {data: view}
 }
 
 
-export const getTopicVersionHandler: CAHandler<{params: {did: string, rkey: string}}, TopicView> = async (ctx, agent, {params}) => {
+export const getTopicVersionHandler: CAHandler<{
+    params: { did: string, rkey: string }
+}, TopicView> = async (ctx, agent, {params}) => {
     const {did, rkey} = params
     return getCachedTopicVersion(ctx, agent, getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey))
 }
@@ -545,7 +624,9 @@ function showAuthors(topic: TopicHistoryProps, topicVersion: TopicVersionProps) 
  */
 
 
-export const getTopicVersionAuthors: CAHandler<{params: {did: string, rkey: string}}> = async (ctx, agent, {params}) => {
+export const getTopicVersionAuthors: CAHandler<{
+    params: { did: string, rkey: string }
+}> = async (ctx, agent, {params}) => {
     const {did, rkey} = params
 
     return {
@@ -557,7 +638,9 @@ export const getTopicVersionAuthors: CAHandler<{params: {did: string, rkey: stri
 }
 
 
-export const getTopicVersionChanges: CAHandler<{params: {did: string, rkey: string}}> = async (ctx, agent, {params}) => {
+export const getTopicVersionChanges: CAHandler<{
+    params: { did: string, rkey: string }
+}> = async (ctx, agent, {params}) => {
     const {did, rkey} = params
 
     return {

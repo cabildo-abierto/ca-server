@@ -13,6 +13,10 @@ import {createServer} from "src/lex-server";
 import {Server as XrpcServer} from "src/lex-server"
 import {MirrorMachine} from "#/services/sync/mirror-machine";
 import {createClient as createRedisClient, RedisClientType} from "redis"
+import {Queue} from "bullmq";
+import IORedis from "ioredis";
+import {updateCategoriesGraphHandler} from "#/services/topic/graph";
+import {createWorker} from "#/jobs/worker";
 
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:16379'
@@ -24,7 +28,9 @@ export type AppContext = {
     oauthClient: OAuthClient
     resolver: BidirectionalResolver
     xrpc: XrpcServer
-    redis: RedisClientType
+    redis: RedisClientType,
+    ioredis: IORedis,
+    queue: Queue
 }
 
 export class Server {
@@ -51,6 +57,12 @@ export class Server {
         });
         await redisDB.connect()
 
+        const ioredis = new IORedis(redisUrl, {
+            password: process.env.REDIS_PASSWORD,
+            maxRetriesPerRequest: null
+        })
+        const queue = new Queue('bgJobs', {connection: ioredis})
+
         const oauthClient = await createClient(redisDB)
 
         const baseIdResolver = createIdResolver()
@@ -62,8 +74,12 @@ export class Server {
             oauthClient,
             resolver,
             xrpc,
-            redis: redisDB
+            redis: redisDB,
+            ioredis: ioredis,
+            queue
         }
+
+        const worker = createWorker(ctx)
 
         const ingester = new MirrorMachine(ctx)
         ingester.run()

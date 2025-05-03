@@ -10,7 +10,8 @@ import {CAHandler} from "#/utils/handler";
 
 export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: string}}, FeedViewContent[]> = async (ctx, agent, {params}) => {
     const {handleOrDid, kind} = params
-    const did = await handleToDid(agent, handleOrDid)
+    const did = await handleToDid(ctx, agent, handleOrDid)
+    if(!did) return {error: "No se encontró el usuario."}
 
     let pipeline: FeedPipelineProps
     if(kind == "publicaciones"){

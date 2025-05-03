@@ -4,6 +4,8 @@ import {getCollectionFromUri, getDidFromUri, getRkeyFromUri} from "#/utils/uri";
 import {decompress} from "#/utils/compression";
 import {getAllText} from "#/services/topic/diff";
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+import { JsonArray } from "@prisma/client/runtime/library";
+import { Prisma } from '@prisma/client';
 
 
 export function processRecord(ctx: AppContext, r: SyncRecordProps) {
@@ -175,10 +177,8 @@ export function processContent(ctx: AppContext, r: SyncRecordProps){
             uri: r.uri
         }
     })
-    console.log("Upserting content", content)
 
     if(blob){
-        console.log("Upserting blob")
         const blobUpd = ctx.db.blob.upsert({
             create: blob,
             update: blob,
@@ -249,6 +249,9 @@ export function processTopicVersion(ctx: AppContext, r: SyncRecordProps) {
     let updates: any[] = processContent(ctx, r)
 
     const record = r.record as TopicVersionRecord
+    console.log("Processing topic version for", record.id)
+    console.log("uri", r.uri)
+    console.log("Props", record.props)
 
     const isNewCurrentVersion = true // TO DO: esto debería depender de los permisos del usuario, o no hacerse si preferimos esperar a un voto
 
@@ -263,13 +266,11 @@ export function processTopicVersion(ctx: AppContext, r: SyncRecordProps) {
         where: {id: record.id}
     }))
 
-    const props: {name: string, value: string, dataType?: string}[] | undefined = record.props
-
     const topicVersion = {
         uri: r.uri,
         topicId: record.id,
         message: record.message ? record.message : undefined,
-        props
+        props: record.props ? record.props as unknown as JsonArray : Prisma.JsonNull,
     }
 
     updates.push(ctx.db.topicVersion.upsert({
@@ -298,33 +299,35 @@ export function processTopicVersion(ctx: AppContext, r: SyncRecordProps) {
 
 
 export function processTopicVote(ctx: AppContext, r: SyncRecordProps){
+    const updates: any = newDirtyRecord(ctx, r.record.subject)
     if(r.record.value == "accept"){
         const topicVote = {
             uri: r.uri,
             acceptedRecordId: r.record.subject.uri
         }
-        return [
+        updates.push(
             ctx.db.topicAccept.upsert({
                 create: topicVote,
                 update: topicVote,
                 where: {uri: r.uri}
             })
-        ]
+        )
     } else if(r.record.value == "reject"){
         const topicVote = {
             uri: r.uri,
             rejectedRecordId: r.record.subject.uri
         }
-        return [
+        updates.push(
             ctx.db.topicReject.upsert({
                 create: topicVote,
                 update: topicVote,
                 where: {uri: r.uri}
             })
-        ]
+        )
     } else {
         throw Error("Invalid topic vote value:", r.record.value)
     }
+    return updates
 }
 
 

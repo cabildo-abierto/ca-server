@@ -31,6 +31,7 @@ import {getCategoriesGraph, getCategoryGraph} from "#/services/topic/graph";
 import {createTopicVersion} from "#/services/write/topic";
 import path from "path";
 import {cancelEditVote, voteEdit} from "#/services/topic/votes";
+import { adminRoutes } from './admin-routes';
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -144,7 +145,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/thread/:did/:collection/:rkey',
+        '/thread/:handleOrDid/:collection/:rkey',
         handler(makeHandler(ctx, getThread))
     )
 
@@ -261,6 +262,8 @@ export const createRouter = (ctx: AppContext) => {
         '/cancel-edit-vote/:id/:rkey',
         makeHandler(ctx, cancelEditVote)
     )
+
+    router.use(adminRoutes(ctx))
 
     router.use(ctx.xrpc.xrpc.router)
 

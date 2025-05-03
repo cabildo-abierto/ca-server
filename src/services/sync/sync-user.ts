@@ -8,7 +8,8 @@ import {UserRepo} from "#/lib/types";
 import {iterateAtpRepo} from "@atcute/car"
 import {getServiceEndpointForDid} from "#/services/blob";
 import {union} from "#/utils/arrays";
-import {getCollectionFromUri} from "#/utils/uri";
+import {getCollectionFromUri, shortCollectionToCollection} from "#/utils/uri";
+import {CAHandler} from "#/utils/handler";
 
 
 export async function restartSync(ctx: AppContext): Promise<void> {
@@ -50,8 +51,21 @@ function parseCar(did: string, buf: ArrayBuffer): UserRepo {
 }
 
 
-export async function syncUser(ctx: AppContext, did: string, collectionsMustUpdate: string[] = [], retries: number = 100){
+export async function getUserRepo(did: string, doc: string | Record<string, unknown> | null){
+    if(typeof doc != "string") return null
+    const url = doc+"/xrpc/com.atproto.sync.getRepo?did="+did
+    const res = await fetch(url)
+    if(res.ok){
+        const arrayBuffer = await res.arrayBuffer()
+        return parseCar(did, arrayBuffer)
+    }
+    return null
+}
+
+
+export async function syncUser(ctx: AppContext, did: string, collectionsMustUpdate?: string[], retries: number = 100){
     console.log("Syncing user:", did)
+    collectionsMustUpdate = collectionsMustUpdate ? collectionsMustUpdate.map(shortCollectionToCollection) : undefined
     console.log("Must update", collectionsMustUpdate)
 
     const [_, doc] = await Promise.all([
@@ -67,24 +81,9 @@ export async function syncUser(ctx: AppContext, did: string, collectionsMustUpda
     ])
     // revalidateTag("mirrorStatus:"+did)
 
-    const presentRecords = new Set()
-    let foundRepo = false
-    if(typeof doc == "string"){
-        const url = doc+"/xrpc/com.atproto.sync.getRepo?did="+did
-        const res = await fetch(url)
-        if(res.ok){
-            foundRepo = true
-            const arrayBuffer = await res.arrayBuffer()
-            let repo = parseCar(did, arrayBuffer)
+    let repo = await getUserRepo(did, doc)
 
-            repo = repo.filter((r) => (validRecord(r)))
-            repo.forEach((r) => {presentRecords.add(r.uri)})
-
-            await processRepo(ctx, repo, did, collectionsMustUpdate, retries)
-        }
-    }
-
-    if(!foundRepo){
+    if(!repo){
         console.log("Couldn't fetch repo from " + did)
         await ctx.db.user.update({
             data: {
@@ -96,6 +95,11 @@ export async function syncUser(ctx: AppContext, did: string, collectionsMustUpda
         })
         return
     }
+
+    const presentRecords = new Set()
+    repo = repo.filter((r) => (validRecord(r)))
+    repo.forEach((r) => {presentRecords.add(r.uri)})
+    await processRepo(ctx, repo, did, collectionsMustUpdate, retries)
 
     /*
     TO DO: Procesar eventos pendientes
@@ -203,4 +207,14 @@ export async function checkUpdateRequired(ctx: AppContext, repo: UserRepo, did: 
     }
 
     return {reqUpdate, recordsReqUpdate}
+}
+
+
+export const syncUserHandler: CAHandler<{params: {handleOrDid: string}, query: {c: string[] | string | undefined}}, {}> = async (ctx, agent, {params, query}) => {
+    const {handleOrDid} = params
+    const {c} = query
+
+    await ctx.queue.add("sync-user", {handleOrDid, collectionsMustUpdate: c ? (typeof c == "string" ? [c] : c) : undefined})
+
+    return {data: {}}
 }

@@ -10,8 +10,8 @@ import {CAHandler} from "#/utils/handler";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
 import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {HydrationData} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
+import {Dataplane} from "#/services/hydration/dataplane";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -32,12 +32,34 @@ export async function getFollowing(ctx: AppContext, did: string): Promise<string
 }
 
 
-export async function handleToDid(agent: SessionAgent, userId: string){
-    if(userId.startsWith("did")) {
-        return userId
+export async function dbHandleToDid(ctx: AppContext, handleOrDid: string): Promise<string | null> {
+    if(handleOrDid.startsWith("did")) {
+        return handleOrDid
     } else {
-        const {data} = await agent.bsky.resolveHandle({handle: userId})
-        return data.did
+        const res = await ctx.db.user.findFirst({
+            select: {
+                did: true
+            },
+            where: {
+                handle: handleOrDid
+            }
+        })
+        return res?.did ?? null
+    }
+}
+
+
+export async function handleToDid(ctx: AppContext, agent: SessionAgent, handleOrDid: string): Promise<string | null> {
+    if(handleOrDid.startsWith("did")) {
+        return handleOrDid
+    } else {
+        try {
+            return await ctx.resolver.resolveHandleToDid(handleOrDid)
+        } catch (err) {
+            console.error("Error in handleToDid:", handleOrDid)
+            console.error(err)
+            return null
+        }
     }
 }
 
@@ -51,6 +73,18 @@ export async function isCAUser(ctx: AppContext, did: string) {
         }
     })
     return res != null
+}
+
+
+export const getCAUsersDids = async (ctx: AppContext) => {
+    return (await ctx.db.user.findMany({
+        select: {
+            did: true
+        },
+        where: {
+            inCA: true
+        }
+    })).map(({did}) => did)
 }
 
 
@@ -317,7 +351,8 @@ export const unfollow: CAHandler<{followUri: string}> = async (ctx, agent, {foll
 
 
 export const getProfile: CAHandler<{params: {handleOrDid: string}}, Profile> = async (ctx, agent, {params}) => {
-    const did = await handleToDid(agent, params.handleOrDid)
+    const did = await handleToDid(ctx, agent, params.handleOrDid)
+    if(!did) return {error: "No se encontró el usuario."}
 
     try {
         const [bskyProfile, caProfile, caFollowsCount, caFollowersCount] = await Promise.all([
@@ -857,7 +892,8 @@ export async function getCADataForUsers(ctx: AppContext, users: string[]) {
 
 
 export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOrDid, kind}: {handleOrDid: string, kind: "follows" | "followers"}) => {
-    const did = await handleToDid(agent, handleOrDid)
+    const did = await handleToDid(ctx, agent, handleOrDid)
+    if(!did) return {error: "No se encontró el usuario."}
 
     const users = kind == "follows" ?
         (await agent.bsky.getFollows({actor: did})).data.follows :
@@ -867,12 +903,13 @@ export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOr
     const caData = await getCADataForUsers(ctx, users.map(u => u.did))
     const caMap = new Map(caData.map(a => [a.did, a]))
 
-    const hData: HydrationData = {
+    const dataplane = new Dataplane(ctx, agent)
+    dataplane.data = {
         bskyUsers: bskyMap,
         caUsers: caMap
-    }
+    } // TO DO: Refactor
 
-    let data = users.map(u => hydrateProfileViewBasic(u.did, hData)).filter(x => x != null)
+    let data = users.map(u => hydrateProfileViewBasic(u.did, dataplane)).filter(x => x != null)
     data = sortByKey(data, (u => [u.caProfile != null ? 1 : 0]), listOrderDesc)
 
     return {data}

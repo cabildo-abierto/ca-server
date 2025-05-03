@@ -74,74 +74,6 @@ export type RecordProps = {
 }
 
 
-export type TopicProps = {
-    id: string
-    protection: EditorStatus
-    synonyms: string[]
-    categories: {
-        categoryId: string
-    }[]
-    currentVersion: {
-        uri: string
-        content: {
-            text: string
-            format?: string
-            record: {
-                cid: string
-                author: {
-                    did: string
-                    handle: string
-                    displayName?: string
-                    avatar?: string
-                }
-                createdAt: Date
-            }
-        }
-    }
-}
-
-
-export type TopicHistoryProps = {
-    id: string
-    versions: {
-        uri: string
-        cid: string | null
-        collection: "ar.cabildoabierto.wiki.topicVersion" | null
-        author: {
-            did: string
-            handle: string | null
-            displayName: string | null
-            avatar: string | null
-        }
-        content: {
-            hasText: boolean
-            topicVersion: {
-                charsAdded?: number | null
-                charsDeleted?: number | null
-                accCharsAdded?: number | null
-                contribution?: string | null
-                message?: string | null
-                diff?: string | null
-                title?: string | null
-                categories?: string | null
-                synonyms?: string | null
-            }
-        }
-        createdAt: Date
-        uniqueAccepts: number
-        uniqueRejects: number
-    }[]
-}
-
-
-export type TopicVersionAuthorsProps = {
-    text: string
-}
-
-
-export type TopicSortOrder = "popular" | "recent"
-
-
 export type TopicsGraph = {
     nodeIds: string[]
     edges: {x: string, y: string}[]
@@ -149,27 +81,12 @@ export type TopicsGraph = {
 }
 
 
-export type ReasonProps = {
-    createdAt: Date
-    collection: Collection
-    by: ProfileViewBasic
-}
-
 export type MentionProps = {
     did: string
     handle: string
     displayName?: string
     avatar?: string
 }
-
-
-export type BothContributionsProps = {
-    monetized: [string, number][]
-    all: [string, number][]
-}
-
-
-export type ContributionsProps = [string, number][]
 
 
 export type FeedEngagementProps = {
@@ -187,34 +104,6 @@ export type SubscriptionProps = {
     endsAt: Date | null
     price: number
 }
-
-
-export type UserProps = {
-    did: string
-    handle: string
-    displayName?: string
-    avatar?: string
-    banner?: string
-    description?: string
-    hasAccess: boolean
-    email?: string
-    inCA: boolean
-    CAProfileUri?: string
-    createdAt: Date
-    seenTutorial: boolean
-    editorStatus: EditorStatus
-    platformAdmin: boolean
-    subscriptionsUsed: SubscriptionProps[]
-    subscriptionsBought: {id: string, price: number}[]
-    viewer?: {following?: string, followed?: string}
-    followersCount: number
-    followsCount: number
-    messagesSent: MessageProps[]
-    messagesReceived: MessageProps[]
-    usedInviteCode?: {
-        code: string
-    }
-};
 
 
 export type MessageProps = {

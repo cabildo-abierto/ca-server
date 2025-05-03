@@ -1,13 +1,6 @@
 import {handleToDid} from "#/services/user/users";
 import {SessionAgent} from "#/utils/session-agent";
 
-export async function getValidUri(agent: SessionAgent, userId: string, shortCollection: string, rkey: string){
-    const did = await handleToDid(agent, userId)
-    const collection = shortCollectionToCollection(shortCollection)
-
-    return getUri(did, collection, rkey)
-}
-
 
 export function getUri(did: string, collection: string, rkey: string) {
     return "at://" + did + "/" + collection + "/" + rkey
@@ -41,6 +34,9 @@ export function shortCollectionToCollection(collection: string) {
     if (collection == "visualization") {
         return "ar.cabildoabierto.data.visualization"
     }
+    if (collection == "topicVersion") {
+        return "ar.cabildoabierto.wiki.topicVersion"
+    }
     return collection
 }
 
@@ -72,7 +68,7 @@ export function editVisualizationUrl(uri: string) {
     return "/nueva-visualizacion?did=" + did + "&rkey=" + rkey + collectionParam
 }
 
-export function userUrl(id: string) {
+export function profileUrl(id: string) {
     return "/perfil/" + id
 }
 
@@ -108,12 +104,8 @@ export function getCollectionFromUri(uri: string) {
     return uri.split("/")[3]
 }
 
-export function isBskyPost(collection: string){
-    return collection == "app.bsky.feed.post"
-}
-
 export function isPost(collection: string) {
-    return isQuotePost(collection) || isBskyPost(collection)
+    return collection == "app.bsky.feed.post"
 }
 
 export function isArticle(c: string){

@@ -1,9 +1,14 @@
-import {FeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {CAHandler} from "#/utils/handler";
 import {getFeed} from "#/services/feed/feed";
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
 import {creationDateSortKey} from "#/services/feed/utils";
+import {getTopic} from "#/services/topic/topics";
+import {hydrateFeedViewContent} from "#/services/hydration/hydrate";
+import {listOrderDesc, sortByKey} from "#/utils/arrays";
+import {isNotFoundPost} from "#/lex-server/types/app/bsky/feed/defs";
+import {Dataplane} from "#/services/hydration/dataplane";
 
 
 const getTopicRepliesSkeleton = async (ctx: AppContext, agent: SessionAgent, id: string) => {
@@ -15,7 +20,9 @@ const getTopicRepliesSkeleton = async (ctx: AppContext, agent: SessionAgent, id:
                     content: {
                         post: {
                             replyTo: {
-                                collection: "ar.com.cabildoabierto.topic",
+                                collection: {
+                                    in: ["ar.com.cabildoabierto.topic", "ar.cabildoabierto.wiki.topicVersion"]
+                                },
                                 content: {
                                     topicVersion: {
                                         topicId: id
@@ -49,7 +56,11 @@ const getTopicMentionsSkeleton = async (ctx: AppContext, agent: SessionAgent, id
                 }
             },
             collection: {
-                in: ["ar.com.cabildoabierto.article", "ar.com.cabildoabierto.quotePost", "app.bsky.feed.post"]
+                in: [
+                    "ar.com.cabildoabierto.article",
+                    "app.bsky.feed.post",
+                    "ar.cabildoabierto.feed.article"
+                ]
             }
         },
         orderBy: {
@@ -84,6 +95,35 @@ export async function getTopicMentionsInTopics(ctx: AppContext, id: string){
 }
 
 
+export const getTopicVersionReplies = async (ctx: AppContext, agent: SessionAgent, id: string) => {
+    const [topicVersion, skeleton] = await Promise.all([
+        getTopic(ctx, agent, id),
+        getTopicRepliesSkeleton(ctx, agent, id)
+    ])
+
+    if(!topicVersion.data) return {error: topicVersion.error}
+
+    const data = new Dataplane(ctx, agent)
+    await data.fetchHydrationData(skeleton)
+
+    data.data.topicViews = new Map([[topicVersion.data.uri, topicVersion.data]])
+
+    let feed = skeleton
+        .map((e) => (hydrateFeedViewContent(e, data)))
+
+    feed.filter(isNotFoundPost).forEach(x => {
+        console.log("Post not found:", x.uri)
+    })
+
+    let res = feed
+        .filter(x => isFeedViewContent(x))
+
+    res = sortByKey(res, creationDateSortKey, listOrderDesc)
+
+    return {data: res}
+}
+
+
 export const getTopicFeed: CAHandler<{ params: { id: string } }, {
     mentions: FeedViewContent[],
     replies: FeedViewContent[],
@@ -93,12 +133,7 @@ export const getTopicFeed: CAHandler<{ params: { id: string } }, {
 
     try {
         const [replies, mentions, topicMentions] = await Promise.all([
-            getFeed({
-                ctx, agent, pipeline: {
-                    getSkeleton: (ctx, agent) => getTopicRepliesSkeleton(ctx, agent, id),
-                    sortKey: creationDateSortKey
-                }
-            }),
+            getTopicVersionReplies(ctx, agent, id),
             getFeed({
                 ctx, agent, pipeline: {
                     getSkeleton: (ctx, agent) => getTopicMentionsSkeleton(ctx, agent, id),

@@ -1,7 +1,7 @@
 import {processCreateRecordFromRefAndRecord} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
 import {CAHandler} from "#/utils/handler";
-import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {uploadStringBlob} from "#/services/blob";
 import {BlobRef} from "@atproto/lexicon";
 
@@ -24,7 +24,7 @@ export async function createTopicVersionATProto(agent: SessionAgent, {id, text, 
         format,
         message,
         id,
-        props,
+        props: props && !props.some(p => !validateTopicProp(p).success) ? props : null,
         createdAt: new Date().toISOString()
     }
 

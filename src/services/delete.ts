@@ -185,6 +185,8 @@ export const deleteRecord: CAHandler<{uri: string}> = async (ctx, agent, {uri}) 
     const c = getCollectionFromUri(uri)
     if(isTopicVersion(c)){
         await deleteTopicVersion(ctx, agent, uri)
+    } else {
+        await deleteRecords({ctx, agent, uris: [uri], atproto: true})
     }
     return {data: {}}
 }

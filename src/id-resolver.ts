@@ -11,6 +11,8 @@ export function createIdResolver() {
 }
 
 export interface BidirectionalResolver {
+    resolveHandleToDid(handle: string): Promise<string | null>
+
     resolveDidToHandle(did: string): Promise<string>
 
     resolveDidsToHandles(dids: string[]): Promise<Record<string, string>>
@@ -39,5 +41,13 @@ export function createBidirectionalResolver(resolver: IdResolver) {
             }
             return didHandleMap
         },
+
+        async resolveHandleToDid(handle: string): Promise<string | null> {
+            let did = await resolver.handle.resolveDns(handle)
+            if(!did){
+                did = await resolver.handle.resolveHttp(handle)
+            }
+            return did ?? null
+        }
     }
 }

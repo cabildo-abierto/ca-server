@@ -108,7 +108,7 @@ model Topic {
   categories         TopicToCategory[]
   lastSynonymsChange DateTime?
   popularityScore    Int?
-  lastEdit           DateTime?
+  lastEdit           DateTime?          @updatedAt
 }
 
 model TopicVersion {

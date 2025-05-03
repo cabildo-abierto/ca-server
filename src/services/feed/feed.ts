@@ -47,16 +47,11 @@ export type GetFeedProps = {
 
 
 export const getFeed = async ({ctx, agent, pipeline}: GetFeedProps): CAHandlerOutput<FeedViewContent[]> => {
-
-    const t1 = Date.now()
     const skeleton = await pipeline.getSkeleton(ctx, agent)
+    console.log("Skeleton", skeleton)
 
-    const t2 = Date.now()
     let feed = await hydrateFeed(ctx, agent, skeleton)
     feed = sortByKey(feed, pipeline.sortKey, listOrderDesc)
 
-    const t3 = Date.now()
-
-    // logTimes("get feed", [t1, t2, t3])
     return {data: feed}
 }

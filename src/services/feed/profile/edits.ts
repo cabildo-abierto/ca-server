@@ -9,7 +9,9 @@ export const getEditsProfileFeedSkeleton = (did: string) : GetSkeletonProps => {
                 uri: true
             },
             where: {
-                collection: "ar.cabildoabierto.feed.topic",
+                collection: {
+                    in: ["ar.cabildoabierto.wiki.topicVersion", "ar.com.cabildoabierto.topic"]
+                },
                 authorId: did
             }
         })).map(({uri}) => ({post: uri}))

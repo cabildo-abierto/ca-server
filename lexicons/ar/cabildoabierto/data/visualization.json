@@ -33,32 +33,42 @@
             "#histogram"
           ]
         },
-        "title": "string"
+        "title": {
+            "type": "string"
+        }
       }
     },
     "hemicycleVisualization" : {
+      "type": "object",
+      "properties": {
+
+      }
     },
     "topicListVisualization": {
+      "type": "object",
+      "properties": {
+
+      }
     },
     "barplot": {
       "type": "object",
       "properties": {
-        "xlabel": "string",
-        "ylabel": "string"
+        "xlabel": {"type": "string"},
+        "ylabel": {"type": "string"}
       }
     },
     "scatterplot": {
       "type": "object",
       "properties": {
-        "xlabel": "string",
-        "ylabel": "string"
+        "xlabel": {"type": "string"},
+        "ylabel": {"type": "string"}
       }
     },
     "histogram": {
       "type": "object",
       "properties": {
-        "xlabel": "string",
-        "normalized": "bool"
+        "xlabel": {"type": "string"},
+        "normalized": {"type": "boolean"}
       }
     }
   }
