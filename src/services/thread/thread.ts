@@ -11,7 +11,7 @@ import {unique} from "#/utils/arrays";
 import {isThreadViewPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {CAHandler} from "#/utils/handler";
 import {handleToDid} from "#/services/user/users";
-import {Dataplane, HydrationData, joinHydrationData} from "#/services/hydration/dataplane";
+import {Dataplane} from "#/services/hydration/dataplane";
 
 
 async function getThreadRepliesSkeletonForPostFromBsky(ctx: AppContext, agent: SessionAgent, uri: string){
@@ -89,13 +89,13 @@ export const getThread: CAHandler<{params: {handleOrDid: string, collection: str
     if(!did) {
         return {error: "No se encontró el autor."}
     }
+
     const uri = getUri(did, collection, rkey)
     const replies = await getThreadRepliesSkeleton(ctx, agent, uri)
     const skeleton: ThreadSkeleton = {post: uri, replies}
 
     const data = new Dataplane(ctx, agent)
-    const flatSkeleton: {post: string}[] = [...skeleton.replies ?? [], {post: skeleton.post}]
-    await data.fetchHydrationData(flatSkeleton)
+    await data.fetchThreadHydrationData(skeleton)
 
     const thread = hydrateThreadViewContent({post: uri, replies}, data, true)
 

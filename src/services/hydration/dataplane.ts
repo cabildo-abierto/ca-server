@@ -1,21 +1,74 @@
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
 import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs";
-import {Collection, FeedEngagementProps} from "#/lib/types";
+import {Collection} from "#/lib/types";
 import {ProfileViewBasic} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
 import {TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {
-    ArticleViewForSelectionQuote, getArticleViewsForSelectionQuotes,
-    getBskyPosts,
-    getCAFeedContents,
-    getTopicViews
+    ArticleViewForSelectionQuote, BlobRef, ThreadSkeleton
 } from "#/services/hydration/hydrate";
 import {FeedSkeleton} from "#/services/feed/feed";
-import {getUserEngagement} from "#/services/feed/get-user-engagement";
-import {PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {unique} from "#/utils/arrays";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
+import {postUris, topicVersionUris} from "#/utils/uri";
+import {AppBskyEmbedRecord} from "@atproto/api";
+import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
+import {getTextFromBlob, TopicQueryResultBasic} from "#/services/topic/topics";
+import {logTimes, reactionsQuery, recordQuery} from "#/utils/utils";
+
+
+const hydrateFeedQuery = {
+    ...recordQuery,
+    ...reactionsQuery,
+    record: true,
+    enDiscusion: true,
+    content: {
+        select: {
+            text: true,
+            format: true,
+            textBlobId: true,
+            article: {
+                select: {
+                    title: true
+                }
+            },
+            post: {
+                select: {
+                    facets: true,
+                    embed: true,
+                    quote: true,
+                    replyTo: {
+                        select: {
+                            uri: true,
+                            cid: true,
+                            author: {
+                                select: {
+                                    did: true,
+                                    handle: true,
+                                    displayName: true
+                                }
+                            }
+                        }
+                    },
+                    root: {
+                        select: {
+                            uri: true,
+                            cid: true,
+                            author: {
+                                select: {
+                                    did: true,
+                                    handle: true,
+                                    displayName: true
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 
 export type FeedElementQueryResult = {
@@ -41,9 +94,7 @@ export type FeedElementQueryResult = {
     content: {
         text: string | null
         summary?: string
-        textBlob: {
-            cid: string
-        } | null
+        textBlobId: string | null
         format: string | null
         post: {
             quote: string | null
@@ -80,47 +131,34 @@ function joinMaps<T>(a?: Map<string, T>, b?: Map<string, T>): Map<string, T> {
     return new Map([...a ?? [], ...b ?? []])
 }
 
-function joinLists<T>(a?: T[], b?: T[]): T[] {
-    return [...a ?? [], ...b ?? []]
-}
-
-
-export function joinHydrationData(a: HydrationData, b: HydrationData): HydrationData {
-    return {
-        caContents: joinMaps(a.caContents, b.caContents),
-        bskyPosts: joinMaps(a.bskyPosts, b.bskyPosts),
-        engagement: {
-            likes: joinLists(a.engagement?.likes, b.engagement?.likes),
-            reposts: joinLists(a.engagement?.reposts, b.engagement?.reposts)
-        },
-        bskyUsers: joinMaps(a.bskyUsers, b.bskyUsers),
-        caUsers: joinMaps(a.caUsers, b.caUsers),
-        topicViews: joinMaps(a.topicViews, b.topicViews),
-        articleViewsForSelectionQuotes: joinMaps(a.articleViewsForSelectionQuotes, b.articleViewsForSelectionQuotes)
-    }
-}
-
-
-function getReplyUrisFromPostViews(postViews: (PostView | BskyPostView)[]) {
-    return unique(postViews.reduce((acc: string[], cur) => {
-        const record = cur.record as PostRecord
-        if (record.reply) {
-            return [...acc, cur.uri, record.reply.root.uri, record.reply.parent.uri]
-        } else {
-            return [...acc, cur.uri]
-        }
-    }, []))
-}
-
 
 export type HydrationData = {
     caContents?: Map<string, FeedElementQueryResult>
     bskyPosts?: Map<string, BskyPostView>
-    engagement?: FeedEngagementProps
+    likes?: Map<string, string | null>
+    reposts?: Map<string, string | null>
     bskyUsers?: Map<string, ProfileViewBasic>
     caUsers?: Map<string, CAProfileViewBasic>
-    topicViews?: Map<string, TopicView>
-    articleViewsForSelectionQuotes?: Map<string, ArticleViewForSelectionQuote>
+    topicsByUri?: Map<string, TopicQueryResultBasic>
+    topicsById?: Map<string, TopicQueryResultBasic>
+    textBlobs?: Map<string, string>
+}
+
+
+export function getBlobKey(blob: BlobRef) {
+    return blob.cid + ":" + blob.authorId
+}
+
+
+export function blobRefsFromContents(contents: {
+    content: { textBlobId: string | null } | null,
+    author: { did: string }
+}[]) {
+    const blobRefs: { cid: string, authorId: string }[] = contents
+        .map(a => (a.content?.textBlobId != null ? {cid: a.content.textBlobId, authorId: a.author.did} : null))
+        .filter(x => x != null)
+
+    return blobRefs
 }
 
 
@@ -135,29 +173,319 @@ export class Dataplane {
         this.data = {}
     }
 
-    async fetchHydrationData(skeleton: FeedSkeleton) {
-        const uris = skeleton.map(p => p.post)
+    async fetchCAContents(uris: string[]) {
+        uris = uris.filter(u => !this.data.caContents?.has(u))
 
-        const bskyPostsMap = await getBskyPosts(this.agent, uris)
+        const t1 = Date.now()
+        const res = await this.ctx.db.record.findMany({
+            select: {
+                ...hydrateFeedQuery,
+            },
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        })
+        const t2 = Date.now()
 
-        const replyUris = getReplyUrisFromPostViews(Array.from(bskyPostsMap.values()))
+        let contents: FeedElementQueryResult[] = []
+        res.forEach(r => {
+            if (r.cid && r.author.handle) {
+                contents.push({
+                    ...r,
+                    cid: r.cid,
+                    author: {
+                        ...r.author,
+                        handle: r.author.handle
+                    },
+                    collection: r.collection as Collection,
+                })
+            }
+        })
 
-        const [bskyRepliesMap, caContents, engagement, topicViews, articleViewsForSelectionQuotes] = await Promise.all([
-            getBskyPosts(this.agent, replyUris),
-            getCAFeedContents(this.ctx, uris),
-            getUserEngagement(this.ctx, uris, this.agent.did),
-            getTopicViews(this.ctx, this.agent, replyUris),
-            getArticleViewsForSelectionQuotes(this.ctx, this.agent, replyUris)
+        const m = new Map<string, FeedElementQueryResult>(
+            contents.map(item => [item.uri, item])
+        )
+
+        const blobRefs = blobRefsFromContents(contents)
+        await this.fetchTextBlobs(blobRefs)
+        const t3 = Date.now()
+
+        logTimes("fetchCAContents", [t1, t2, t3])
+        this.data.caContents = joinMaps(this.data.caContents, m)
+    }
+
+    async fetchTextBlobs(blobs: BlobRef[]) {
+        async function getKeyAndText(blob: BlobRef): Promise<[string, string] | null> {
+            const text = await getTextFromBlob(blob)
+            if (!text) return null
+            return [getBlobKey(blob), text]
+        }
+
+        const texts = await Promise.all(blobs.map(getKeyAndText))
+        const m = new Map<string, string>(texts.filter(x => x != null))
+        this.data.textBlobs = joinMaps(this.data.textBlobs, m)
+    }
+
+    async fetchPostAndArticleViewsHydrationData(uris: string[]) {
+        await Promise.all([
+            this.fetchBskyPosts(postUris(uris)),
+            this.fetchCAContents(uris),
+            this.fetchEngagement(uris),
+            this.fetchTopicsBasicByUris(topicVersionUris(uris))
+        ])
+    }
+
+    async fetchTopicsBasicByUris(uris: string[]) {
+        uris = uris.filter(u => !this.data.topicsByUri?.has(u))
+
+        const data = await this.ctx.db.record.findMany({
+            select: {
+                uri: true,
+                content: {
+                    select: {
+                        topicVersion: {
+                            select: {
+                                topic: {
+                                    select: {
+                                        id: true,
+                                        popularityScore: true,
+                                        lastEdit: true,
+                                        categories: {
+                                            select: {
+                                                categoryId: true,
+                                            }
+                                        },
+                                        synonyms: true,
+                                        currentVersion: {
+                                            select: {
+                                                props: true,
+                                                synonyms: true,
+                                                categories: true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        })
+
+
+        const queryResults: {uri: string, topic: TopicQueryResultBasic}[] = []
+
+        data.forEach(item => {
+            if(item.content?.topicVersion){
+                queryResults.push({
+                    uri: item.uri,
+                    topic: item.content.topicVersion.topic
+                })
+            }
+        })
+
+        const mapByUri = new Map(queryResults.map(item => [item.uri, item.topic]))
+        const mapById = new Map(queryResults.map(item => [item.topic.id, item.topic]))
+
+        this.data.topicsByUri = joinMaps(this.data.topicsByUri, mapByUri)
+        this.data.topicsById = joinMaps(this.data.topicsById, mapById)
+    }
+
+    async fetchTopicsBasicByIds(ids: string[]) {
+        ids = ids.filter(u => !this.data.topicsById?.has(u))
+
+        const data: TopicQueryResultBasic[] = await this.ctx.db.topic.findMany({
+            select: {
+                id: true,
+                popularityScore: true,
+                lastEdit: true,
+                categories: {
+                    select: {
+                        categoryId: true,
+                    }
+                },
+                synonyms: true,
+                currentVersion: {
+                    select: {
+                        props: true,
+                        synonyms: true,
+                        categories: true
+                    }
+                }
+            },
+            where: {
+                id: {
+                    in: ids
+                }
+            }
+        })
+
+        const mapById = new Map(data.map(item => [item.id, item]))
+        this.data.topicsById = joinMaps(this.data.topicsById, mapById)
+    }
+
+    async expandUrisWithReplies(uris: string[]): Promise<string[]> {
+        const [_, caPosts] = await Promise.all([
+            this.fetchBskyPosts(postUris(uris)),
+            this.ctx.db.post.findMany({
+                select: {
+                    uri: true,
+                    replyToId: true,
+                    rootId: true
+                },
+                where: {
+                    uri: {
+                        in: postUris(uris)
+                    }
+                }
+            })
         ])
 
-        let bskyMap = new Map([...bskyPostsMap, ...bskyRepliesMap])
+        const bskyPosts = uris.map(u => this.data.bskyPosts?.get(u)).filter(x => x != null)
 
-        this.data = {
-            caContents,
-            bskyPosts: bskyMap,
-            engagement,
-            topicViews,
-            articleViewsForSelectionQuotes
+        return unique([
+            ...uris,
+            ...caPosts.map(p => p.replyToId),
+            ...caPosts.map(p => p.rootId),
+            ...bskyPosts.map(p => (p.record as PostRecord).reply?.root?.uri),
+            ...bskyPosts.map(p => (p.record as PostRecord).reply?.parent?.uri),
+            // faltan quote posts
+        ].filter(x => x != null))
+    }
+
+    async fetchFeedHydrationData(skeleton: FeedSkeleton) {
+        const uris = skeleton.map(p => p.post)
+        const t1 = Date.now()
+        const urisWithReplies = await this.expandUrisWithReplies(uris)
+        const t2 = Date.now()
+        await this.fetchPostAndArticleViewsHydrationData(urisWithReplies)
+        const t3 = Date.now()
+        logTimes("fetchFeedHydrationData", [t1, t2, t3])
+    }
+
+
+    addEmbedsToPostsMap(m: Map<string, BskyPostView>) {
+        const posts = Array.from(m.values())
+
+        posts.forEach(post => {
+            if (post.embed && post.embed.$type == "app.bsky.embed.record#view") {
+                const embed = post.embed as AppBskyEmbedRecord.View
+                if (embed.record.$type == "app.bsky.embed.record#viewRecord") {
+                    const record = embed.record as ViewRecord
+                    m.set(record.uri, {
+                        ...record,
+                        uri: record.uri,
+                        cid: record.cid,
+                        $type: "app.bsky.feed.defs#postView",
+                        author: {
+                            ...record.author
+                        },
+                        indexedAt: record.indexedAt,
+                        record: record.value
+                    })
+                }
+            }
+        })
+
+        return m
+    }
+
+    async fetchBskyPosts(uris: string[]) {
+        uris = uris.filter(u => !this.data.bskyPosts?.has(u))
+
+        const postsList = postUris(uris)
+        if (postsList.length == 0) return
+
+        const batches: string[][] = []
+        for (let i = 0; i < postsList.length; i += 25) {
+            batches.push(postsList.slice(i, i + 25))
         }
+        const results = await Promise.all(batches.map(b => this.agent.bsky.getPosts({uris: b})))
+        const postViews = results.map(r => r.data.posts).reduce((acc, cur) => [...acc, ...cur])
+
+        let m = new Map<string, BskyPostView>(
+            postViews.map(item => [item.uri, item])
+        )
+
+        m = this.addEmbedsToPostsMap(m)
+
+        this.data.bskyPosts = joinMaps(this.data.bskyPosts, m)
+
+
+    }
+
+    getFetchedBlob(blob: BlobRef): string | null {
+        const key = getBlobKey(blob)
+        return this.data.textBlobs?.get(key) ?? null
+    }
+
+    async fetchEngagement(uris: string[]) {
+        const did = this.agent.did
+        const getLikes = this.ctx.db.like.findMany({
+            select: {
+                likedRecordId: true,
+                uri: true
+            },
+            where: {
+                record: {
+                    authorId: did
+                },
+                likedRecordId: {
+                    in: uris
+                }
+            }
+        })
+
+        const getReposts = this.ctx.db.repost.findMany({
+            select: {
+                repostedRecordId: true,
+                uri: true
+            },
+            where: {
+                record: {
+                    authorId: did
+                },
+                repostedRecordId: {
+                    in: uris
+                }
+            }
+        })
+
+        const [likes, reposts] = await Promise.all([getLikes, getReposts])
+
+        const likesMap = new Map<string, string | null>(uris.map(uri => [uri, null]))
+        const repostsMap = new Map<string, string | null>(uris.map(uri => [uri, null]))
+
+        likes.forEach(l => {
+            if (l.likedRecordId) {
+                likesMap.set(l.likedRecordId, l.uri)
+            }
+        })
+
+        reposts.forEach(l => {
+            if (l.repostedRecordId) {
+                repostsMap.set(l.repostedRecordId, l.uri)
+            }
+        })
+
+        this.data.likes = joinMaps(this.data.likes, likesMap)
+        this.data.reposts = joinMaps(this.data.reposts, repostsMap)
+    }
+
+    async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
+        const expanded = await this.expandUrisWithReplies([skeleton.post])
+
+        const uris = [
+            ...(skeleton.replies ? skeleton.replies.map(({post}) => post) : []),
+            ...expanded
+        ]
+        await this.fetchPostAndArticleViewsHydrationData(uris)
     }
 }

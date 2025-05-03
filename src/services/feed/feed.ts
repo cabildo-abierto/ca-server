@@ -36,6 +36,7 @@ export type GetSkeletonProps = (ctx: AppContext, agent: SessionAgent) => Promise
 export type FeedPipelineProps = {
     getSkeleton: GetSkeletonProps
     sortKey: (a: FeedViewContent) => number[]
+    filter?: (feed: FeedViewContent[]) => FeedViewContent[]
 }
 
 
@@ -47,11 +48,19 @@ export type GetFeedProps = {
 
 
 export const getFeed = async ({ctx, agent, pipeline}: GetFeedProps): CAHandlerOutput<FeedViewContent[]> => {
-    const skeleton = await pipeline.getSkeleton(ctx, agent)
-    console.log("Skeleton", skeleton)
+    const t1 = Date.now()
 
-    let feed = await hydrateFeed(ctx, agent, skeleton)
+    const skeleton = await pipeline.getSkeleton(ctx, agent)
+    const t2 = Date.now()
+
+    let feed: FeedViewContent[] = await hydrateFeed(ctx, agent, skeleton)
+    const t3 = Date.now()
+
     feed = sortByKey(feed, pipeline.sortKey, listOrderDesc)
 
+    if(pipeline.filter){
+        feed = pipeline.filter(feed)
+    }
+    logTimes("get feed", [t1, t2, t3])
     return {data: feed}
 }

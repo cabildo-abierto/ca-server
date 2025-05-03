@@ -15,10 +15,12 @@ import {getTopicCurrentVersion} from "#/services/topic/current-version";
 import {SessionAgent} from "#/utils/session-agent";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import { Prisma } from "@prisma/client";
+import {Dataplane} from "#/services/hydration/dataplane";
+import {$Typed} from "@atproto/api";
 
 
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
-    return await getTopics(ctx, [], "popular", 10)
+    return await getTopics(ctx, agent, [], "popular", 10)
 }
 
 type TopicOrder = "popular" | "recent"
@@ -74,7 +76,23 @@ export type TopicQueryResultBasic = {
 }
 
 
-export function hydrateTopicViewBasic(t: TopicQueryResultBasic): TopicViewBasic {
+export function hydrateTopicViewBasicFromUri(uri: string, data: Dataplane): {data?: $Typed<TopicViewBasic>, error?: string} {
+    const q = data.data.topicsByUri?.get(uri)
+    if(!q) return {error: "No se pudo encontrar el tema."}
+
+    return {data: topicQueryResultToTopicViewBasic(q)}
+}
+
+
+export function hydrateTopicViewBasicFromTopicId(id: string, data: Dataplane) {
+    const q = data.data.topicsById?.get(id)
+    if(!q) return null
+
+    return topicQueryResultToTopicViewBasic(q)
+}
+
+
+export function topicQueryResultToTopicViewBasic(t: TopicQueryResultBasic): $Typed<TopicViewBasic> {
     let props: TopicProp[] = []
 
     if(t.currentVersion && t.currentVersion.props){
@@ -127,46 +145,19 @@ export function hydrateTopicViewBasic(t: TopicQueryResultBasic): TopicViewBasic 
 }
 
 
-export async function getTopicViewBasicsHydrationData(ctx: AppContext, skeleton: {id: string}[]){
-    const data: TopicQueryResultBasic[] = await ctx.db.topic.findMany({
-        select: {
-            id: true,
-            popularityScore: true,
-            lastEdit: true,
-            categories: {
-                select: {
-                    categoryId: true,
-                }
-            },
-            synonyms: true,
-            currentVersion: {
-                select: {
-                    props: true,
-                    synonyms: true,
-                    categories: true
-                }
-            }
-        },
-        where: {
-            id: {
-                in: skeleton.map(s => s.id)
-            }
-        }
-    })
-
-    return data
-}
-
-
 export async function getTopics(
     ctx: AppContext,
+    agent: SessionAgent,
     categories: string[],
     sortedBy: "popular" | "recent",
     limit: number): CAHandlerOutput<TopicViewBasic[]> {
 
     const skeleton = await getTopicsSkeleton(ctx, categories, sortedBy, limit)
-    const data = await getTopicViewBasicsHydrationData(ctx, skeleton)
-    return {data: data.map(hydrateTopicViewBasic)}
+
+    const data = new Dataplane(ctx, agent)
+    await data.fetchTopicsBasicByIds(skeleton.map(s => s.id))
+
+    return {data: skeleton.map(s => hydrateTopicViewBasicFromTopicId(s.id, data)).filter(x => x != null)}
 }
 
 
@@ -180,7 +171,7 @@ export const getTopicsHandler: CAHandler<{
 
     if (sort != "popular" && sort != "recent") return {error: `Criterio de ordenamiento inválido: ${sort}`}
 
-    return await getTopics(ctx, categories, sort, 50)
+    return await getTopics(ctx, agent, categories, sort, 50)
 }
 
 

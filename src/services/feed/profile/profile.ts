@@ -6,6 +6,7 @@ import {FeedPipelineProps, getFeed} from "#/services/feed/feed";
 import {rootCreationDateSortKey} from "#/services/feed/utils";
 import {getEditsProfileFeedSkeleton} from "#/services/feed/profile/edits";
 import {CAHandler} from "#/utils/handler";
+import {filterFeed} from "#/services/feed/inicio/following";
 
 
 export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: string}}, FeedViewContent[]> = async (ctx, agent, {params}) => {
@@ -17,12 +18,14 @@ export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: stri
     if(kind == "publicaciones"){
         pipeline = {
             getSkeleton: getMainProfileFeedSkeleton(did),
-            sortKey: rootCreationDateSortKey
+            sortKey: rootCreationDateSortKey,
+            filter: filterFeed
         }
     } else if(kind == "respuestas"){
         pipeline = {
             getSkeleton: getRepliesProfileFeedSkeleton(did),
-            sortKey: rootCreationDateSortKey // TO DO: Reemplazar por fecha de la última respuesta
+            sortKey: rootCreationDateSortKey, // TO DO: Reemplazar por fecha de la última respuesta
+            filter: filterFeed
         }
     } else if(kind == "ediciones"){
         pipeline = {

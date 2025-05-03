@@ -95,18 +95,11 @@ export async function getTopicMentionsInTopics(ctx: AppContext, id: string){
 }
 
 
-export const getTopicVersionReplies = async (ctx: AppContext, agent: SessionAgent, id: string) => {
-    const [topicVersion, skeleton] = await Promise.all([
-        getTopic(ctx, agent, id),
-        getTopicRepliesSkeleton(ctx, agent, id)
-    ])
-
-    if(!topicVersion.data) return {error: topicVersion.error}
+export const getTopicVersionReplies = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{data?: FeedViewContent[], error?: string}> => {
+    const skeleton = await getTopicRepliesSkeleton(ctx, agent, id)
 
     const data = new Dataplane(ctx, agent)
-    await data.fetchHydrationData(skeleton)
-
-    data.data.topicViews = new Map([[topicVersion.data.uri, topicVersion.data]])
+    await data.fetchFeedHydrationData(skeleton)
 
     let feed = skeleton
         .map((e) => (hydrateFeedViewContent(e, data)))

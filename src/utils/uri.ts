@@ -128,6 +128,18 @@ export function isVisualization(c: string){
     return c == "ar.com.cabildoabierto.visualization"
 }
 
+export function articleUris(uris: string[]){
+    return uris.filter(u => isArticle(getCollectionFromUri(u)))
+}
+
+export function postUris(uris: string[]){
+    return uris.filter(u => isPost(getCollectionFromUri(u)))
+}
+
+export function topicVersionUris(uris: string[]){
+    return uris.filter(u => isTopicVersion(getCollectionFromUri(u)))
+}
+
 export function collectionToDisplay(c: string){
     if(isPost(c)){
         return "Publicación"

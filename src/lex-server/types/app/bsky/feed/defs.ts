@@ -17,6 +17,7 @@ import type * as AppBskyEmbedRecord from '../embed/record.js'
 import type * as AppBskyEmbedRecordWithMedia from '../embed/recordWithMedia.js'
 import type * as ComAtprotoLabelDefs from '../../../com/atproto/label/defs.js'
 import type * as ArCabildoabiertoFeedDefs from '../../../ar/cabildoabierto/feed/defs.js'
+import type * as ArCabildoabiertoWikiTopicVersion from '../../../ar/cabildoabierto/wiki/topicVersion.js'
 import type * as AppBskyRichtextFacet from '../richtext/facet.js'
 import type * as AppBskyGraphDefs from '../graph/defs.js'
 
@@ -118,12 +119,14 @@ export interface ReplyRef {
   root:
     | $Typed<ArCabildoabiertoFeedDefs.PostView>
     | $Typed<ArCabildoabiertoFeedDefs.ArticleView>
+    | $Typed<ArCabildoabiertoWikiTopicVersion.TopicViewBasic>
     | $Typed<NotFoundPost>
     | $Typed<BlockedPost>
     | { $type: string }
   parent:
     | $Typed<ArCabildoabiertoFeedDefs.PostView>
     | $Typed<ArCabildoabiertoFeedDefs.ArticleView>
+    | $Typed<ArCabildoabiertoWikiTopicVersion.TopicViewBasic>
     | $Typed<NotFoundPost>
     | $Typed<BlockedPost>
     | { $type: string }

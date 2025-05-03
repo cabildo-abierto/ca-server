@@ -9,7 +9,7 @@ import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/
 import { Prisma } from "@prisma/client";
 import {AppContext} from "#/index";
 import { JsonObject } from "@prisma/client/runtime/library";
-import {getTopicViewBasicsHydrationData, hydrateTopicViewBasic} from "#/services/topic/topics";
+import {hydrateTopicViewBasicFromTopicId, topicQueryResultToTopicViewBasic} from "#/services/topic/topics";
 import {Dataplane, HydrationData} from "#/services/hydration/dataplane";
 
 
@@ -136,8 +136,9 @@ export const searchTopics: CAHandler<{params: {q: string}}, TopicViewBasic[]> = 
     const query = cleanText(q)
     const skeleton = await getSearchTopicsSkeleton(ctx, query)
 
-    const data = await getTopicViewBasicsHydrationData(ctx, skeleton)
+    const data = new Dataplane(ctx, agent)
+    await data.fetchTopicsBasicByIds(skeleton.map(x => x.id))
 
-    return {data: data.map(hydrateTopicViewBasic)}
+    return {data: skeleton.map(({id}) => hydrateTopicViewBasicFromTopicId(id, data)).filter(x => x != null)}
 }
 
