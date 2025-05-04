@@ -3,6 +3,7 @@ import type {AppContext} from '#/index'
 import {CAHandler, makeHandler} from "#/utils/handler";
 import {updateCategoriesGraphHandler} from "#/services/topic/graph";
 import {syncUserHandler} from "#/services/sync/sync-user";
+import {updateReferences, updateReferencesHandler} from "#/services/topic/references";
 
 
 function isAdmin(did: string){
@@ -32,6 +33,8 @@ export const adminRoutes = (ctx: AppContext) => {
     const router = express.Router()
 
     router.post("/update-categories-graph", makeAdminHandler(ctx, updateCategoriesGraphHandler))
+
+    router.post("/update-references", makeAdminHandler(ctx, updateReferencesHandler))
 
     router.post(
         "/sync-user/:handleOrDid",

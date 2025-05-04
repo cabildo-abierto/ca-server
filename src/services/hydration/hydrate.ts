@@ -30,7 +30,7 @@ import {
 import {creationDateSortKey} from "#/services/feed/utils";
 import {Dataplane, FeedElementQueryResult} from "#/services/hydration/dataplane";
 import {markdownToPlainText} from "#/utils/lexical/transforms";
-import {topicQueryResultToTopicViewBasic, hydrateTopicViewBasicFromUri} from "#/services/topic/topics";
+import {hydrateTopicViewBasicFromUri} from "#/services/topic/topics";
 import {TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 
 
@@ -84,7 +84,7 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
             format: e.content?.format ?? undefined,
             author,
             record: e.record ? JSON.parse(e.record) : {},
-            indexedAt: e.createdAt.toISOString(),
+            indexedAt: new Date(e.createdAt).toISOString(),
             likeCount: e._count.likes,
             repostCount: e._count.reposts,
             replyCount: e._count.replies,
@@ -133,7 +133,7 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
             summaryFormat: "plain-text",
             author,
             record: e.record ? JSON.parse(e.record) : {},
-            indexedAt: e.createdAt.toISOString(),
+            indexedAt: new Date(e.createdAt).toISOString(),
             likeCount: e._count.likes,
             repostCount: e._count.reposts,
             replyCount: e._count.replies,
@@ -266,12 +266,6 @@ export function hydrateFeedViewContent(e: SkeletonFeedPost, data: Dataplane): $T
     const parent = reply && !isReasonRepost(reason) ? hydrateContent(reply.parent.uri, data) : null
     const root = reply && !isReasonRepost(reason) ? hydrateContent(reply.root.uri, data) : null
 
-    if(e.post == "at://did:plc:2356xofv4ntrbu42xeilxjnb/app.bsky.feed.post/3lobjotnmr42b"){
-        console.log("Post: ", e.post)
-        console.log("Reply: ", reply)
-        console.log("Hydrated root:", root)
-    }
-
     if (!leaf.data || leaf.error) {
         console.log("Warning: No se encontró el contenido en Bluesky. Uri: ", e.post)
         return notFoundPost(e.post)
@@ -307,8 +301,7 @@ export type ArticleViewForSelectionQuote = {
 export type BlobRef = { cid: string, authorId: string }
 
 
-export async function hydrateFeed(ctx: AppContext, agent: SessionAgent, skeleton: FeedSkeleton): Promise<$Typed<FeedViewContent>[]> {
-    const data = new Dataplane(ctx, agent)
+export async function hydrateFeed(skeleton: FeedSkeleton, data: Dataplane): Promise<$Typed<FeedViewContent>[]> {
     await data.fetchFeedHydrationData(skeleton)
 
     const feed = skeleton

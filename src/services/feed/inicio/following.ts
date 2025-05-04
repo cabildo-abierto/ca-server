@@ -5,13 +5,16 @@ import {FeedPipelineProps, FeedSkeleton} from "#/services/feed/feed";
 import {
     rootCreationDateSortKey
 } from "#/services/feed/utils";
-import {FeedViewPost, isFeedViewPost, SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
+import {FeedViewPost, isFeedViewPost, PostView, SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
 import {articleCollections, getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri";
 import {listOrderDesc, sortByKey, unique} from "#/utils/arrays";
 import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {isKnownContent} from "#/utils/type-utils";
 import {isPostView as isCAPostView} from "#/lex-server/types/ar/cabildoabierto/feed/defs";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
+import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
+import {logTimes} from "#/utils/utils";
+import {$Typed} from "@atproto/api";
 
 type RepostQueryResult = {
     author: {
@@ -77,7 +80,7 @@ function getRootUriFromPost(e: FeedViewPost | FeedViewContent): string | null {
         } else if(isFeedViewContent(e) && isKnownContent(e.content)){
             return e.content.uri
         } else {
-            // console.log("Warning: No se encontró el root del post", e)
+            console.log("Warning: No se encontró el root del post", e)
             return null
         }
     } else if(e.reply.root && "uri" in e.reply.root){
@@ -101,24 +104,29 @@ export const feedViewPostToSkeletonElement = (p: FeedViewPost): SkeletonFeedPost
 }
 
 
-export const getSkeletonFromTimeline = (timeline: FeedViewPost[], sameAuthorOnly: boolean = true) => {
+export const getSkeletonFromTimeline = (timeline: FeedViewPost[], following?: string[]) => {
     // Idea:
     // Me quedo con todos los posts cuyo root sea seguido por el agent
     // Si un root está más de una vez, me quedo solo con los que tengan respuestas únicamente del mismo autor,
     // y de esos con el que más respuestas tenga
 
-    let skeleton: FeedSkeleton = timeline.map(feedViewPostToSkeletonElement)
+    let filtered = following ? timeline.filter(t => {
+        const rootUri = getRootUriFromPost(t)
+        if(!rootUri) return false
+        const rootAuthor = getDidFromUri(rootUri)
+        return following.includes(rootAuthor)
+    }) : timeline
+
+    let skeleton: FeedSkeleton = filtered.map(feedViewPostToSkeletonElement)
+
 
     return skeleton
 }
 
 
-export const getFollowingFeedSkeleton = async (ctx: AppContext, agent: SessionAgent): Promise<FeedSkeleton> => {
-    const following = [agent.did, ...(await getFollowing(ctx, agent.did))]
-
-    const timelineQuery = agent.bsky.getTimeline({limit: 50})
-
-    const articlesQuery = ctx.db.record.findMany({
+export async function getArticlesForFollowingFeed(ctx: AppContext, following: string[]): Promise<{createdAt: Date, uri: string}[]> {
+    const t1 = Date.now()
+    const res = await ctx.db.record.findMany({
         select: {
             createdAt: true,
             uri: true
@@ -133,8 +141,15 @@ export const getFollowingFeedSkeleton = async (ctx: AppContext, agent: SessionAg
         },
         take: 10
     })
+    const t2 = Date.now()
+    logTimes("getArticlesForFollowingFeed", [t1, t2])
+    return res
+}
 
-    const articleRepostsQuery: Promise<RepostQueryResult[]> = ctx.db.record.findMany({
+
+export async function getArticleRepostsForFollowingFeed(ctx: AppContext, following: string[]){
+    const t1 = Date.now()
+    const res = await (ctx.db.record.findMany({
         select: {
             createdAt: true,
             author: {
@@ -168,19 +183,49 @@ export const getFollowingFeedSkeleton = async (ctx: AppContext, agent: SessionAg
             }
         },
         take: 10
-    }) as Promise<RepostQueryResult[]>
+    }) as Promise<RepostQueryResult[]>)
+    const t2 = Date.now()
+    logTimes("getArticleRepostsForFollowingFeed", [t1, t2])
+    return res
+}
+
+
+export async function getBskyTimeline(agent: SessionAgent, limit: number, data: Dataplane): Promise<$Typed<FeedViewPost>[]> {
+    const t1 = Date.now()
+    const res = await agent.bsky.getTimeline({limit})
+    const t2 = Date.now()
+    logTimes("getBskyTimeline", [t1, t2])
+
+    const feed = res.data.feed
+    data.storeFeedViewPosts(feed)
+
+    return feed.map(f => ({
+        ...f,
+        $type: "app.bsky.feed.defs#feedViewPost",
+    }))
+}
+
+
+export const getFollowingFeedSkeleton = async (ctx: AppContext, agent: SessionAgent, data: Dataplane): Promise<FeedSkeleton> => {
+    const following = [agent.did, ...(await getFollowing(ctx, agent.did))]
+
+    const timelineQuery = getBskyTimeline(agent, 50, data)
+
+    const articlesQuery = getArticlesForFollowingFeed(ctx, following)
+
+    const articleRepostsQuery: Promise<RepostQueryResult[]> = getArticleRepostsForFollowingFeed(ctx, following)
 
     let [timeline, articles, articleReposts] = await Promise.all([timelineQuery, articlesQuery, articleRepostsQuery])
 
     // borramos todos los artículos y reposts de artículos posteriores al último post de la timeline
-    const lastInTimeline = timeline.data.feed.length > 0 ? timeline.data.feed[timeline.data.feed.length-1].post.indexedAt : null
+    const lastInTimeline = timeline.length > 0 ? timeline[timeline.length-1].post.indexedAt : null
     if(lastInTimeline){
         const lastInTimelineDate = new Date(lastInTimeline)
         articles = articles.filter(a => a.createdAt >= lastInTimelineDate)
         articleReposts = articleReposts.filter(a => a.createdAt >= lastInTimelineDate)
     }
 
-    const timelineSkeleton = getSkeletonFromTimeline(timeline.data.feed)
+    const timelineSkeleton = getSkeletonFromTimeline(timeline, following)
 
     const articleRepostsSkeleton = articleReposts.map(skeletonFromArticleReposts)
 
@@ -192,7 +237,7 @@ export const getFollowingFeedSkeleton = async (ctx: AppContext, agent: SessionAg
 }
 
 
-export function filterFeed(feed: FeedViewContent[]){
+export function filterFeed(feed: FeedViewContent[], allowTopicVersions: boolean = false){
 
     feed = feed.filter(a => {
         if(!isCAPostView(a.content)) return true
@@ -203,8 +248,8 @@ export function filterFeed(feed: FeedViewContent[]){
         const parent = getCollectionFromUri(record.reply.parent.uri)
         const root = getCollectionFromUri(record.reply.root.uri)
 
-        if(!isArticle(parent) && !isPost(parent) && !isTopicVersion(parent)) return false
-        if(!isArticle(root) && !isPost(root) && !isTopicVersion(root)) return false
+        if(!isArticle(parent) && !isPost(parent) && (!allowTopicVersions || !isTopicVersion(parent))) return false
+        if(!isArticle(root) && !isPost(root) && (!allowTopicVersions || !isTopicVersion(root))) return false
 
         return true
     })
@@ -216,6 +261,8 @@ export function filterFeed(feed: FeedViewContent[]){
         if(rootUri && !roots.has(rootUri)){
             res.push(a)
             roots.add(rootUri)
+        } else if(!rootUri){
+            console.log("Warning: Filtrando porque no se encontró el root.")
         }
     })
 

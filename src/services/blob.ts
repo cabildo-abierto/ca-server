@@ -1,6 +1,10 @@
 import {DidResolver} from "@atproto/identity";
 import {SessionAgent} from "#/utils/session-agent";
 import {ImagePayload} from "#/services/write/post";
+import {AppContext} from "#/index";
+import {BlobRef} from "#/services/hydration/hydrate";
+import {getBlobKey} from "#/services/hydration/dataplane";
+import {redisCacheTTL} from "#/services/topic/topics";
 
 
 export async function getServiceEndpointForDid(did: string){
@@ -40,6 +44,65 @@ export async function fetchBlob(blob: {cid: string, authorId: string}) {
         }
     }
     return null
+}
+
+
+export async function fetchTextBlob(ref: {cid: string, authorId: string}, retries: number = 0) {
+    const res = await fetchBlob(ref)
+    if(!res) {
+        if(retries > 0) {
+            console.log(`Retrying... (${retries-1} retries left)`)
+            return fetchTextBlob(ref, retries - 1)
+        } else {
+            return null
+        }
+    }
+    const blob = await res.blob()
+    return await blob.text()
+}
+
+
+export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries: number = 0): Promise<(string | null)[]> {
+    if(blobs.length == 0) return []
+    const keys: string[] = blobs.map(b => getBlobKey(b))
+    console.log("Fetching blobs:", blobs.length)
+
+    const t1 = Date.now()
+    const blobContents = await ctx.ioredis.mget(keys)
+    const t2 = Date.now()
+
+    const pending: {i: number, blob: BlobRef}[] = []
+    for(let i = 0; i < blobContents.length; i++){
+        if(!blobContents[i]){
+            pending.push({i, blob: blobs[i]})
+        }
+    }
+    console.log(`Found cache misses after ${t2-t1}. Fetching ${pending.length} blobs.`)
+
+    const res = await Promise.all(pending.map(p => fetchTextBlob(p.blob, retries)))
+    const t3 = Date.now()
+    console.log(`Fetched blobs after ${t3-t2}.`)
+
+    for(let i = 0; i < pending.length; i++){
+        const r = res[i]
+        if(r){
+            blobContents[pending[i].i] = r
+        } else {
+            console.log(`Warning: Couldn't find blob ${pending[i].blob.cid} ${pending[i].blob.authorId}`)
+        }
+    }
+
+    const pipeline = ctx.ioredis.pipeline()
+    for(let i = 0; i < pending.length; i++){
+        const b = res[i]
+        const k = getBlobKey(pending[i].blob)
+        if(b) pipeline.set(k, b, 'EX', redisCacheTTL)
+    }
+    await pipeline.exec()
+    const t4 = Date.now()
+    console.log(`Set cache after ${t4-t3}.`)
+
+    return blobContents
 }
 
 

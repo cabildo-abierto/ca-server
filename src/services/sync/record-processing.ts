@@ -188,7 +188,6 @@ export function processContent(ctx: AppContext, r: SyncRecordProps){
         })
         return [blobUpd, contentUpd]
     } else {
-        console.log("No blob")
         return [contentUpd]
     }
 }

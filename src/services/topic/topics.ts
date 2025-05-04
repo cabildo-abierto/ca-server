@@ -1,4 +1,4 @@
-import {fetchBlob} from "../blob";
+import {fetchBlob, fetchTextBlobs} from "../blob";
 import {getDidFromUri, getUri, splitUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {CAHandler, CAHandlerOutput} from "#/utils/handler";
@@ -15,8 +15,9 @@ import {getTopicCurrentVersion} from "#/services/topic/current-version";
 import {SessionAgent} from "#/utils/session-agent";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import { Prisma } from "@prisma/client";
-import {Dataplane} from "#/services/hydration/dataplane";
+import {Dataplane, getBlobKey} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
+import {logTimes} from "#/utils/utils";
 
 
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
@@ -206,19 +207,7 @@ export const getCategories: CAHandler<{}, { category: string, size: number }[]> 
 }
 
 
-export async function getTextFromBlob(blob: { cid: string, authorId: string }) {
-    try {
-        const response = await fetchBlob(blob)
-        if (!response || !response.ok) return null
-        const responseBlob = await response.blob()
-        if (!responseBlob) return null
-        return await responseBlob.text()
-    } catch (e) {
-        console.error("Error getting text from blob", blob)
-        console.error(e)
-        return null
-    }
-}
+export const redisCacheTTL = 60*60*24*30
 
 
 export function dbUserToProfileViewBasic(author: {
@@ -408,8 +397,9 @@ export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string)
     data?: TopicView,
     error?: string
 }> => {
+    const t1 = Date.now()
     const {data: currentVersionId} = await cached(ctx, ["currentVersion", id], async () => getTopicCurrentVersionFromDB(ctx, agent, id))
-
+    const t2 = Date.now()
     let uri: string
     if (!currentVersionId) {
         console.log(`Warning: Current version not set for topic ${id}.`)
@@ -427,8 +417,14 @@ export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string)
     } else {
         uri = currentVersionId
     }
+    const t3 = Date.now()
 
-    return await getCachedTopicVersion(ctx, agent, uri)
+    const res = await getCachedTopicVersion(ctx, agent, uri)
+
+    const t4 = Date.now()
+
+    logTimes("getTopic", [t1, t2, t3, t4])
+    return res
 }
 
 
@@ -502,8 +498,9 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
     let text: string | null = null
     if (!topic.content.text) {
         if (topic.content.textBlob) {
-            text = await getTextFromBlob(
-                topic.content.textBlob
+            [text] = await fetchTextBlobs(
+                ctx,
+                [topic.content.textBlob]
             )
         }
     } else {

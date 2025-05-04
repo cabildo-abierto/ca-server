@@ -4,7 +4,6 @@ import {TopicsGraph} from "#/lib/types";
 import {logTimes} from "#/utils/utils";
 import {CAHandler} from "#/utils/handler";
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {isJsonArray} from "#/services/search/search";
 import {getTopicCategories} from "#/services/topic/utils";
 
 
@@ -17,7 +16,13 @@ export const updateCategoriesGraph = async (ctx: AppContext) => {
             id: true,
             currentVersion: {
                 select: {
-                    props: true
+                    props: true,
+                    categories: true
+                }
+            },
+            categories: {
+                select: {
+                    categoryId: true
                 }
             },
             referencedBy: {
@@ -41,8 +46,11 @@ export const updateCategoriesGraph = async (ctx: AppContext) => {
     const categories = new Map<string, number>()
     for (let i = 0; i < topics.length; i++) {
         const t = topics[i]
-        if(!t.currentVersion || !t.currentVersion.props || !isJsonArray(t.currentVersion.props)) continue
-        const cats = getTopicCategories(t.currentVersion.props as unknown as TopicProp[])
+        const cats = getTopicCategories(
+            t.currentVersion?.props as unknown as TopicProp[] | undefined,
+            t.categories.map(c => c.categoryId),
+            t.currentVersion?.categories ?? undefined
+        )
         topicToCategoriesMap.set(t.id, cats)
         cats.forEach((c) => {
             const y = categories.get(c)
@@ -93,12 +101,8 @@ export const updateCategoriesGraph = async (ctx: AppContext) => {
 
 
 export const updateCategoriesGraphHandler: CAHandler<{}, {}> = async (ctx, agent, {}) => {
-
     console.log("Updating categories graph queued.")
-
     await ctx.queue.add("update-categories-graph", null)
-
-
     return {data: {}}
 }
 

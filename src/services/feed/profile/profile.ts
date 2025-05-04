@@ -19,7 +19,7 @@ export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: stri
         pipeline = {
             getSkeleton: getMainProfileFeedSkeleton(did),
             sortKey: rootCreationDateSortKey,
-            filter: filterFeed
+            filter: (f) => filterFeed(f, true)
         }
     } else if(kind == "respuestas"){
         pipeline = {

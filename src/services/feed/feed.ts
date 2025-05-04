@@ -9,6 +9,7 @@ import {enDiscusionFeedPipeline} from "#/services/feed/inicio/discusion";
 import {discoverFeedPipeline} from "#/services/feed/inicio/discover";
 import {SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {CAHandler, CAHandlerOutput} from "#/utils/handler";
+import {Dataplane} from "#/services/hydration/dataplane";
 
 
 export const getFeedByKind: CAHandler<{params: {kind: string}}, FeedViewContent[]> = async (ctx, agent, {params}) => {
@@ -30,7 +31,7 @@ export const getFeedByKind: CAHandler<{params: {kind: string}}, FeedViewContent[
 export type FeedSkeleton = SkeletonFeedPost[]
 
 
-export type GetSkeletonProps = (ctx: AppContext, agent: SessionAgent) => Promise<FeedSkeleton>
+export type GetSkeletonProps = (ctx: AppContext, agent: SessionAgent, data: Dataplane) => Promise<FeedSkeleton>
 
 
 export type FeedPipelineProps = {
@@ -50,10 +51,11 @@ export type GetFeedProps = {
 export const getFeed = async ({ctx, agent, pipeline}: GetFeedProps): CAHandlerOutput<FeedViewContent[]> => {
     const t1 = Date.now()
 
-    const skeleton = await pipeline.getSkeleton(ctx, agent)
+    const data = new Dataplane(ctx, agent)
+    const skeleton = await pipeline.getSkeleton(ctx, agent, data)
     const t2 = Date.now()
 
-    let feed: FeedViewContent[] = await hydrateFeed(ctx, agent, skeleton)
+    let feed: FeedViewContent[] = await hydrateFeed(skeleton, data)
     const t3 = Date.now()
 
     feed = sortByKey(feed, pipeline.sortKey, listOrderDesc)

@@ -121,9 +121,7 @@ export async function getSearchTopicsSkeleton(ctx: AppContext, query: string) {
     let topics: {id: string}[]= await ctx.db.$queryRaw`
         SELECT t."id"
         FROM "Topic" t
-                 LEFT JOIN "TopicVersion" tv
-                           ON t."currentVersionId" = tv."uri"
-        WHERE t."id" ILIKE '%' || ${query} || '%'
+        WHERE unaccent(t."id") ILIKE unaccent('%' || ${query} || '%')
             LIMIT 20
     `;
 

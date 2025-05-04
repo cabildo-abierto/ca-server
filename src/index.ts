@@ -15,8 +15,7 @@ import {MirrorMachine} from "#/services/sync/mirror-machine";
 import {createClient as createRedisClient, RedisClientType} from "redis"
 import {Queue} from "bullmq";
 import IORedis from "ioredis";
-import {updateCategoriesGraphHandler} from "#/services/topic/graph";
-import {createWorker} from "#/jobs/worker";
+import {setupWorker} from "#/jobs/worker";
 
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:16379'
@@ -79,7 +78,7 @@ export class Server {
             queue
         }
 
-        const worker = createWorker(ctx)
+        setupWorker(ctx)
 
         const ingester = new MirrorMachine(ctx)
         ingester.run()

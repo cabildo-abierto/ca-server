@@ -1,25 +1,28 @@
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
 import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs";
-import {Collection} from "#/lib/types";
 import {ProfileViewBasic} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
-import {TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {
-    ArticleViewForSelectionQuote, BlobRef, ThreadSkeleton
+    BlobRef, ThreadSkeleton
 } from "#/services/hydration/hydrate";
 import {FeedSkeleton} from "#/services/feed/feed";
-import {unique} from "#/utils/arrays";
+import {removeNullValues, unique} from "#/utils/arrays";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
 import {postUris, topicVersionUris} from "#/utils/uri";
 import {AppBskyEmbedRecord} from "@atproto/api";
 import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
-import {getTextFromBlob, TopicQueryResultBasic} from "#/services/topic/topics";
-import {logTimes, reactionsQuery, recordQuery} from "#/utils/utils";
+import {TopicQueryResultBasic} from "#/services/topic/topics";
+import {authorQuery, logTimes, reactionsQuery} from "#/utils/utils";
+import { FeedViewPost, isPostView, PostView } from "@atproto/api/src/client/types/app/bsky/feed/defs";
+import {fetchTextBlobs} from "#/services/blob";
 
 
 const hydrateFeedQuery = {
-    ...recordQuery,
+    uri: true,
+    cid: true,
+    createdAt: true,
+    ...authorQuery,
     ...reactionsQuery,
     record: true,
     enDiscusion: true,
@@ -32,39 +35,6 @@ const hydrateFeedQuery = {
                 select: {
                     title: true
                 }
-            },
-            post: {
-                select: {
-                    facets: true,
-                    embed: true,
-                    quote: true,
-                    replyTo: {
-                        select: {
-                            uri: true,
-                            cid: true,
-                            author: {
-                                select: {
-                                    did: true,
-                                    handle: true,
-                                    displayName: true
-                                }
-                            }
-                        }
-                    },
-                    root: {
-                        select: {
-                            uri: true,
-                            cid: true,
-                            author: {
-                                select: {
-                                    did: true,
-                                    handle: true,
-                                    displayName: true
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -74,9 +44,7 @@ const hydrateFeedQuery = {
 export type FeedElementQueryResult = {
     uri: string
     cid: string
-    rkey: string
-    collection: Collection
-    createdAt: Date,
+    createdAt: Date | string,
     record: string | null
     author: {
         did: string
@@ -93,32 +61,8 @@ export type FeedElementQueryResult = {
     uniqueViewsCount: number | null
     content: {
         text: string | null
-        summary?: string
         textBlobId: string | null
         format: string | null
-        post: {
-            quote: string | null
-            embed: string | null
-            facets: string | null
-            replyTo: {
-                uri: string
-                cid: string | null
-                author: {
-                    did: string
-                    handle: string | null
-                    displayName: string | null
-                }
-            } | null
-            root: {
-                uri: string
-                cid: string | null
-                author: {
-                    did: string
-                    handle: string | null
-                    displayName: string | null
-                }
-            } | null
-        } | null,
         article: {
             title: string
         } | null
@@ -127,7 +71,7 @@ export type FeedElementQueryResult = {
 }
 
 
-function joinMaps<T>(a?: Map<string, T>, b?: Map<string, T>): Map<string, T> {
+export function joinMaps<T>(a?: Map<string, T>, b?: Map<string, T>): Map<string, T> {
     return new Map([...a ?? [], ...b ?? []])
 }
 
@@ -173,10 +117,35 @@ export class Dataplane {
         this.data = {}
     }
 
+    async fetchCAContentsAndBlobs(uris: string[]) {
+        const t1 = Date.now()
+        await this.fetchCAContents(uris)
+
+        const t2 = Date.now()
+        const contents = Array.from(this.data.caContents?.values() ?? [])
+        const blobRefs = blobRefsFromContents(contents)
+        await this.fetchTextBlobs(blobRefs)
+        const t3 = Date.now()
+        logTimes("fetchCAContentsAndBlobs", [t1, t2, t3])
+    }
+
     async fetchCAContents(uris: string[]) {
         uris = uris.filter(u => !this.data.caContents?.has(u))
+        if (uris.length == 0) return
 
-        const t1 = Date.now()
+        /*const caContentKey = (u: string) => "ca-feed-query:" + u
+
+        const redisRes = await this.ctx.redis.mGet(uris.map(caContentKey))
+        const redisMap = new Map(range(uris.length).map(i => {
+            if (redisRes[i] == null) return null
+            return [uris[i], JSON.parse(redisRes[i])] as [string, FeedElementQueryResult]
+        }).filter(x => x != null))
+
+        this.data.caContents = joinMaps(this.data.caContents, redisMap)
+
+        uris = uris.filter(u => !this.data.caContents?.has(u))
+        if (uris.length == 0) return*/
+
         const res = await this.ctx.db.record.findMany({
             select: {
                 ...hydrateFeedQuery,
@@ -187,7 +156,6 @@ export class Dataplane {
                 }
             }
         })
-        const t2 = Date.now()
 
         let contents: FeedElementQueryResult[] = []
         res.forEach(r => {
@@ -198,40 +166,36 @@ export class Dataplane {
                     author: {
                         ...r.author,
                         handle: r.author.handle
-                    },
-                    collection: r.collection as Collection,
+                    }
                 })
             }
         })
 
         const m = new Map<string, FeedElementQueryResult>(
-            contents.map(item => [item.uri, item])
+            contents.map(c => [c.uri, c])
         )
-
-        const blobRefs = blobRefsFromContents(contents)
-        await this.fetchTextBlobs(blobRefs)
-        const t3 = Date.now()
-
-        logTimes("fetchCAContents", [t1, t2, t3])
         this.data.caContents = joinMaps(this.data.caContents, m)
+
+        /*const pipeline = this.ctx.ioredis.pipeline();
+        contents.forEach((c) => {
+            pipeline.set(caContentKey(c.uri), JSON.stringify(c), 'EX', redisCacheTTL);
+        })
+        await pipeline.exec()*/
     }
 
     async fetchTextBlobs(blobs: BlobRef[]) {
-        async function getKeyAndText(blob: BlobRef): Promise<[string, string] | null> {
-            const text = await getTextFromBlob(blob)
-            if (!text) return null
-            return [getBlobKey(blob), text]
-        }
+        const texts = await fetchTextBlobs(this.ctx, blobs)
+        const keys = blobs.map(b => getBlobKey(b))
 
-        const texts = await Promise.all(blobs.map(getKeyAndText))
-        const m = new Map<string, string>(texts.filter(x => x != null))
+        const entries: [string, string | null][] = texts.map((t, i) => [keys[i], t])
+        const m = removeNullValues(new Map<string, string | null>(entries))
         this.data.textBlobs = joinMaps(this.data.textBlobs, m)
     }
 
     async fetchPostAndArticleViewsHydrationData(uris: string[]) {
         await Promise.all([
             this.fetchBskyPosts(postUris(uris)),
-            this.fetchCAContents(uris),
+            this.fetchCAContentsAndBlobs(uris),
             this.fetchEngagement(uris),
             this.fetchTopicsBasicByUris(topicVersionUris(uris))
         ])
@@ -240,33 +204,27 @@ export class Dataplane {
     async fetchTopicsBasicByUris(uris: string[]) {
         uris = uris.filter(u => !this.data.topicsByUri?.has(u))
 
-        const data = await this.ctx.db.record.findMany({
+        const t1 = Date.now()
+
+        const data = await this.ctx.db.topicVersion.findMany({
             select: {
                 uri: true,
-                content: {
+                topic: {
                     select: {
-                        topicVersion: {
+                        id: true,
+                        popularityScore: true,
+                        lastEdit: true,
+                        categories: {
                             select: {
-                                topic: {
-                                    select: {
-                                        id: true,
-                                        popularityScore: true,
-                                        lastEdit: true,
-                                        categories: {
-                                            select: {
-                                                categoryId: true,
-                                            }
-                                        },
-                                        synonyms: true,
-                                        currentVersion: {
-                                            select: {
-                                                props: true,
-                                                synonyms: true,
-                                                categories: true
-                                            }
-                                        }
-                                    }
-                                }
+                                categoryId: true,
+                            }
+                        },
+                        synonyms: true,
+                        currentVersion: {
+                            select: {
+                                props: true,
+                                synonyms: true,
+                                categories: true
                             }
                         }
                     }
@@ -279,16 +237,15 @@ export class Dataplane {
             }
         })
 
-
-        const queryResults: {uri: string, topic: TopicQueryResultBasic}[] = []
+        const t2 = Date.now()
+        logTimes("fetchTopicsBasicByUris", [t1, t2])
+        const queryResults: { uri: string, topic: TopicQueryResultBasic }[] = []
 
         data.forEach(item => {
-            if(item.content?.topicVersion){
-                queryResults.push({
-                    uri: item.uri,
-                    topic: item.content.topicVersion.topic
-                })
-            }
+            queryResults.push({
+                uri: item.uri,
+                topic: item.topic
+            })
         })
 
         const mapByUri = new Map(queryResults.map(item => [item.uri, item.topic]))
@@ -417,8 +374,6 @@ export class Dataplane {
         m = this.addEmbedsToPostsMap(m)
 
         this.data.bskyPosts = joinMaps(this.data.bskyPosts, m)
-
-
     }
 
     getFetchedBlob(blob: BlobRef): string | null {
@@ -427,6 +382,7 @@ export class Dataplane {
     }
 
     async fetchEngagement(uris: string[]) {
+        const t1 = Date.now()
         const did = this.agent.did
         const getLikes = this.ctx.db.like.findMany({
             select: {
@@ -477,6 +433,8 @@ export class Dataplane {
 
         this.data.likes = joinMaps(this.data.likes, likesMap)
         this.data.reposts = joinMaps(this.data.reposts, repostsMap)
+        const t2 = Date.now()
+        logTimes("fetchEngagement", [t1, t2])
     }
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
@@ -487,5 +445,22 @@ export class Dataplane {
             ...expanded
         ]
         await this.fetchPostAndArticleViewsHydrationData(uris)
+    }
+
+    storeFeedViewPosts(feed: FeedViewPost[]){
+        const m = new Map<string, PostView>()
+        feed.forEach(f => {
+            m.set(f.post.uri, f.post)
+            if(f.reply){
+                if(isPostView(f.reply.parent)){
+                    m.set(f.reply.parent.uri, f.reply.parent)
+                }
+                if(isPostView(f.reply.root)){
+                    m.set(f.reply.root.uri, f.reply.root)
+                }
+            }
+        })
+
+        this.data.bskyPosts = joinMaps(this.data.bskyPosts, m)
     }
 }

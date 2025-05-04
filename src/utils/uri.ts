@@ -105,7 +105,7 @@ export function getCollectionFromUri(uri: string) {
 }
 
 export function isPost(collection: string) {
-    return collection == "app.bsky.feed.post"
+    return collection == "app.bsky.feed.post" || collection == "ar.com.cabildoabierto.quotePost"
 }
 
 export function isArticle(c: string){

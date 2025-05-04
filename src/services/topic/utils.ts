@@ -4,9 +4,10 @@ import {
     TopicProp,
     TopicVersionStatus
 } from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {areArraysEqual, gett} from "#/utils/arrays";
+import {areArraysEqual, gett, unique} from "#/utils/arrays";
 import {$Typed} from "@atproto/api";
 import {EditorStatus} from "@prisma/client";
+import {cleanText} from "#/utils/strings";
 
 
 export function currentCategories(topic: {
@@ -47,9 +48,15 @@ export function propsEqualValue(a: PropValue, b: PropValue) {
 }
 
 
-export function getTopicCategories(props?: TopicProp[]): string[] {
+export function getTopicCategories(props?: TopicProp[], topicCategories?: string[], currentVersionCategories?: string): string[] {
     const c = getTopicProp("Categorías", props)
-    return c && isStringListProp(c.value) ? c.value.value : []
+    const propsCategories = c && isStringListProp(c.value) ? c.value.value : []
+
+    return unique([
+        ...propsCategories,
+        ...(topicCategories ?? []), // deprecated
+        ...(currentVersionCategories ? JSON.parse(currentVersionCategories) : []) // deprecated
+    ])
 }
 
 
@@ -87,7 +94,7 @@ export function getTopicTitle(topic: {id: string, props?: TopicProp[]}): string 
 }
 
 
-export function getTopicSynonyms(topic: {id: string, props?: TopicProp[]}): string[] {
+export function getTopicSynonyms(topic: {id: string, synonyms?: string[], props?: TopicProp[]}): string[] {
     const s = getTopicProp("Sinónimos", topic.props)
     const t = getTopicProp("Título", topic.props)
 
@@ -98,7 +105,10 @@ export function getTopicSynonyms(topic: {id: string, props?: TopicProp[]}): stri
     if(t && isStringProp(t.value)) {
         synonyms.push(t.value.value)
     }
-    return synonyms
+
+    if(topic.synonyms) synonyms = [...synonyms, ...topic.synonyms]
+
+    return unique(synonyms, cleanText)
 }
 
 

@@ -5,6 +5,18 @@ export function union<T>(s: Set<T>, t: Set<T>): Set<T> {
 }
 
 
+
+export const removeNullValues = <K, V>(m: Map<K, V | null>): Map<K, V> => {
+    const res = new Map<K, V>()
+    m.forEach((v, k) => {
+        if(v !== null && v !== undefined){
+            res.set(k, v)
+        }
+    })
+    return res
+};
+
+
 export function unique<T, K>(list: T[], key?: (x: T) => K, removeNulls: boolean = false): T[]{
     if(key){
         const seen = new Set<K>()
