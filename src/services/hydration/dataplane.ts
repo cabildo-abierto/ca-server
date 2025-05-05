@@ -157,6 +157,8 @@ export class Dataplane {
             }
         })
 
+        console.log("CA contents", res)
+
         let contents: FeedElementQueryResult[] = []
         res.forEach(r => {
             if (r.cid && r.author.handle) {
@@ -364,8 +366,14 @@ export class Dataplane {
         for (let i = 0; i < postsList.length; i += 25) {
             batches.push(postsList.slice(i, i + 25))
         }
-        const results = await Promise.all(batches.map(b => this.agent.bsky.getPosts({uris: b})))
-        const postViews = results.map(r => r.data.posts).reduce((acc, cur) => [...acc, ...cur])
+        let postViews: PostView[]
+        try {
+            const results = await Promise.all(batches.map(b => this.agent.bsky.getPosts({uris: b})))
+            postViews = results.map(r => r.data.posts).reduce((acc, cur) => [...acc, ...cur])
+        } catch (err) {
+            console.log("Error fetching posts", err)
+            return
+        }
 
         let m = new Map<string, BskyPostView>(
             postViews.map(item => [item.uri, item])

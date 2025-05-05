@@ -52,6 +52,13 @@ export async function deleteRecords({ctx, agent, uris, atproto}: { ctx: AppConte
     try {
         // TO DO: hacer esto por collections
         await ctx.db.$transaction([
+            ctx.db.reference.deleteMany({
+                where: {
+                    referencingContentId: {
+                        in: uris
+                    }
+                }
+            }),
             ctx.db.topicAccept.deleteMany({
                 where: {
                     uri: {

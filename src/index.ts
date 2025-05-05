@@ -86,6 +86,8 @@ export class Server {
         const app: Express = express()
         app.set('trust proxy', true)
 
+        app.use(express.json({ limit: "10mb" }))
+
         const allowedOrigins = [
             'http://127.0.0.1:3000',
             'http://localhost:3000',

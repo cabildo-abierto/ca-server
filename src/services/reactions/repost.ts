@@ -48,7 +48,7 @@ export const repost: CAHandler<ATProtoStrongRef, {uri: string}> = async (ctx, ag
     } catch(err) {
         console.error("Error reposting", err)
         console.error("uri", ref.uri)
-        return {error: "No se pudo agregar el like."}
+        return {error: "No se pudo republicar el contenido."}
     }
 }
 

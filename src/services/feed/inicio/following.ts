@@ -5,7 +5,13 @@ import {FeedPipelineProps, FeedSkeleton} from "#/services/feed/feed";
 import {
     rootCreationDateSortKey
 } from "#/services/feed/utils";
-import {FeedViewPost, isFeedViewPost, PostView, SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
+import {
+    FeedViewPost,
+    isFeedViewPost,
+    isReasonRepost,
+    PostView,
+    SkeletonFeedPost
+} from "#/lex-api/types/app/bsky/feed/defs";
 import {articleCollections, getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri";
 import {listOrderDesc, sortByKey, unique} from "#/utils/arrays";
 import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
@@ -41,24 +47,6 @@ function skeletonFromArticleReposts(p: RepostQueryResult): SkeletonFeedPost {
             $type: "app.bsky.feed.defs#skeletonReasonRepost"
         }
     }
-}
-
-
-export function filterTimeline(e: FeedViewPost){
-    if(e.reason) return true
-    const rootUri = getRootUriFromPost(e)
-    const parentUri = getParentUriFromPost(e)
-
-    if(rootUri){
-        const rootAuthor = getDidFromUri(rootUri)
-        if(rootAuthor != e.post.author.did) return false
-    }
-    if(parentUri){
-        const parentAuthor = getDidFromUri(parentUri)
-        if(parentAuthor != e.post.author.did) return false
-    }
-
-    return true
 }
 
 
@@ -111,6 +99,7 @@ export const getSkeletonFromTimeline = (timeline: FeedViewPost[], following?: st
     // y de esos con el que más respuestas tenga
 
     let filtered = following ? timeline.filter(t => {
+        if(t.reason && isReasonRepost(t.reason)) return true
         const rootUri = getRootUriFromPost(t)
         if(!rootUri) return false
         const rootAuthor = getDidFromUri(rootUri)

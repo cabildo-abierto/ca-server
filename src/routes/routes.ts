@@ -32,6 +32,7 @@ import {createTopicVersion} from "#/services/write/topic";
 import path from "path";
 import {cancelEditVote, voteEdit} from "#/services/topic/votes";
 import { adminRoutes } from './admin-routes';
+import { fetchURLMetadata } from '#/services/write/metadata';
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -262,6 +263,8 @@ export const createRouter = (ctx: AppContext) => {
         '/cancel-edit-vote/:id/:rkey',
         makeHandler(ctx, cancelEditVote)
     )
+
+    router.get('/metadata', makeHandler(ctx, fetchURLMetadata));
 
     router.use(adminRoutes(ctx))
 

@@ -5,6 +5,7 @@ import {AppContext} from "#/index";
 import {BlobRef} from "#/services/hydration/hydrate";
 import {getBlobKey} from "#/services/hydration/dataplane";
 import {redisCacheTTL} from "#/services/topic/topics";
+import {imageSize} from "image-size";
 
 
 export async function getServiceEndpointForDid(did: string){
@@ -119,15 +120,23 @@ export async function uploadImageSrcBlob(agent: SessionAgent, src: string){
     const arrayBuffer = await response.arrayBuffer();
     const uint8 = new Uint8Array(arrayBuffer);
     const res = await agent.bsky.uploadBlob(uint8)
-    return res.data.blob
+    return {ref: res.data.blob, size: imageSize(uint8)}
+}
+
+
+export async function uploadBase64Blob(agent: SessionAgent, base64: string){
+    const arrayBuffer = Buffer.from(base64, "base64")
+    const uint8 = new Uint8Array(arrayBuffer);
+    const res = await agent.bsky.uploadBlob(uint8)
+    return {ref: res.data.blob, size: imageSize(uint8)}
 }
 
 
 export async function uploadImageBlob(agent: SessionAgent, image: ImagePayload){
     if(image.$type == "url") {
-        return await uploadStringBlob(agent, image.src)
+        return await uploadImageSrcBlob(agent, image.src)
     } else {
-        return await uploadImageSrcBlob(agent, image.image)
+        return await uploadBase64Blob(agent, image.base64)
     }
 }
 
