@@ -23,13 +23,17 @@ export class Agent {
 export class SessionAgent extends Agent {
     bsky: BskyAgent
     did: string
-    constructor(CAAgent: AtpBaseClient, bskyAgent: BskyAgent) {
+    req?: IncomingMessage
+    res?: ServerResponse<IncomingMessage>
+    constructor(CAAgent: AtpBaseClient, bskyAgent: BskyAgent, req?: IncomingMessage, res?: ServerResponse<IncomingMessage>) {
         super(CAAgent)
         this.bsky = bskyAgent
         if(!bskyAgent || !bskyAgent.did){
             throw Error("No session.")
         }
         this.did = bskyAgent && bskyAgent.did
+        this.req = req
+        this.res = res
     }
 
     override hasSession(): this is SessionAgent {
@@ -51,7 +55,7 @@ export async function sessionAgent(
             const oauthSession = await ctx.oauthClient.restore(session.did)
             const bskyAgent = new BskyAgent(oauthSession)
             if(oauthSession) {
-                return new SessionAgent(CAAgent, bskyAgent)
+                return new SessionAgent(CAAgent, bskyAgent, req, res)
             }
         } catch (err) {
             ctx.logger.warn({err}, 'oauth restore failed')

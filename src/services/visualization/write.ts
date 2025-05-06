@@ -1,8 +1,8 @@
 import {BlobRef} from "@atproto/lexicon";
-import {processCreateRecordFromRefAndRecord} from "../sync/process-event";
 import {ATProtoStrongRef} from "#/lib/types";
 import {SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
+import {processCreate} from "#/services/sync/process-event";
 
 type VisualizationSpec = {
     // TO DO
@@ -62,9 +62,8 @@ export async function createVisualization(ctx: AppContext, agent: SessionAgent, 
         return {error}
     }
     if(!ref) return {error: "Ocurrió un error al crear la visualización"}
-    const {updates} = await processCreateRecordFromRefAndRecord(ctx, ref, record)
+    const updates = await processCreate(ctx, ref, record)
     await ctx.db.$transaction(updates)
-    // await revalidateTags(Array.from(tags))
 
     return {}
 }

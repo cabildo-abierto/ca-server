@@ -1,17 +1,18 @@
 import {AppContext} from "#/index";
 import {ProfileView, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import {Prisma} from "@prisma/client";
 import {Account, MentionProps, Profile, Session, UserStats} from "#/lib/types";
-import { SessionAgent } from "#/utils/session-agent";
-import {getDidFromUri, getRkeyFromUri } from "#/utils/uri";
+import {cookieOptions, SessionAgent} from "#/utils/session-agent";
+import {getDidFromUri, getRkeyFromUri} from "#/utils/uri";
 import {deleteRecords} from "#/services/delete";
 import {cleanText} from "#/utils/strings";
-import {CAHandler} from "#/utils/handler";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
 import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {Dataplane} from "#/services/hydration/dataplane";
+import {getIronSession} from "iron-session";
+import {createCAUser} from "#/services/user/access";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -33,7 +34,7 @@ export async function getFollowing(ctx: AppContext, did: string): Promise<string
 
 
 export async function dbHandleToDid(ctx: AppContext, handleOrDid: string): Promise<string | null> {
-    if(handleOrDid.startsWith("did")) {
+    if (handleOrDid.startsWith("did")) {
         return handleOrDid
     } else {
         const res = await ctx.db.user.findFirst({
@@ -50,7 +51,7 @@ export async function dbHandleToDid(ctx: AppContext, handleOrDid: string): Promi
 
 
 export async function handleToDid(ctx: AppContext, agent: SessionAgent, handleOrDid: string): Promise<string | null> {
-    if(handleOrDid.startsWith("did")) {
+    if (handleOrDid.startsWith("did")) {
         return handleOrDid
     } else {
         try {
@@ -64,15 +65,20 @@ export async function handleToDid(ctx: AppContext, agent: SessionAgent, handleOr
 }
 
 
-export async function isCAUser(ctx: AppContext, did: string) {
-    const res = await ctx.db.user.findFirst({
-        select: {did: true},
+export async function didToHandle(ctx: AppContext, did: string): Promise<string | null> {
+    return await ctx.resolver.resolveDidToHandle(did)
+}
+
+
+export const getCAUsersHandles = async (ctx: AppContext) => {
+    return (await ctx.db.user.findMany({
+        select: {
+            handle: true
+        },
         where: {
-            did,
             inCA: true
         }
-    })
-    return res != null
+    })).map(({handle}) => handle)
 }
 
 
@@ -107,7 +113,7 @@ export const getUsers = async (ctx: AppContext): Promise<{ users?: CAProfileView
         let users: CAProfileViewBasic[] = []
 
         res.forEach(u => {
-            if(u.handle){
+            if (u.handle) {
                 users.push({
                     ...u,
                     handle: u.handle,
@@ -183,7 +189,10 @@ export const getConversations = async (ctx: AppContext, userId: string) => {
 }
 
 
-export async function getATProtoUserById(agent: SessionAgent, userId: string): Promise<{ profile?: ProfileViewDetailed, error?: string }> {
+export async function getATProtoUserById(agent: SessionAgent, userId: string): Promise<{
+    profile?: ProfileViewDetailed,
+    error?: string
+}> {
     try {
         const {data} = await agent.bsky.getProfile({
             actor: userId
@@ -195,92 +204,6 @@ export async function getATProtoUserById(agent: SessionAgent, userId: string): P
 }
 
 
-const fullUserQuery = {
-    did: true,
-    handle: true,
-    avatar: true,
-    banner: true,
-    displayName: true,
-    description: true,
-    email: true,
-    createdAt: true,
-    hasAccess: true,
-    inCA: true,
-    platformAdmin: true,
-    editorStatus: true,
-    seenTutorial: true,
-    usedInviteCode: {
-        select: {
-            code: true
-        }
-    },
-    subscriptionsUsed: {
-        orderBy: {
-            createdAt: "asc" as Prisma.SortOrder
-        }
-    },
-    subscriptionsBought: {
-        select: {
-            id: true,
-            price: true
-        },
-        where: {
-            price: {
-                gte: 500
-            }
-        }
-    },
-    records: {
-        select: {
-            cid: true,
-            follow: {
-                select: {
-                    userFollowedId: true
-                }
-            }
-        },
-        where: {
-            collection: "app.bsky.graph.follow",
-            follow: {
-                userFollowed: {
-                    inCA: true
-                }
-            }
-        }
-    },
-    followers: {
-        select: {
-            uri: true,
-            record: {
-                select: {
-                    authorId: true
-                }
-            }
-        }
-    },
-    messagesReceived: {
-        select: {
-            createdAt: true,
-            id: true,
-            text: true,
-            fromUserId: true,
-            toUserId: true,
-            seen: true
-        }
-    },
-    messagesSent: {
-        select: {
-            createdAt: true,
-            id: true,
-            text: true,
-            fromUserId: true,
-            toUserId: true,
-            seen: true
-        }
-    }
-}
-
-
 // TO DO: Eliminar esta función, está repetida
 export function createRecord({ctx, uri, cid, createdAt, collection}: {
     ctx: AppContext
@@ -288,7 +211,7 @@ export function createRecord({ctx, uri, cid, createdAt, collection}: {
     cid: string
     createdAt: Date
     collection: string
-}){
+}) {
     // @ts-ignore
     const data = {
         uri,
@@ -310,9 +233,14 @@ export function createRecord({ctx, uri, cid, createdAt, collection}: {
 }
 
 
-
-export async function createFollowDB({ctx, did, uri, cid, followedDid}: {ctx: AppContext, did: string, uri: string, cid: string, followedDid: string}) {
-    const updates= [
+export async function createFollowDB({ctx, did, uri, cid, followedDid}: {
+    ctx: AppContext,
+    did: string,
+    uri: string,
+    cid: string,
+    followedDid: string
+}) {
+    const updates = [
         ...createRecord({ctx, uri, cid, createdAt: new Date(), collection: "app.bsky.graph.follow"}),
         ctx.db.follow.create({
             data: {
@@ -328,7 +256,7 @@ export async function createFollowDB({ctx, did, uri, cid, followedDid}: {ctx: Ap
 }
 
 
-export const follow: CAHandler<{followedDid: string}, {followUri: string}> = async (ctx, agent,  {followedDid}) => {
+export const follow: CAHandler<{ followedDid: string }, { followUri: string }> = async (ctx, agent, {followedDid}) => {
     try {
         const res = await agent.bsky.follow(followedDid)
         await createFollowDB({ctx, did: agent.did, ...res, followedDid})
@@ -339,7 +267,7 @@ export const follow: CAHandler<{followedDid: string}, {followUri: string}> = asy
 }
 
 
-export const unfollow: CAHandler<{followUri: string}> = async (ctx, agent, {followUri}) => {
+export const unfollow: CAHandler<{ followUri: string }> = async (ctx, agent, {followUri}) => {
     try {
         await deleteRecords({ctx, agent, uris: [followUri], atproto: true})
         return {data: {}}
@@ -350,9 +278,9 @@ export const unfollow: CAHandler<{followUri: string}> = async (ctx, agent, {foll
 }
 
 
-export const getProfile: CAHandler<{params: {handleOrDid: string}}, Profile> = async (ctx, agent, {params}) => {
+export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile> = async (ctx, agent, {params}) => {
     const did = await handleToDid(ctx, agent, params.handleOrDid)
-    if(!did) return {error: "No se encontró el usuario."}
+    if (!did) return {error: "No se encontró el usuario."}
 
     try {
         const [bskyProfile, caProfile, caFollowsCount, caFollowersCount] = await Promise.all([
@@ -398,7 +326,16 @@ export const getProfile: CAHandler<{params: {handleOrDid: string}}, Profile> = a
 }
 
 
-export const getSession: CAHandler<{}, Session> = async (ctx, agent) => {
+export async function deleteSession(ctx: AppContext, agent: SessionAgent) {
+    await ctx.oauthClient.revoke(agent.did)
+    if (agent.req && agent.res) {
+        const session = await getIronSession<Session>(agent.req, agent.res, cookieOptions)
+        session.destroy()
+    }
+}
+
+
+export const getSessionData = async (ctx: AppContext, agent: SessionAgent): Promise<Session | null> => {
     const data = await ctx.db.user.findUnique({
         select: {
             platformAdmin: true,
@@ -413,14 +350,35 @@ export const getSession: CAHandler<{}, Session> = async (ctx, agent) => {
             did: agent.did
         }
     })
-    if(!data || !data.handle) return {error: "No se encontró el usuario."}
+    if (!data || !data.handle) return null
     return {
-        data: {
-            ...data,
-            did: agent.did,
-            handle: data.handle
-        }
+        ...data,
+        did: agent.did,
+        handle: data.handle
     }
+}
+
+
+export const getSession: CAHandlerNoAuth<{ params?: {code?: string} }, Session> = async (ctx, agent, {params}) => {
+    if (!agent.hasSession()) {
+        return {error: "No session."}
+    }
+
+    const data = await getSessionData(ctx, agent)
+    if(data) return {data}
+
+    // el usuario no está en la db pero logró iniciar sesión, creamos un nuevo usuario de CA
+    const code = params?.code
+    if(code) {
+        const {error} = await createCAUser(ctx, agent, code)
+        if(error) return {error}
+
+        const newUserData = await getSessionData(ctx, agent)
+        if(newUserData) return {data: newUserData}
+    }
+
+    await deleteSession(ctx, agent)
+    return {error: "Ocurrió un error al crear el usuario."} // no debería pasar (!)
 }
 
 
@@ -433,7 +391,7 @@ export const getAccount: CAHandler<{}, Account> = async (ctx, agent) => {
             did: agent.did
         }
     })
-    if(!data) return {error: "No se encontró el usuario."}
+    if (!data) return {error: "No se encontró el usuario."}
     return {
         data: {
             email: data.email ?? undefined
@@ -802,7 +760,10 @@ export async function setATProtoProfile(ctx: AppContext, agent: SessionAgent, di
 )*/
 
 
-export async function searchATProtoUsers(agent: SessionAgent, q: string): Promise<{ users?: ProfileView[], error?: string }> {
+export async function searchATProtoUsers(agent: SessionAgent, q: string): Promise<{
+    users?: ProfileView[],
+    error?: string
+}> {
     try {
         const {data} = await agent.bsky.searchActors({
             q
@@ -846,16 +807,16 @@ export const queryMentions = async (ctx: AppContext, trigger: string, query: str
 }
 
 
-export async function setSeenTutorial(ctx: AppContext, agent: SessionAgent, v: boolean) {
+export const setSeenTutorial: CAHandler = async (ctx, agent) => {
     await ctx.db.user.update({
         data: {
-            seenTutorial: v
+            seenTutorial: true
         },
         where: {
             did: agent.did
         }
     })
-    // revalidateTag("user:" + did)
+    return {data: {}}
 }
 
 
@@ -891,15 +852,21 @@ export async function getCADataForUsers(ctx: AppContext, users: string[]) {
 }
 
 
-export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOrDid, kind}: {handleOrDid: string, kind: "follows" | "followers"}) => {
+export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOrDid, kind}: {
+    handleOrDid: string,
+    kind: "follows" | "followers"
+}) => {
     const did = await handleToDid(ctx, agent, handleOrDid)
-    if(!did) return {error: "No se encontró el usuario."}
+    if (!did) return {error: "No se encontró el usuario."}
 
     const users = kind == "follows" ?
         (await agent.bsky.getFollows({actor: did})).data.follows :
         (await agent.bsky.getFollowers({actor: did})).data.followers
 
-    const bskyMap = new Map<string, ProfileViewBasic>(users.map(u => [u.did, {...u, $type: "app.bsky.actor.defs#profileViewBasic"}]))
+    const bskyMap = new Map<string, ProfileViewBasic>(users.map(u => [u.did, {
+        ...u,
+        $type: "app.bsky.actor.defs#profileViewBasic"
+    }]))
     const caData = await getCADataForUsers(ctx, users.map(u => u.did))
     const caMap = new Map(caData.map(a => [a.did, a]))
 
@@ -916,11 +883,15 @@ export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOr
 }
 
 
-export const getFollows: CAHandler<{params: {handleOrDid: string}}, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
+export const getFollows: CAHandler<{
+    params: { handleOrDid: string }
+}, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
     return await getFollowx(ctx, agent, {handleOrDid: params.handleOrDid, kind: "follows"})
 }
 
 
-export const getFollowers: CAHandler<{params: {handleOrDid: string}}, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
+export const getFollowers: CAHandler<{
+    params: { handleOrDid: string }
+}, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
     return await getFollowx(ctx, agent, {handleOrDid: params.handleOrDid, kind: "followers"})
 }

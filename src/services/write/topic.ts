@@ -1,4 +1,4 @@
-import {processCreateRecordFromRefAndRecord} from "../sync/process-event";
+import {processCreate} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
 import {CAHandler} from "#/utils/handler";
 import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
@@ -50,7 +50,7 @@ type CreateTopicVersionProps = {
 export const createTopicVersion: CAHandler<CreateTopicVersionProps> = async (ctx, agent, params) => {
     const {ref, record} = await createTopicVersionATProto(agent, params)
     if(ref){
-        const {updates} = await processCreateRecordFromRefAndRecord(ctx, ref, record)
+        const updates = await processCreate(ctx, ref, record)
         await ctx.db.$transaction(updates)
     }
     return {}

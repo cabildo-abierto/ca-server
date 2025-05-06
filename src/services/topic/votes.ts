@@ -1,5 +1,5 @@
 import {deleteRecords} from "../delete";
-import {processCreateRecord} from "../sync/process-event";
+import {processCreate} from "../sync/process-event";
 import {updateTopicCurrentVersion} from "./current-version";
 import {ATProtoStrongRef} from "#/lib/types";
 import {SessionAgent} from "#/utils/session-agent";
@@ -81,7 +81,7 @@ export async function createTopicVote(ctx: AppContext, agent: SessionAgent, topi
         repo: agent.did
     })
 
-    let {updates, tags} = await processCreateRecord(ctx, {
+    let {updates, tags} = await processCreate(ctx, {
         did: agent.did,
         uri: data.uri,
         cid: data.cid,

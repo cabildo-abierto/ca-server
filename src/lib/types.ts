@@ -183,16 +183,6 @@ export type CommitEvent = JetstreamEvent & {
 }
 
 
-export type SyncRecordProps = {
-    did: string
-    uri: string
-    collection: string
-    rkey: string
-    cid: string
-    record: any
-}
-
-
 export type UserRepo = {
     did: string
     uri: string

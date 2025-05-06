@@ -17,7 +17,7 @@ export const collectionsList = [
     "ar.com.cabildoabierto.profile",
     "ar.cabildoabierto.wiki.topicVersion",
     "ar.cabildoabierto.wiki.vote",
-    "ar.cabildoabierto.actor.profile",
+    "ar.cabildoabierto.actor.caProfile",
     "ar.cabildoabierto.data.dataset",
     "ar.cabildoabierto.data.visualization",
     "ar.cabildoabierto.data.dataBlock",

@@ -1,16 +1,25 @@
 import express from 'express'
 import type {AppContext} from '#/index'
 import {cookieOptions, handler, Session, sessionAgent} from "#/utils/session-agent";
-import {makeHandler} from "#/utils/handler";
+import {makeHandler, makeHandlerNoAuth} from "#/utils/handler";
 import {searchTopics, searchUsers} from "#/services/search/search";
 import {createArticle} from "#/services/write/article";
 import {isValidHandle} from "@atproto/syntax";
 import {getIronSession} from "iron-session";
 import {env} from "#/lib/env";
-import {getAvailableInviteCodes} from "#/services/user/access";
+import {getAvailableInviteCodes, login} from "#/services/user/access";
 import {getFeedByKind} from "#/services/feed/feed";
 import {getProfileFeed} from "#/services/feed/profile/profile";
-import {follow, getAccount, getFollowers, getFollows, getProfile, getSession, unfollow} from "#/services/user/users";
+import {
+    deleteSession,
+    follow,
+    getAccount,
+    getFollowers,
+    getFollows,
+    getProfile,
+    getSession, setSeenTutorial,
+    unfollow
+} from "#/services/user/users";
 import {createPost} from "#/services/write/post";
 import {addLike, removeLike} from "#/services/reactions/like";
 import {removeRepost, repost} from "#/services/reactions/repost";
@@ -43,21 +52,7 @@ export const createRouter = (ctx: AppContext) => {
         return res.sendFile(path.join(process.cwd(), 'public', 'client-metadata.json'))
     })
 
-    router.post('/login', async (req, res) => {
-        const handle = req.body?.handle
-        if (typeof handle !== 'string' || !isValidHandle(handle)) {
-            return res.status(200).send("Handle inválido.")
-        }
-
-        try {
-            const url = await ctx.oauthClient.authorize(handle, {
-                scope: 'atproto transition:generic',
-            })
-            return res.status(200).json({ url })
-        } catch (err) {
-            return res.status(400).send("Error al iniciar sesión.")
-        }
-    })
+    router.post('/login', makeHandlerNoAuth(ctx, login))
 
     router.get('/oauth/callback', async (req, res) => {
         const params = new URLSearchParams(req.originalUrl.split('?')[1])
@@ -70,24 +65,16 @@ export const createRouter = (ctx: AppContext) => {
             ctx.logger.error({ err }, 'oauth callback failed')
             return res.redirect('/?error')
         }
-        return res.redirect(env.FRONTEND_URL+'/inicio')
+        return res.redirect(env.FRONTEND_URL+'/login/ok')
     })
 
     router.post('/logout', async (req, res) => {
         const agent = await sessionAgent(req, res, ctx)
         if(agent.hasSession()){
-            await ctx.oauthClient.revoke(agent.did)
-            const session = await getIronSession<Session>(req, res, cookieOptions)
-            session.destroy()
+            await deleteSession(ctx, agent)
         }
 
         return res.status(200).json({})
-    })
-
-    router.get("/codes", async (req, res) => {
-        const codes = await getAvailableInviteCodes(ctx)
-
-        return {data: codes}
     })
 
     router.get(
@@ -161,7 +148,12 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get(
         '/session',
-        handler(makeHandler(ctx, getSession))
+        handler(makeHandlerNoAuth(ctx, getSession))
+    )
+
+    router.get(
+        '/session/:code',
+        handler(makeHandlerNoAuth(ctx, getSession))
     )
 
     router.get(
@@ -262,6 +254,10 @@ export const createRouter = (ctx: AppContext) => {
     router.post(
         '/cancel-edit-vote/:id/:rkey',
         makeHandler(ctx, cancelEditVote)
+    )
+
+    router.post('/seen-tutorial',
+        makeHandler(ctx, setSeenTutorial)
     )
 
     router.get('/metadata', makeHandler(ctx, fetchURLMetadata));

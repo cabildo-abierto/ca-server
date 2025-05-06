@@ -4,9 +4,11 @@ import {CAHandler, makeHandler} from "#/utils/handler";
 import {updateCategoriesGraphHandler} from "#/services/topic/graph";
 import {syncUserHandler} from "#/services/sync/sync-user";
 import {updateReferences, updateReferencesHandler} from "#/services/topic/references";
+import {deleteUserHandler} from "#/services/delete";
+import {getAvailableInviteCodes} from "#/services/user/access";
 
 
-function isAdmin(did: string){
+function isAdmin(did: string) {
     return [
         "did:plc:2356xofv4ntrbu42xeilxjnb",
         "did:plc:rup47j6oesjlf44wx4fizu4m",
@@ -39,6 +41,15 @@ export const adminRoutes = (ctx: AppContext) => {
     router.post(
         "/sync-user/:handleOrDid",
         makeAdminHandler(ctx, syncUserHandler)
+    )
+    router.post(
+        "/delete-user/:handleOrDid",
+        makeAdminHandler(ctx, deleteUserHandler)
+    )
+
+    router.get(
+        "/codes",
+        makeAdminHandler(ctx, getAvailableInviteCodes)
     )
 
     return router

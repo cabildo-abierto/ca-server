@@ -3,6 +3,7 @@ import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
 import {CAHandler} from "#/utils/handler";
 import {deleteTopicVersion} from "#/services/topic/current-version";
+import {handleToDid} from "#/services/user/users";
 
 
 export async function deleteRecordsForAuthor({ctx, agent, author, collections, atproto}: {ctx: AppContext, agent?: SessionAgent, author: string, collections?: string[], atproto: boolean}){
@@ -157,6 +158,15 @@ export async function deleteRecords({ctx, agent, uris, atproto}: { ctx: AppConte
     }
 
     return {}
+}
+
+
+export const deleteUserHandler: CAHandler<{params: {handleOrDid: string}}> = async (ctx, agent, {params}) => {
+    const {handleOrDid} = params
+    const did = await handleToDid(ctx, agent, handleOrDid)
+    if(!did) return {error: "No se pudo resolver el handle."}
+    await deleteUser(ctx, did)
+    return {data: {}}
 }
 
 

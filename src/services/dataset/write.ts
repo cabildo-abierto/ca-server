@@ -1,4 +1,4 @@
-import {processCreateRecordFromRefAndRecord} from "../sync/process-event";
+import {processCreate} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
 
@@ -72,12 +72,9 @@ export async function createDataset(ctx: AppContext, agent: SessionAgent, title:
     const {error, datasetRecord, datasetRef, blockRecord, blockRef} = await createDatasetATProto(agent, title, columns, description, formData, format)
     if(error || !datasetRef || !blockRef) return {error}
 
-    const r1 = await processCreateRecordFromRefAndRecord(ctx, datasetRef, datasetRecord)
-    const r2 = await processCreateRecordFromRefAndRecord(ctx, blockRef, blockRecord)
-
     const updates = [
-        ...r1.updates,
-        ...r2.updates
+        ...await processCreate(ctx, datasetRef, datasetRecord),
+        ...await processCreate(ctx, blockRef, blockRecord)
     ]
 
     await ctx.db.$transaction(updates)

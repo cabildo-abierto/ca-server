@@ -157,8 +157,6 @@ export class Dataplane {
             }
         })
 
-        console.log("CA contents", res)
-
         let contents: FeedElementQueryResult[] = []
         res.forEach(r => {
             if (r.cid && r.author.handle) {

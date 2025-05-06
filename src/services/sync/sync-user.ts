@@ -1,4 +1,4 @@
-import {processCreateRecord} from "./process-event";
+import {processCreate} from "./process-event";
 import {deleteRecords} from "../delete";
 import {validRecord} from "./utils";
 import {getDirtyUsers, setMirrorStatus} from "./mirror-status";
@@ -140,7 +140,7 @@ export async function processRepo(ctx: AppContext, repo: UserRepo, did: string, 
     let tags = new Set<string>()
     for(let i = 0; i < repo.length; i++){
         if(recordsReqUpdate == null || recordsReqUpdate.has(repo[i].uri)){
-            const r = await processCreateRecord(ctx, repo[i])
+            const r = await processCreate(ctx, repo[i])
             updates = [...updates, ...r.updates]
             union(tags, r.tags)
         }

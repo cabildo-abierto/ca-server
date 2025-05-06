@@ -1,5 +1,5 @@
 import {splitUri} from "#/utils/uri";
-import {processCreateRecord} from "#/services/sync/process-event";
+import {processCreate} from "#/services/sync/process-event";
 import {uploadStringBlob} from "#/services/blob";
 import {CAHandler} from "#/utils/handler";
 
@@ -36,7 +36,7 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
         })
 
         const {uri, cid} = data
-        const {updates} = await processCreateRecord(ctx, {
+        const {updates} = await processCreate(ctx, {
             uri,
             cid,
             ...splitUri(uri),

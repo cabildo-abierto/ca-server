@@ -1,4 +1,4 @@
-import {processCreateRecordFromRefAndRecord} from "../sync/process-event";
+import {processCreate} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
 import {$Typed, RichText} from "@atproto/api";
@@ -9,7 +9,6 @@ import {CAHandler} from "#/utils/handler";
 import {View as ExternalEmbedView} from "#/lex-server/types/app/bsky/embed/external"
 import {Main as EmbedRecord} from "#/lex-server/types/app/bsky/embed/record"
 import {Main as EmbedRecordWithMedia} from "#/lex-server/types/app/bsky/embed/recordWithMedia"
-import {imageSize} from "image-size";
 
 
 function createQuotePostEmbed(post: ATProtoStrongRef): $Typed<EmbedRecord> {
@@ -159,24 +158,14 @@ export type CreatePostProps = {
 
 
 export const createPost: CAHandler<CreatePostProps, ATProtoStrongRef> = async (ctx, agent, post) => {
-
     const ref = await createPostAT({
         agent, post
     })
 
     if (ref) {
-        const {updates, tags} = await processCreateRecordFromRefAndRecord(ctx, ref, post)
-
+        const updates = await processCreate(ctx, ref, post)
         await ctx.db.$transaction(updates)
-        // await revalidateTags(Array.from(tags))
     }
-
-    //if(reply){
-    // revalidateTag("thread:"+getDidFromUri(reply.parent.uri)+":"+getRkeyFromUri(reply.parent.uri))
-    // revalidateTag("thread:"+getDidFromUri(reply.root.uri)+":"+getRkeyFromUri(reply.root.uri))
-
-    // revalidateTag("topic:Inflación")
-    //}
 
     return {data: ref}
 }
