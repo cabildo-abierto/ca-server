@@ -32,19 +32,9 @@
             "createdAt": {
               "type": "string",
               "format": "datetime"
-            },
-            "visualizations": {
-              "type": "array",
-              "items": {
-                "type": "ref",
-                "ref": "#"
-              }
             }
           }
         }
-      },
-      "visualizationInArticle": {
-
       }
     }
   }
