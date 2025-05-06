@@ -18,7 +18,7 @@ import IORedis from "ioredis";
 import {setupWorker} from "#/jobs/worker";
 
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:16379'
+const redisUrl = process.env.REDIS_URL as string
 
 
 export type AppContext = {
@@ -90,6 +90,7 @@ export class Server {
 
         const allowedOrigins = [
             'http://127.0.0.1:3000',
+            'http://127.0.0.1:3002',
             'http://localhost:3000',
             'http://localhost:8080',
             'http://127.0.0.1:8080',

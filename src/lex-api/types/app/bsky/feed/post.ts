@@ -16,6 +16,7 @@ import type * as AppBskyEmbedExternal from '../embed/external.js'
 import type * as AppBskyEmbedRecord from '../embed/record.js'
 import type * as AppBskyEmbedRecordWithMedia from '../embed/recordWithMedia.js'
 import type * as ArCabildoabiertoEmbedSelectionQuote from '../../../ar/cabildoabierto/embed/selectionQuote.js'
+import type * as ArCabildoabiertoEmbedVisualization from '../../../ar/cabildoabierto/embed/visualization.js'
 import type * as ComAtprotoLabelDefs from '../../../com/atproto/label/defs.js'
 import type * as ComAtprotoRepoStrongRef from '../../../com/atproto/repo/strongRef.js'
 
@@ -39,6 +40,7 @@ export interface Record {
     | $Typed<AppBskyEmbedRecord.Main>
     | $Typed<AppBskyEmbedRecordWithMedia.Main>
     | $Typed<ArCabildoabiertoEmbedSelectionQuote.Main>
+    | $Typed<ArCabildoabiertoEmbedVisualization.Main>
     | { $type: string }
   /** Indicates human language of post primary text content. */
   langs?: string[]

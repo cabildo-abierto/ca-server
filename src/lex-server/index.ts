@@ -66,8 +66,8 @@ import * as ComAtprotoSyncGetRecord from './types/com/atproto/sync/getRecord.js'
 import * as ComAtprotoSyncGetRepo from './types/com/atproto/sync/getRepo.js'
 import * as ComAtprotoSyncGetRepoStatus from './types/com/atproto/sync/getRepoStatus.js'
 import * as ComAtprotoSyncListBlobs from './types/com/atproto/sync/listBlobs.js'
-import * as ComAtprotoSyncListReposByCollection from './types/com/atproto/sync/listReposByCollection.js'
 import * as ComAtprotoSyncListRepos from './types/com/atproto/sync/listRepos.js'
+import * as ComAtprotoSyncListReposByCollection from './types/com/atproto/sync/listReposByCollection.js'
 import * as ComAtprotoSyncNotifyOfUpdate from './types/com/atproto/sync/notifyOfUpdate.js'
 import * as ComAtprotoSyncRequestCrawl from './types/com/atproto/sync/requestCrawl.js'
 import * as ComAtprotoSyncSubscribeRepos from './types/com/atproto/sync/subscribeRepos.js'
@@ -93,14 +93,14 @@ import * as AppBskyFeedDescribeFeedGenerator from './types/app/bsky/feed/describ
 import * as AppBskyFeedGetActorFeeds from './types/app/bsky/feed/getActorFeeds.js'
 import * as AppBskyFeedGetActorLikes from './types/app/bsky/feed/getActorLikes.js'
 import * as AppBskyFeedGetAuthorFeed from './types/app/bsky/feed/getAuthorFeed.js'
+import * as AppBskyFeedGetFeed from './types/app/bsky/feed/getFeed.js'
 import * as AppBskyFeedGetFeedGenerator from './types/app/bsky/feed/getFeedGenerator.js'
 import * as AppBskyFeedGetFeedGenerators from './types/app/bsky/feed/getFeedGenerators.js'
-import * as AppBskyFeedGetFeed from './types/app/bsky/feed/getFeed.js'
 import * as AppBskyFeedGetFeedSkeleton from './types/app/bsky/feed/getFeedSkeleton.js'
 import * as AppBskyFeedGetLikes from './types/app/bsky/feed/getLikes.js'
 import * as AppBskyFeedGetListFeed from './types/app/bsky/feed/getListFeed.js'
-import * as AppBskyFeedGetPosts from './types/app/bsky/feed/getPosts.js'
 import * as AppBskyFeedGetPostThread from './types/app/bsky/feed/getPostThread.js'
+import * as AppBskyFeedGetPosts from './types/app/bsky/feed/getPosts.js'
 import * as AppBskyFeedGetQuotes from './types/app/bsky/feed/getQuotes.js'
 import * as AppBskyFeedGetRepostedBy from './types/app/bsky/feed/getRepostedBy.js'
 import * as AppBskyFeedGetSuggestedFeeds from './types/app/bsky/feed/getSuggestedFeeds.js'
@@ -112,8 +112,8 @@ import * as AppBskyGraphGetBlocks from './types/app/bsky/graph/getBlocks.js'
 import * as AppBskyGraphGetFollowers from './types/app/bsky/graph/getFollowers.js'
 import * as AppBskyGraphGetFollows from './types/app/bsky/graph/getFollows.js'
 import * as AppBskyGraphGetKnownFollowers from './types/app/bsky/graph/getKnownFollowers.js'
-import * as AppBskyGraphGetListBlocks from './types/app/bsky/graph/getListBlocks.js'
 import * as AppBskyGraphGetList from './types/app/bsky/graph/getList.js'
+import * as AppBskyGraphGetListBlocks from './types/app/bsky/graph/getListBlocks.js'
 import * as AppBskyGraphGetListMutes from './types/app/bsky/graph/getListMutes.js'
 import * as AppBskyGraphGetLists from './types/app/bsky/graph/getLists.js'
 import * as AppBskyGraphGetMutes from './types/app/bsky/graph/getMutes.js'
@@ -992,17 +992,6 @@ export class ComAtprotoSyncNS {
     return this._server.xrpc.method(nsid, cfg)
   }
 
-  listReposByCollection<AV extends AuthVerifier>(
-    cfg: ConfigOf<
-      AV,
-      ComAtprotoSyncListReposByCollection.Handler<ExtractAuth<AV>>,
-      ComAtprotoSyncListReposByCollection.HandlerReqCtx<ExtractAuth<AV>>
-    >,
-  ) {
-    const nsid = 'com.atproto.sync.listReposByCollection' // @ts-ignore
-    return this._server.xrpc.method(nsid, cfg)
-  }
-
   listRepos<AV extends AuthVerifier>(
     cfg: ConfigOf<
       AV,
@@ -1011,6 +1000,17 @@ export class ComAtprotoSyncNS {
     >,
   ) {
     const nsid = 'com.atproto.sync.listRepos' // @ts-ignore
+    return this._server.xrpc.method(nsid, cfg)
+  }
+
+  listReposByCollection<AV extends AuthVerifier>(
+    cfg: ConfigOf<
+      AV,
+      ComAtprotoSyncListReposByCollection.Handler<ExtractAuth<AV>>,
+      ComAtprotoSyncListReposByCollection.HandlerReqCtx<ExtractAuth<AV>>
+    >,
+  ) {
+    const nsid = 'com.atproto.sync.listReposByCollection' // @ts-ignore
     return this._server.xrpc.method(nsid, cfg)
   }
 
@@ -1349,6 +1349,17 @@ export class AppBskyFeedNS {
     return this._server.xrpc.method(nsid, cfg)
   }
 
+  getFeed<AV extends AuthVerifier>(
+    cfg: ConfigOf<
+      AV,
+      AppBskyFeedGetFeed.Handler<ExtractAuth<AV>>,
+      AppBskyFeedGetFeed.HandlerReqCtx<ExtractAuth<AV>>
+    >,
+  ) {
+    const nsid = 'app.bsky.feed.getFeed' // @ts-ignore
+    return this._server.xrpc.method(nsid, cfg)
+  }
+
   getFeedGenerator<AV extends AuthVerifier>(
     cfg: ConfigOf<
       AV,
@@ -1368,17 +1379,6 @@ export class AppBskyFeedNS {
     >,
   ) {
     const nsid = 'app.bsky.feed.getFeedGenerators' // @ts-ignore
-    return this._server.xrpc.method(nsid, cfg)
-  }
-
-  getFeed<AV extends AuthVerifier>(
-    cfg: ConfigOf<
-      AV,
-      AppBskyFeedGetFeed.Handler<ExtractAuth<AV>>,
-      AppBskyFeedGetFeed.HandlerReqCtx<ExtractAuth<AV>>
-    >,
-  ) {
-    const nsid = 'app.bsky.feed.getFeed' // @ts-ignore
     return this._server.xrpc.method(nsid, cfg)
   }
 
@@ -1415,17 +1415,6 @@ export class AppBskyFeedNS {
     return this._server.xrpc.method(nsid, cfg)
   }
 
-  getPosts<AV extends AuthVerifier>(
-    cfg: ConfigOf<
-      AV,
-      AppBskyFeedGetPosts.Handler<ExtractAuth<AV>>,
-      AppBskyFeedGetPosts.HandlerReqCtx<ExtractAuth<AV>>
-    >,
-  ) {
-    const nsid = 'app.bsky.feed.getPosts' // @ts-ignore
-    return this._server.xrpc.method(nsid, cfg)
-  }
-
   getPostThread<AV extends AuthVerifier>(
     cfg: ConfigOf<
       AV,
@@ -1434,6 +1423,17 @@ export class AppBskyFeedNS {
     >,
   ) {
     const nsid = 'app.bsky.feed.getPostThread' // @ts-ignore
+    return this._server.xrpc.method(nsid, cfg)
+  }
+
+  getPosts<AV extends AuthVerifier>(
+    cfg: ConfigOf<
+      AV,
+      AppBskyFeedGetPosts.Handler<ExtractAuth<AV>>,
+      AppBskyFeedGetPosts.HandlerReqCtx<ExtractAuth<AV>>
+    >,
+  ) {
+    const nsid = 'app.bsky.feed.getPosts' // @ts-ignore
     return this._server.xrpc.method(nsid, cfg)
   }
 
@@ -1574,17 +1574,6 @@ export class AppBskyGraphNS {
     return this._server.xrpc.method(nsid, cfg)
   }
 
-  getListBlocks<AV extends AuthVerifier>(
-    cfg: ConfigOf<
-      AV,
-      AppBskyGraphGetListBlocks.Handler<ExtractAuth<AV>>,
-      AppBskyGraphGetListBlocks.HandlerReqCtx<ExtractAuth<AV>>
-    >,
-  ) {
-    const nsid = 'app.bsky.graph.getListBlocks' // @ts-ignore
-    return this._server.xrpc.method(nsid, cfg)
-  }
-
   getList<AV extends AuthVerifier>(
     cfg: ConfigOf<
       AV,
@@ -1593,6 +1582,17 @@ export class AppBskyGraphNS {
     >,
   ) {
     const nsid = 'app.bsky.graph.getList' // @ts-ignore
+    return this._server.xrpc.method(nsid, cfg)
+  }
+
+  getListBlocks<AV extends AuthVerifier>(
+    cfg: ConfigOf<
+      AV,
+      AppBskyGraphGetListBlocks.Handler<ExtractAuth<AV>>,
+      AppBskyGraphGetListBlocks.HandlerReqCtx<ExtractAuth<AV>>
+    >,
+  ) {
+    const nsid = 'app.bsky.graph.getListBlocks' // @ts-ignore
     return this._server.xrpc.method(nsid, cfg)
   }
 
