@@ -1,84 +1,75 @@
 import {processCreate} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
-import {AppContext} from "#/index";
+import {CAHandler} from "#/utils/handler";
+import {uploadStringBlob} from "#/services/blob";
+import {Record as DatasetRecord} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
+import {BlobRef} from "@atproto/lexicon";
+import {compress} from "#/utils/compression";
 
 
-export async function createDatasetATProto(agent: SessionAgent, title: string, columns: string[], description: string, formData: FormData, format: string){
-    const data = Object.fromEntries(formData);
-
-    let f = data.data as File
-
-    const headers: Record<string, string> = {
-        "Content-Length": f.size.toString()
+export async function createDatasetATProto(agent: SessionAgent, params: CreateDatasetProps) {
+    if(params.format != "json"){
+        return {error: "Formato no soportado."}
+    }
+    let blobRef: BlobRef | null = null
+    try {
+        blobRef = await uploadStringBlob(agent, compress(params.data))
+    } catch (err) {
+        console.error("Error al publicar el blob.")
+        console.error(err)
+        return {error: "Error al publicar el dataset."}
     }
 
-    const res = await agent.bsky.uploadBlob(f, {headers})
-    if(res.success){
-        const blob = res.data.blob
-        const curDate = new Date().toISOString()
+    const curDate = new Date().toISOString()
 
-        const datasetRecord = {
-            title: title,
-            createdAt: curDate,
-            columns: columns.map((c) => ({name: c})),
-            description,
-            "$type": "ar.com.cabildoabierto.dataset"
-        }
-
-        let datasetLink = null
-        try {
-            const {data: datasetData} = await agent.bsky.com.atproto.repo.createRecord({
-                repo: agent.did,
-                collection: "ar.com.cabildoabierto.dataset",
-                record: datasetRecord
-            })
-            datasetLink = {uri: data.uri, cid: data.cid}
-
-            const blockRecord = {
-                createdAt: curDate,
-                dataset: datasetLink,
-                format: format,
-                data: {
-                    ref: blob.ref,
-                    mimeType: blob.mimeType,
-                    size: blob.size,
-                    $type: "blob"
-                },
-                "$type": "ar.com.cabildoabierto.dataBlock"
+    const record: DatasetRecord = {
+        name: params.name,
+        createdAt: curDate,
+        columns: params.columns.map((c) => ({name: c})),
+        description: params.description,
+        data: [
+            {
+                $type: "ar.cabildoabierto.data.dataset#dataBlock",
+                blob: blobRef,
+                format: "json-compressed"
             }
+        ],
+        $type: "ar.cabildoabierto.data.dataset"
+    }
 
-            const {data: blockData} = await agent.bsky.com.atproto.repo.createRecord({
-                repo: agent.did,
-                collection: "ar.com.cabildoabierto.dataBlock",
-                record: blockRecord
-            })
-            return {
-                blockRef: {cid: blockData.cid, uri: blockData.uri},
-                blockRecord,
-                datasetRecord,
-                datasetRef: {cid: datasetData.cid, uri: datasetData.uri}
-            }
-        } catch (e) {
-            console.error(e)
-            return {error: "No se pudo publicar el dataset."}
+    try {
+        const {data: datasetData} = await agent.bsky.com.atproto.repo.createRecord({
+            repo: agent.did,
+            collection: "ar.cabildoabierto.data.dataset",
+            record: record
+        })
+
+        return {
+            record,
+            ref: {cid: datasetData.cid, uri: datasetData.uri}
         }
-    } else {
+    } catch (e) {
+        console.error(e)
         return {error: "No se pudo publicar el dataset."}
     }
 }
 
+export type CreateDatasetProps = {
+    name: string
+    description: string
+    columns: string[]
+    data: string
+    format?: string
+}
 
-export async function createDataset(ctx: AppContext, agent: SessionAgent, title: string, columns: string[], description: string, formData: FormData, format: string): Promise<{error?: string}>{
-    const {error, datasetRecord, datasetRef, blockRecord, blockRef} = await createDatasetATProto(agent, title, columns, description, formData, format)
-    if(error || !datasetRef || !blockRef) return {error}
+export const createDataset: CAHandler<CreateDatasetProps> = async (ctx, agent, params) => {
+    const {error, record, ref} = await createDatasetATProto(agent, params)
+    if (error || !record || !ref) return {error}
 
     const updates = [
-        ...await processCreate(ctx, datasetRef, datasetRecord),
-        ...await processCreate(ctx, blockRef, blockRecord)
+        ...await processCreate(ctx, ref, record)
     ]
 
     await ctx.db.$transaction(updates)
-    // await revalidateTags(Array.from(union(r1.tags, r2.tags)))
-
     return {}
 }

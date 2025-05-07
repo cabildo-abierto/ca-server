@@ -29,6 +29,13 @@
               "ref": "#column"
             },
             "minLength": 1
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "ref",
+              "ref": "#dataBlock"
+            }
           }
         }
       }
@@ -41,8 +48,17 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 120
+        }
+      }
+    },
+    "dataBlock": {
+      "type": "object",
+      "required": ["blob"],
+      "properties": {
+        "blob": {
+          "type": "blob"
         },
-        "datatype": {
+        "format": {
           "type": "string"
         }
       }
@@ -88,7 +104,7 @@
     },
     "datasetView": {
       "type": "object",
-      "required": ["name", "uri", "cid", "author", "createdAt", "data", "columns"],
+      "required": ["name", "uri", "cid", "author", "createdAt", "columns", "data"],
       "properties": {
         "name": {
           "type": "string"
@@ -127,8 +143,7 @@
           "type": "string"
         },
         "dataFormat": {
-          "type": "string",
-          "maxLength": 50
+          "type": "string"
         }
       }
     }

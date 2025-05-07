@@ -116,9 +116,7 @@ export async function updateTopicCurrentVersion(ctx: AppContext, agent: SessionA
 
     if(!topic) return {error}
 
-    console.log("history", topic)
     const currentVersion = getTopicCurrentVersion(topic.versions)
-    console.log("current version", currentVersion)
 
     const uri = currentVersion != null ? topic.versions[currentVersion].uri : null
 

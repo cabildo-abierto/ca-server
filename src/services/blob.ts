@@ -107,10 +107,10 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
 }
 
 
-export async function uploadStringBlob(agent: SessionAgent, s: string){
+export async function uploadStringBlob(agent: SessionAgent, s: string, encoding?: string){
     const encoder = new TextEncoder()
     const uint8 = encoder.encode(s)
-    const res = await agent.bsky.uploadBlob(uint8)
+    const res = await agent.bsky.uploadBlob(uint8, {encoding})
     return res.data.blob
 }
 

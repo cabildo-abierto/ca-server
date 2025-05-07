@@ -5,6 +5,8 @@ export function hydrateProfileViewBasic(did: string, data: Dataplane): CAProfile
     const ca = data.data.caUsers?.get(did)
     const bsky = data.data.bskyUsers?.get(did)
 
+    if(!bsky) return null
+
     if(ca) {
         return ca
     } else if(bsky) {

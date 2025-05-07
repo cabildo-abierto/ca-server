@@ -4,6 +4,7 @@ import {CAHandler} from "#/utils/handler";
 import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {uploadStringBlob} from "#/services/blob";
 import {BlobRef} from "@atproto/lexicon";
+import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 
 
 export async function createTopicVersionATProto(agent: SessionAgent, {id, text, format, message, props}: CreateTopicVersionProps){
@@ -13,18 +14,15 @@ export async function createTopicVersionATProto(agent: SessionAgent, {id, text, 
         blob = await uploadStringBlob(agent, text)
     }
 
-    const record = {
-        "$type": "ar.cabildoabierto.wiki.topicVersion",
-        text: blob ? {
-            ref: blob.ref,
-            mimeType: blob.mimeType,
-            size: blob.size,
-            $type: "blob"
-        } : text,
+    if(text && !blob) return {error: "Ocurrió un error al publicar el tema."}
+
+    const record: TopicVersionRecord = {
+        $type: "ar.cabildoabierto.wiki.topicVersion",
+        text: text && blob ? blob : undefined,
         format,
         message,
         id,
-        props: props && !props.some(p => !validateTopicProp(p).success) ? props : null,
+        props: props && !props.some(p => !validateTopicProp(p).success) ? props : undefined,
         createdAt: new Date().toISOString()
     }
 
@@ -48,10 +46,10 @@ type CreateTopicVersionProps = {
 
 
 export const createTopicVersion: CAHandler<CreateTopicVersionProps> = async (ctx, agent, params) => {
-    const {ref, record} = await createTopicVersionATProto(agent, params)
-    if(ref){
+    const {error, ref, record} = await createTopicVersionATProto(agent, params)
+    if(!error && ref && record){
         const updates = await processCreate(ctx, ref, record)
         await ctx.db.$transaction(updates)
     }
-    return {}
+    return {error}
 }

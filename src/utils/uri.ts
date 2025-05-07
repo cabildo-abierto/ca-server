@@ -105,15 +105,11 @@ export function getCollectionFromUri(uri: string) {
 }
 
 export function isPost(collection: string) {
-    return collection == "app.bsky.feed.post" || collection == "ar.com.cabildoabierto.quotePost"
+    return collection == "app.bsky.feed.post"
 }
 
 export function isArticle(c: string){
     return articleCollections.includes(c)
-}
-
-export function isQuotePost(c: string) {
-    return c == "ar.com.cabildoabierto.quotePost"
 }
 
 export function isTopicVersion(c: string){

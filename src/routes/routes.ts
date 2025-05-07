@@ -4,10 +4,9 @@ import {cookieOptions, handler, Session, sessionAgent} from "#/utils/session-age
 import {makeHandler, makeHandlerNoAuth} from "#/utils/handler";
 import {searchTopics, searchUsers} from "#/services/search/search";
 import {createArticle} from "#/services/write/article";
-import {isValidHandle} from "@atproto/syntax";
 import {getIronSession} from "iron-session";
 import {env} from "#/lib/env";
-import {getAvailableInviteCodes, login} from "#/services/user/access";
+import {login} from "#/services/user/access";
 import {getFeedByKind} from "#/services/feed/feed";
 import {getProfileFeed} from "#/services/feed/profile/profile";
 import {
@@ -42,6 +41,9 @@ import path from "path";
 import {cancelEditVote, voteEdit} from "#/services/topic/votes";
 import { adminRoutes } from './admin-routes';
 import { fetchURLMetadata } from '#/services/write/metadata';
+import {getDataset, getDatasets } from '#/services/dataset/read';
+import { createDataset } from '#/services/dataset/write';
+import {searchContents} from "#/services/feed/search";
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -246,6 +248,11 @@ export const createRouter = (ctx: AppContext) => {
         makeHandler(ctx, searchTopics)
     )
 
+    router.get(
+        '/search-contents/:q',
+        makeHandler(ctx, searchContents)
+    )
+
     router.post(
         '/vote-edit/:vote/:id/:did/:rkey/:cid',
         makeHandler(ctx, voteEdit)
@@ -258,6 +265,18 @@ export const createRouter = (ctx: AppContext) => {
 
     router.post('/seen-tutorial',
         makeHandler(ctx, setSeenTutorial)
+    )
+
+    router.get('/datasets',
+        makeHandler(ctx, getDatasets)
+    )
+
+    router.get('/dataset/:did/:collection/:rkey',
+        makeHandler(ctx, getDataset)
+    )
+
+    router.post('/dataset',
+        makeHandler(ctx, createDataset)
     )
 
     router.get('/metadata', makeHandler(ctx, fetchURLMetadata));

@@ -491,7 +491,6 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
     })
 
     if (!topic || !topic.content || !topic.content.topicVersion) {
-        console.log("no topic version")
         return {error: "No se encontró la versión."}
     }
 
@@ -512,7 +511,6 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
     const id = topic.content.topicVersion.topic.id
 
     if (!author || !topic.cid) {
-        console.log("missing data")
         console.log(author != null, topic.cid != null)
         return {error: "No se encontró el tema " + id + "."}
     }

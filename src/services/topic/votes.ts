@@ -10,8 +10,6 @@ import {CAHandler} from "#/utils/handler";
 export const voteEdit: CAHandler<{message?: string, labels?: string[], params: {id: string, vote: string, rkey: string, did: string, cid: string}}, {acceptUri: string}> = async (ctx: AppContext, agent: SessionAgent, {message, labels, params}) => {
     const {id, vote, rkey, did, cid} = params
 
-    console.log("voting edit", vote, id, did, rkey, cid)
-
     if(vote !== "accept" && vote !== "reject"){
         return {error: `Voto inválido: ${vote}.`}
     }
@@ -55,11 +53,7 @@ export const voteEdit: CAHandler<{message?: string, labels?: string[], params: {
         await deleteRecords({ctx, agent, uris: accepts.map(a => a.uri), atproto: true})
     }
 
-    console.log("deleted previous votes")
-
     await updateTopicCurrentVersion(ctx, agent, id)
-
-    console.log("updated current version")
 
     return {}
 }
@@ -81,23 +75,18 @@ export async function createTopicVote(ctx: AppContext, agent: SessionAgent, topi
         repo: agent.did
     })
 
-    let {updates, tags} = await processCreate(ctx, {
-        did: agent.did,
+    let updates = await processCreate(ctx, {
         uri: data.uri,
-        cid: data.cid,
-        rkey: getRkeyFromUri(data.uri),
-        collection: getCollectionFromUri(data.uri),
-        record
-    })
+        cid: data.cid
+    }, record)
 
     await ctx.db.$transaction(updates)
-    // await revalidateTags(Array.from(tags))
 
     return {}
 }
 
 export const cancelEditVote: CAHandler<{params: {id: string, rkey: string}}> = async (ctx: AppContext, agent: SessionAgent, {params}) => {
-    const {id, rkey} = params
+    const {rkey} = params
     const uri = getUri(agent.did, "ar.cabildoabierto.wiki.vote", rkey)
     return await deleteRecords({ctx, agent, uris: [uri], atproto: true})
 }

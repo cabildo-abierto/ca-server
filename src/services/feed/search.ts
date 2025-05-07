@@ -1,7 +1,8 @@
 import {cleanText} from "#/utils/strings";
 import {FeedViewContent} from "#/lex-server/types/ar/cabildoabierto/feed/defs";
-import {SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
+import {CAHandler} from "#/utils/handler";
+import {FeedPipelineProps, getFeed, GetSkeletonProps} from "#/services/feed/feed";
 
 
 export async function getFullTopicList(ctx: AppContext){
@@ -27,43 +28,42 @@ export async function getFullTopicList(ctx: AppContext){
 }
 
 
-export async function searchContents(ctx: AppContext, agent: SessionAgent, q: string) : Promise<{feed?: FeedViewContent[], error?: string}> {
-    if(q.length == 0) return {feed: []}
+const getSearchContentsSkeleton: (q: string) => GetSkeletonProps = (q) => async (ctx, agent, data) => {
+    // solo los posts tienen atributo text en content, el resto suelen usar blobs
+    const postUris: {uri: string}[] = await ctx.db.$queryRaw`
+      SELECT "uri"
+      FROM "Content"
+      WHERE to_tsvector('simple', immutable_unaccent("text")) @@ plainto_tsquery('simple', immutable_unaccent(${q}))
+      ORDER BY ts_rank(to_tsvector('simple', immutable_unaccent("text")), plainto_tsquery('simple', immutable_unaccent(${q}))) DESC
+      LIMIT 10
+    `;
+    const articleUris: {uri: string}[] = await ctx.db.$queryRaw`
+      SELECT "uri"
+      FROM "Article"
+      WHERE to_tsvector('simple', immutable_unaccent("title")) @@ plainto_tsquery('simple', immutable_unaccent(${q}))
+      ORDER BY ts_rank(to_tsvector('simple', immutable_unaccent("title")), plainto_tsquery('simple', immutable_unaccent(${q}))) DESC
+      LIMIT 10
+    `;
+
+    const res: string[] = []
+    let i = 0
+    while(i < postUris.length || i < articleUris.length){
+        if(i < postUris.length) res.push(postUris[i].uri)
+        if(i < articleUris.length) res.push(articleUris[i].uri)
+        i++
+    }
+    return res.map(u => ({post: u}))
+}
+
+
+export const searchContents: CAHandler<{params: {q: string}}, FeedViewContent[]> = async (ctx, agent, {params}) => {
+    let {q} = params
+    if(q.length == 0) return {data: []}
     q = cleanText(q)
 
-    // TO DO
-    return {feed: []}
-    /*let feed: FeedContentProps[] = await ctx.db.record.findMany({
-        select: enDiscusionQuery,
-        where: {
-            collection: {
-                in: ["ar.com.cabildoabierto.quotePost", "ar.com.cabildoabierto.article", "app.bsky.feed.post"]
-            },
-            author: {
-                inCA: true
-            }
-        }
-    })
+    const pipeline: FeedPipelineProps = {
+        getSkeleton: getSearchContentsSkeleton(q),
+    }
 
-    feed = feed.filter((c: FeedContentProps) => {
-        if(c.collection == "app.bsky.feed.post"){
-            if(!(c as FastPostProps).content){
-                return false
-            }
-            const text = cleanText((c as FastPostProps).content.text)
-            return text.includes(q)
-        } else if(c.collection == "ar.com.cabildoabierto.article"){
-            const text = cleanText((c as ArticleProps).content.article.title)
-            return text.includes(q)
-        } else {
-            return false
-        }
-    })
-
-    feed = feed.slice(0, 50)
-
-    const engagement = await getUserEngagement(feed, did)
-    feed = addCountersToFeed(feed, engagement)
-
-    return {feed}*/
+    return getFeed({ctx, agent, pipeline})
 }

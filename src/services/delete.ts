@@ -125,7 +125,7 @@ export async function deleteRecords({ctx, agent, uris, atproto}: { ctx: AppConte
             }),
             ctx.db.dataBlock.deleteMany({
                 where: {
-                    uri: {
+                    datasetId: {
                         in: uris
                     }
                 }

@@ -4,7 +4,6 @@ import {getFeed} from "#/services/feed/feed";
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
 import {creationDateSortKey} from "#/services/feed/utils";
-import {getTopic} from "#/services/topic/topics";
 import {hydrateFeedViewContent} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {isNotFoundPost} from "#/lex-server/types/app/bsky/feed/defs";

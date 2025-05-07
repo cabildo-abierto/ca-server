@@ -9,36 +9,16 @@ import {
 import {FeedSkeleton} from "#/services/feed/feed";
 import {removeNullValues, unique} from "#/utils/arrays";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
-import {postUris, topicVersionUris} from "#/utils/uri";
+import {articleUris, getCollectionFromUri, getDidFromUri, isArticle, postUris, topicVersionUris} from "#/utils/uri";
 import {AppBskyEmbedRecord} from "@atproto/api";
 import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
 import {TopicQueryResultBasic} from "#/services/topic/topics";
-import {authorQuery, logTimes, reactionsQuery} from "#/utils/utils";
-import { FeedViewPost, isPostView, PostView } from "@atproto/api/src/client/types/app/bsky/feed/defs";
+import {authorQuery, logTimes, reactionsQuery, recordQuery} from "#/utils/utils";
+import { FeedViewPost, isPostView, PostView } from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {fetchTextBlobs} from "#/services/blob";
+import { Prisma } from "@prisma/client";
 
 
-const hydrateFeedQuery = {
-    uri: true,
-    cid: true,
-    createdAt: true,
-    ...authorQuery,
-    ...reactionsQuery,
-    record: true,
-    enDiscusion: true,
-    content: {
-        select: {
-            text: true,
-            format: true,
-            textBlobId: true,
-            article: {
-                select: {
-                    title: true
-                }
-            }
-        }
-    }
-}
 
 
 export type FeedElementQueryResult = {
@@ -61,13 +41,53 @@ export type FeedElementQueryResult = {
     uniqueViewsCount: number | null
     content: {
         text: string | null
-        textBlobId: string | null
-        format: string | null
-        article: {
+        textBlobId?: string | null
+        format?: string | null
+        article?: {
             title: string
+        } | null
+        topicVersion?: {
+            props: Prisma.JsonValue | null
+            topicId: string
         } | null
     } | null
     enDiscusion: boolean | null
+}
+
+
+export type DatasetQueryResult = {
+    uri: string
+    cid: string | null
+    createdAt: Date | string,
+    record: string | null
+    author: {
+        did: string
+        handle: string | null
+        displayName: string | null
+        avatar: string | null
+        CAProfileUri: string | null
+    }
+    dataset: {
+        title: string
+        columns: string[]
+        dataBlocks: {
+            blob: {
+                cid: string
+            } | null
+            format: string | null
+        }[]
+    } | null
+}
+
+
+export type TopicMentionedProps = {
+    referencedTopic: {
+        id: string
+        currentVersion: {
+            props: Prisma.JsonValue
+        } | null
+    }
+    count: number
 }
 
 
@@ -86,6 +106,9 @@ export type HydrationData = {
     topicsByUri?: Map<string, TopicQueryResultBasic>
     topicsById?: Map<string, TopicQueryResultBasic>
     textBlobs?: Map<string, string>
+    datasets?: Map<string, DatasetQueryResult>
+    datasetContents?: Map<string, string[]>
+    topicsMentioned?: Map<string, TopicMentionedProps[]>
 }
 
 
@@ -95,7 +118,7 @@ export function getBlobKey(blob: BlobRef) {
 
 
 export function blobRefsFromContents(contents: {
-    content: { textBlobId: string | null } | null,
+    content?: { textBlobId?: string | null } | null,
     author: { did: string }
 }[]) {
     const blobRefs: { cid: string, authorId: string }[] = contents
@@ -133,31 +156,95 @@ export class Dataplane {
         uris = uris.filter(u => !this.data.caContents?.has(u))
         if (uris.length == 0) return
 
-        /*const caContentKey = (u: string) => "ca-feed-query:" + u
+        const posts = postUris(uris)
+        const articles = articleUris(uris)
+        const topicVersions = topicVersionUris(uris)
 
-        const redisRes = await this.ctx.redis.mGet(uris.map(caContentKey))
-        const redisMap = new Map(range(uris.length).map(i => {
-            if (redisRes[i] == null) return null
-            return [uris[i], JSON.parse(redisRes[i])] as [string, FeedElementQueryResult]
-        }).filter(x => x != null))
-
-        this.data.caContents = joinMaps(this.data.caContents, redisMap)
-
-        uris = uris.filter(u => !this.data.caContents?.has(u))
-        if (uris.length == 0) return*/
-
-        const res = await this.ctx.db.record.findMany({
-            select: {
-                ...hydrateFeedQuery,
-            },
-            where: {
-                uri: {
-                    in: uris
+        const [postContents, articleContents, topicVersionContents] = await Promise.all([
+            posts.length > 0 ? this.ctx.db.record.findMany({
+                select: {
+                    uri: true,
+                    cid: true,
+                    createdAt: true,
+                    ...authorQuery,
+                    ...reactionsQuery,
+                    record: true,
+                    enDiscusion: true,
+                    content: {
+                        select: {
+                            text: true
+                        }
+                    }
+                },
+                where: {
+                    uri: {
+                        in: posts
+                    }
                 }
-            }
-        })
+            }) : [],
+            articles.length > 0 ? this.ctx.db.record.findMany({
+                select: {
+                    uri: true,
+                    cid: true,
+                    createdAt: true,
+                    ...authorQuery,
+                    ...reactionsQuery,
+                    record: true,
+                    enDiscusion: true,
+                    content: {
+                        select: {
+                            text: true,
+                            format: true,
+                            textBlobId: true,
+                            article: {
+                                select: {
+                                    title: true
+                                }
+                            }
+                        }
+                    }
+                },
+                where: {
+                    uri: {
+                        in: articles
+                    }
+                }
+            }) : [],
+            topicVersions.length > 0 ? this.ctx.db.record.findMany({
+                select: {
+                    uri: true,
+                    cid: true,
+                    createdAt: true,
+                    ...authorQuery,
+                    ...reactionsQuery,
+                    record: true,
+                    enDiscusion: true,
+                    content: {
+                        select: {
+                            text: true,
+                            format: true,
+                            textBlobId: true,
+                            topicVersion: {
+                                select: {
+                                    props: true,
+                                    topicId: true
+                                }
+                            }
+                        }
+                    }
+                },
+                where: {
+                    uri: {
+                        in: topicVersions
+                    }
+                }
+            }) : []
+        ])
 
         let contents: FeedElementQueryResult[] = []
+
+        const res = [...postContents, ...articleContents, ...topicVersionContents]
+
         res.forEach(r => {
             if (r.cid && r.author.handle) {
                 contents.push({
@@ -175,12 +262,6 @@ export class Dataplane {
             contents.map(c => [c.uri, c])
         )
         this.data.caContents = joinMaps(this.data.caContents, m)
-
-        /*const pipeline = this.ctx.ioredis.pipeline();
-        contents.forEach((c) => {
-            pipeline.set(caContentKey(c.uri), JSON.stringify(c), 'EX', redisCacheTTL);
-        })
-        await pipeline.exec()*/
     }
 
     async fetchTextBlobs(blobs: BlobRef[]) {
@@ -370,6 +451,7 @@ export class Dataplane {
             postViews = results.map(r => r.data.posts).reduce((acc, cur) => [...acc, ...cur])
         } catch (err) {
             console.log("Error fetching posts", err)
+            console.log("uris", uris)
             return
         }
 
@@ -445,12 +527,17 @@ export class Dataplane {
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
         const expanded = await this.expandUrisWithReplies([skeleton.post])
+        const c = getCollectionFromUri(skeleton.post)
 
         const uris = [
             ...(skeleton.replies ? skeleton.replies.map(({post}) => post) : []),
             ...expanded
         ]
-        await this.fetchPostAndArticleViewsHydrationData(uris)
+
+        await Promise.all([
+            this.fetchPostAndArticleViewsHydrationData(uris),
+            isArticle(c) ? this.fetchTopicsMentioned(skeleton.post) : null
+        ])
     }
 
     storeFeedViewPosts(feed: FeedViewPost[]){
@@ -468,5 +555,87 @@ export class Dataplane {
         })
 
         this.data.bskyPosts = joinMaps(this.data.bskyPosts, m)
+    }
+
+    async fetchDatasetsHydrationData(uris: string[]) {
+        uris = uris.filter(u => !this.data.datasets?.has(u))
+        if(uris.length == 0) return
+        let datasets: DatasetQueryResult[] = await this.ctx.db.record.findMany({
+            select: {
+                ...recordQuery,
+                dataset: {
+                    select: {
+                        title: true,
+                        columns: true,
+                        description: true,
+                        dataBlocks: {
+                            select: {
+                                blob: {
+                                    select: {
+                                        cid: true,
+                                        authorId: true
+                                    }
+                                },
+                                format: true
+                            }
+                        }
+                    }
+                }
+            },
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        })
+        this.data.datasets = joinMaps(this.data.datasets,
+            new Map(datasets.map(d => [d.uri, d]))
+        )
+    }
+
+    async fetchDatasetContents(uri: string){
+        if(this.data.datasetContents?.has(uri)) return
+
+        await this.fetchDatasetsHydrationData([uri])
+
+        const d = this.data.datasets?.get(uri)
+        if(!d || !d.dataset) return
+
+        const authorId = getDidFromUri(uri)
+        const blocks = d.dataset.dataBlocks
+        const blobs: BlobRef[] = blocks
+            .map(b => b.blob)
+            .filter(b => b != null)
+            .filter(b => b.cid != null)
+            .map(b => ({...b, authorId}))
+
+        const contents = (await fetchTextBlobs(this.ctx, blobs)).filter(c => c != null)
+
+        if(!this.data.datasetContents) this.data.datasetContents = new Map()
+        this.data.datasetContents.set(uri, contents)
+    }
+
+
+    async fetchTopicsMentioned(uri: string){
+        const topics: TopicMentionedProps[] = await this.ctx.db.reference.findMany({
+            select: {
+                referencedTopic: {
+                    select: {
+                        id: true,
+                        currentVersion: {
+                            select: {
+                                props: true
+                            }
+                        }
+                    }
+                },
+                count: true
+            },
+            where: {
+                referencingContentId: uri
+            }
+        })
+        if(!this.data.topicsMentioned) this.data.topicsMentioned = new Map()
+        this.data.topicsMentioned.set(uri, topics)
     }
 }

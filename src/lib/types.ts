@@ -1,22 +1,6 @@
 import {EditorStatus} from "@prisma/client";
-import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
 import {ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 
-
-export type Collection =
-    PostCollection |
-    "ar.com.cabildoabierto.article" |
-    "ar.com.cabildoabierto.topic" |
-    "ar.com.cabildoabierto.vote" |
-    "ar.com.cabildoabierto.visualization" |
-    "ar.com.cabildoabierto.dataset" |
-    "ar.com.cabildoabierto.dataBlock" |
-    "app.bsky.feed.repost" |
-    "app.bsky.feed.like"
-
-export type PostCollection =
-    "ar.com.cabildoabierto.quotePost" |
-    "app.bsky.feed.post"
 
 
 export type ATProtoStrongRef = {
@@ -55,25 +39,6 @@ export type Account = {
 }
 
 
-export type RecordProps = {
-    uri: string
-    cid: string
-    collection: Collection
-    createdAt: Date
-    rkey: string
-    author: {
-        did: string
-        handle: string
-        displayName?: string
-        avatar?: string
-        inCA?: boolean
-    }
-    enDiscusion?: {
-        uri: string
-    }
-}
-
-
 export type TopicsGraph = {
     nodeIds: string[]
     edges: {x: string, y: string}[]
@@ -106,16 +71,6 @@ export type SubscriptionProps = {
 }
 
 
-export type MessageProps = {
-    createdAt: Date,
-    id: string,
-    text: string,
-    fromUserId: string,
-    toUserId: string,
-    seen: boolean
-}
-
-
 export type UserStats = {
     posts: number
     entityEdits: number
@@ -144,20 +99,6 @@ export type FilterProps = {
     op: string
     column: string
 }
-
-
-export type VisualizationProps = RecordProps & {
-    visualization: {
-        spec: string
-        dataset?: {
-            uri: string
-            dataset: {
-                title: string
-            }
-        }
-        previewBlobCid?: string
-    }
-} & {collection: "ar.com.cabildoabierto.visualization"}
 
 
 export type JetstreamEvent = {

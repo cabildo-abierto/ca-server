@@ -161,7 +161,8 @@
         "cid",
         "author",
         "record",
-        "indexedAt"
+        "indexedAt",
+        "title"
       ],
       "properties": {
         "uri": {
@@ -171,6 +172,9 @@
         "cid": {
           "type": "string",
           "format": "cid"
+        },
+        "title": {
+          "type": "string"
         },
         "author": {
           "type": "ref",
@@ -241,7 +245,8 @@
         "cid",
         "author",
         "record",
-        "indexedAt"
+        "indexedAt",
+        "title"
       ],
       "properties": {
         "uri": {
@@ -255,6 +260,9 @@
         "author": {
           "type": "ref",
           "ref": "ar.cabildoabierto.actor.defs#profileViewBasic"
+        },
+        "title": {
+          "type": "string"
         },
         "text": {
           "type": "string",
@@ -306,9 +314,31 @@
             "ref": "com.atproto.label.defs#label"
           }
         },
+        "topicsMentioned": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#topicMention"
+          }
+        },
         "threadgate": {
           "type": "ref",
           "ref": "app.bsky.feed.defs#threadgateView"
+        }
+      }
+    },
+    "topicMention": {
+      "type": "object",
+      "required": ["title", "count", "id"],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
         }
       }
     }

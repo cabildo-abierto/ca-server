@@ -133,7 +133,7 @@ export const getCategoriesGraph: CAHandler<{}, TopicsGraph> = async (ctx, agent,
             edges: links.map(l => ({
                 x: l.idCategoryA,
                 y: l.idCategoryB
-            })),
+            })).filter(e => e.x != e.y),
             nodeLabels: Array.from(nodeLabels.entries()).map(([a, b]) => ({
                 id: a, label: b
             }))
@@ -182,6 +182,7 @@ export const getCategoryGraph: CAHandler<{params: {c: string}}, TopicsGraph> = a
                 if (!v) continue
                 const xId = v.topicId
                 if (!topicIdsSet.has(xId)) continue
+                if(xId == yId) continue
 
                 edges.push({
                     x: xId,

@@ -1,7 +1,7 @@
 import {ThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
-import {getCollectionFromUri, getUri} from "#/utils/uri";
+import {getCollectionFromUri, getUri, isArticle, isPost} from "#/utils/uri";
 import {FeedSkeleton} from "#/services/feed/feed";
 import {
     hydrateThreadViewContent,
@@ -73,9 +73,9 @@ export async function getThreadRepliesSkeletonForArticle(ctx: AppContext, agent:
 export async function getThreadRepliesSkeleton(ctx: AppContext, agent: SessionAgent, uri: string): Promise<FeedSkeleton> {
     const collection = getCollectionFromUri(uri)
 
-    if(collection == "app.bsky.feed.post"){
+    if(isPost(collection)){
         return await getThreadRepliesSkeletonForPost(ctx, agent, uri)
-    } else if(collection == "ar.cabildoabierto.feed.article"){
+    } else if(isArticle(collection)){
         return await getThreadRepliesSkeletonForArticle(ctx, agent, uri)
     } else {
         throw Error("Replies skeleton not implemented for:" + collection)

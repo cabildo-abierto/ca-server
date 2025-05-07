@@ -1,4 +1,3 @@
-import {splitUri} from "#/utils/uri";
 import {processCreate} from "#/services/sync/process-event";
 import {uploadStringBlob} from "#/services/blob";
 import {CAHandler} from "#/utils/handler";
@@ -36,16 +35,11 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
         })
 
         const {uri, cid} = data
-        const {updates} = await processCreate(ctx, {
-            uri,
-            cid,
-            ...splitUri(uri),
-            record
-        })
+        const updates = await processCreate(ctx, {uri, cid}, record)
 
         await ctx.db.$transaction(updates)
         return {data: {}}
-    } catch (err){
+    } catch (err) {
         console.error("Error", err)
         return {error: "Ocurrió un error al publicar el artículo."}
     }

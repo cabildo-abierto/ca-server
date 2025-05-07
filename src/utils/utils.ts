@@ -21,6 +21,7 @@ export const recordQuery = {
     rkey: true,
     collection: true,
     createdAt: true,
+    record: true,
     ...authorQuery
 }
 
@@ -50,9 +51,6 @@ export const datasetQuery = {
         description: true,
         dataBlocks: {
             select: {
-                record: {
-                    select: recordQuery
-                },
                 format: true,
                 blob: {
                     select: {

@@ -40,6 +40,7 @@ export interface DatasetVisualization {
     | $Typed<Barplot>
     | $Typed<Scatterplot>
     | $Typed<Histogram>
+    | $Typed<Lines>
     | { $type: string }
   title?: string
 }
@@ -128,4 +129,21 @@ export function isHistogram<V>(v: V) {
 
 export function validateHistogram<V>(v: V) {
   return validate<Histogram & V>(v, id, hashHistogram)
+}
+
+export interface Lines {
+  $type?: 'ar.cabildoabierto.embed.visualization#lines'
+  xlabel?: string
+  ylabel?: string
+  normalized?: boolean
+}
+
+const hashLines = 'lines'
+
+export function isLines<V>(v: V) {
+  return is$typed(v, id, hashLines)
+}
+
+export function validateLines<V>(v: V) {
+  return validate<Lines & V>(v, id, hashLines)
 }

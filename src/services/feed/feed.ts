@@ -36,7 +36,7 @@ export type GetSkeletonProps = (ctx: AppContext, agent: SessionAgent, data: Data
 
 export type FeedPipelineProps = {
     getSkeleton: GetSkeletonProps
-    sortKey: (a: FeedViewContent) => number[]
+    sortKey?: (a: FeedViewContent) => number[]
     filter?: (feed: FeedViewContent[]) => FeedViewContent[]
 }
 
@@ -58,7 +58,9 @@ export const getFeed = async ({ctx, agent, pipeline}: GetFeedProps): CAHandlerOu
     let feed: FeedViewContent[] = await hydrateFeed(skeleton, data)
     const t3 = Date.now()
 
-    feed = sortByKey(feed, pipeline.sortKey, listOrderDesc)
+    if(pipeline.sortKey){
+        feed = sortByKey(feed, pipeline.sortKey, listOrderDesc)
+    }
 
     if(pipeline.filter){
         feed = pipeline.filter(feed)

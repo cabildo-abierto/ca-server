@@ -155,7 +155,6 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
         return {error: "El código ya fue usado."}
     }
 
-    console.log("Assigning code to user", did, inviteCode)
     const updates = [
         ctx.db.inviteCode.update({
             data: {

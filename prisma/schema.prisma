@@ -108,7 +108,7 @@ model Topic {
   categories         TopicToCategory[]
   lastSynonymsChange DateTime?
   popularityScore    Int?
-  lastEdit           DateTime?          @updatedAt
+  lastEdit           DateTime?         @updatedAt
 }
 
 model TopicVersion {
@@ -170,7 +170,6 @@ model Record {
   topicReject         TopicReject?
   follow              Follow?
   dataset             Dataset?
-  dataBlock           DataBlock?
   visualization       Visualization?
   visualizationsUsing Visualization[] @relation("visualizationUsesDataset")
   embeddedIn          Record?         @relation("embeddings", fields: [uri], references: [uri])
@@ -191,7 +190,7 @@ model Record {
   secondToLastInThreadId String? @unique
   secondToLastInThread   Post?   @relation("secondToLastInThread", fields: [secondToLastInThreadId], references: [uri])
 
-  enDiscusion         Boolean   @default(false)
+  enDiscusion Boolean @default(false)
 }
 
 model Content {
@@ -274,24 +273,23 @@ model Dataset {
   description String?
 }
 
+model DataBlock {
+  cid       String  @id
+  blob      Blob   @relation(fields: [cid], references: [cid])
+  datasetId String
+  dataset   Dataset @relation(fields: [datasetId], references: [uri])
+  format    String?
+}
+
 model Blob {
-  cid      String @id @unique
+  cid      String @id
+  dataBlock DataBlock?
+
   author   User   @relation(fields: [authorId], references: [did])
   authorId String
 
-  dataBlock DataBlock?
   contentOf Content[]
   previewOf Visualization[]
-}
-
-model DataBlock {
-  uri       String   @id
-  record    Record   @relation(fields: [uri], references: [uri])
-  dataset   Dataset? @relation(fields: [datasetId], references: [uri])
-  datasetId String?
-  format    String
-  blob      Blob?    @relation(fields: [blobId], references: [cid])
-  blobId    String?  @unique
 }
 
 model View {

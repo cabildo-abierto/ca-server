@@ -5,7 +5,6 @@ import {CommitEvent, JetstreamEvent} from "#/lib/types";
 import {getUri} from "#/utils/uri";
 import {deleteRecords} from "#/services/delete";
 import {Record as CAProfileRecord} from "#/lex-api/types/ar/cabildoabierto/actor/caProfile"
-import {Record as DataBlockRecord} from "#/lex-api/types/ar/cabildoabierto/data/dataBlock"
 import {Record as DatasetRecord} from "#/lex-api/types/ar/cabildoabierto/data/dataset"
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
@@ -90,7 +89,6 @@ function bannerUrl(did: string, cid: string) {
 
 
 export const processCAProfile: RecordProcessor<CAProfileRecord> = (ctx, ref, r) => {
-    console.log("Processing CAProfile", ref.uri, ref.cid)
     return [
         ctx.db.user.update({
             data: {
@@ -363,10 +361,10 @@ export const processArticle: RecordProcessor<ArticleRecord> = async (ctx, ref, r
 export const processTopicVersion: RecordProcessor<TopicVersionRecord> = async (ctx, ref, r) => {
     const content: ContentProps = {
         format: r.format,
-        textBlob: {
+        textBlob: r.text ? {
             cid: r.text.ref.toString(),
             authorId: getDidFromUri(ref.uri)
-        }
+        } : undefined
     }
 
     let updates: any[] = await processContent(ctx, ref, content)
@@ -456,49 +454,35 @@ const processDataset: RecordProcessor<DatasetRecord> = (ctx, ref, r) => {
         title: r.name,
         description: r.description ? r.description : undefined
     }
+
+    const authorId = getDidFromUri(ref.uri)
+
+    const blobs = r.data?.map(b =>
+        ctx.db.blob.upsert({
+            update: {cid: b.blob.ref.toString(), authorId},
+            create: {cid: b.blob.ref.toString(), authorId},
+            where: {cid: b.blob.ref.toString()}
+        })
+    )
+
+    const blocks = r.data?.map(b =>
+        ctx.db.dataBlock.upsert({
+            update: { cid: b.blob.ref.toString(), datasetId: ref.uri, format: b.format },
+            create: { cid: b.blob.ref.toString(), datasetId: ref.uri, format: b.format },
+            where: {cid: b.blob.ref.toString()}
+        })
+    );
+
+    console.log("Dataset to db", blobs?.length, blocks?.length)
+
     return [
         ctx.db.dataset.upsert({
             create: dataset,
             update: dataset,
             where: {uri: ref.uri}
-        })
-    ]
-}
-
-
-const processDataBlock: RecordProcessor<DataBlockRecord> = (ctx, ref, r) => {
-    const blob = {
-        cid: r.data.ref.toString(),
-        authorId: getDidFromUri(ref.uri)
-    }
-    const block = {
-        uri: ref.uri,
-        datasetId: r.dataset,
-        format: r.format,
-        blobId: blob.cid
-    }
-    const dirtyDataset = {
-        columns: [], // un dataset sin columnas es inválido, lo usamos como placeholder
-        title: "",
-        uri: r.dataset
-    }
-    return [
-        ...updatesForDirtyRecord(ctx, {uri: r.dataset}),
-        ctx.db.dataset.upsert({
-            create: dirtyDataset,
-            update: {},
-            where: {uri: r.dataset}
         }),
-        ctx.db.blob.upsert({
-            create: blob,
-            update: blob,
-            where: {cid: blob.cid}
-        }),
-        ctx.db.dataBlock.upsert({
-            create: block,
-            update: block,
-            where: {uri: ref.uri}
-        })
+        ...blobs ?? [],
+        ...blocks ?? []
     ]
 }
 
@@ -554,7 +538,6 @@ const recordProcessors = new Map<string, RecordProcessor<any>>([
     ["ar.com.cabildoabierto.profile", processCAProfile],
     ["app.bsky.actor.profile", processBskyProfile],
     ["ar.cabildoabierto.data.dataset", processDataset],
-    ["ar.cabildoabierto.data.dataBlock", processDataBlock],
     ["ar.cabildoabierto.wiki.topicVersion", processTopicVersion],
     ["ar.cabildoabierto.wiki.vote", processTopicVote],
     ["ar.com.cabildoabierto.topic", processTopicVersion]

@@ -16,8 +16,6 @@ import {
     SkeletonFeedPost
 } from "#/lex-server/types/app/bsky/feed/defs";
 import {FeedSkeleton} from "#/services/feed/feed";
-import {SessionAgent} from "#/utils/session-agent";
-import {AppContext} from "#/index";
 import {decompress} from "#/utils/compression";
 import {getAllText} from "#/services/topic/diff";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
@@ -31,7 +29,8 @@ import {creationDateSortKey} from "#/services/feed/utils";
 import {Dataplane, FeedElementQueryResult} from "#/services/hydration/dataplane";
 import {markdownToPlainText} from "#/utils/lexical/transforms";
 import {hydrateTopicViewBasicFromUri} from "#/services/topic/topics";
-import {TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {getTopicTitle} from "#/services/topic/utils";
 
 
 const queryResultToProfileViewBasic = (e: FeedElementQueryResult["author"]): CAProfileViewBasic | null => {
@@ -62,6 +61,8 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
     const e = data.data.caContents?.get(uri)
     if (!e) return {error: "Ocurrió un error al cargar el contenido."}
 
+    const topicsMentioned = data.data.topicsMentioned?.get(uri) ?? []
+
     const viewer = hydrateViewer(e.uri, data)
     const author = queryResultToProfileViewBasic(e.author)
     if(!author) return {error: "Ocurrió un error al cargar el contenido."}
@@ -73,13 +74,14 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
         text = e.content.text
     }
 
-    if(!text) return {error: "Ocurrió un error al cargar el contenido."}
+    if(!text || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
 
     return {
         data: {
             $type: "ar.cabildoabierto.feed.defs#fullArticleView",
             uri: e.uri,
             cid: e.cid,
+            title: e.content.article.title,
             text,
             format: e.content?.format ?? undefined,
             author,
@@ -89,7 +91,12 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
             repostCount: e._count.reposts,
             replyCount: e._count.replies,
             uniqueViewsCount: e.uniqueViewsCount ?? undefined,
-            viewer
+            viewer,
+            topicsMentioned: topicsMentioned.map(m => ({
+                count: m.count,
+                title: getTopicTitle(m.referencedTopic),
+                id: m.referencedTopic.id
+            }))
         }
     }
 }
@@ -113,7 +120,7 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
         text = e.content.text
     }
 
-    if(!text) return {error: "Ocurrió un error al cargar el contenido."}
+    if(!text || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
 
     const format = e.content?.format
     let summary = ""
@@ -129,6 +136,7 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
             $type: "ar.cabildoabierto.feed.defs#articleView",
             uri: e.uri,
             cid: e.cid,
+            title: e.content.article.title,
             summary: summary,
             summaryFormat: "plain-text",
             author,
@@ -159,13 +167,25 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
         }
         if(!text) return null
 
+        const collection = getCollectionFromUri(quotedContent)
+        let title: string | undefined
+        if(isArticle(collection)){
+            title = caData.content.article?.title
+        } else if(isTopicVersion(collection) && caData.content.topicVersion?.topicId){
+            title = getTopicTitle({
+                id: caData.content.topicVersion.topicId,
+                props: caData.content.topicVersion.props as unknown as TopicProp[]
+            })
+        }
+        if(!title) return null
+
         return {
             $type: "ar.cabildoabierto.embed.selectionQuote#view",
             start: embed.start,
             end: embed.end,
             quotedText: text,
             quotedTextFormat: caData.content.format ?? undefined,
-            quotedContentTitle: caData.content.article?.title,
+            quotedContentTitle: title,
             quotedContent,
             quotedContentAuthor: author
         }
@@ -286,15 +306,6 @@ export function hydrateFeedViewContent(e: SkeletonFeedPost, data: Dataplane): $T
             }
         }
     }
-}
-
-
-export type ArticleViewForSelectionQuote = {
-    text: string
-    format: string
-    author: CAProfileViewBasic
-    createdAt: Date
-    title: string
 }
 
 
