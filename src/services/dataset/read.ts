@@ -39,13 +39,13 @@ export async function getDatasetList(ctx: AppContext) {
 
 
 export const hydrateDatasetView = (uri: string, data: Dataplane): DatasetView | null => {
-    const d = data.data.datasets?.get(uri)
+    const d = data.datasets.get(uri)
     if(!d || !d.dataset) return null
 
     const basicView = hydrateDatasetViewBasic(uri, data)
     if(!basicView) return null
 
-    const content = data.data.datasetContents?.get(uri)
+    const content = data.datasetContents.get(uri)
 
     let rows: any[] = []
 
@@ -71,7 +71,7 @@ export const hydrateDatasetView = (uri: string, data: Dataplane): DatasetView | 
 
 
 export const hydrateDatasetViewBasic = (uri: string, data: Dataplane): DatasetViewBasic | null => {
-    const d = data.data.datasets?.get(uri)
+    const d = data.datasets?.get(uri)
     if(!d) return null
 
     const author = dbUserToProfileViewBasic(d.author)

@@ -3,17 +3,17 @@ import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {unique} from "#/utils/arrays";
-import {getCADataForUsers} from "#/services/user/users";
 import {cleanText} from "#/utils/strings";
 import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import { Prisma } from "@prisma/client";
 import {AppContext} from "#/index";
 import { JsonObject } from "@prisma/client/runtime/library";
-import {hydrateTopicViewBasicFromTopicId, topicQueryResultToTopicViewBasic} from "#/services/topic/topics";
-import {Dataplane, HydrationData} from "#/services/hydration/dataplane";
+import {hydrateTopicViewBasicFromTopicId} from "#/services/topic/topics";
+import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
+import {SessionAgent} from "#/utils/session-agent";
 
 
-export async function searchUsersInCA(ctx: AppContext, query: string): Promise<CAProfileViewBasic[]> {
+export async function searchUsersInCA(ctx: AppContext, query: string, dataplane: Dataplane): Promise<string[]> {
     let caUsers: {did: string, handle: string, displayName?: string, avatar?: string, CAProfileUri?: string}[] = (await ctx.db.$queryRaw`
         SELECT 
             u."did",
@@ -25,10 +25,30 @@ export async function searchUsersInCA(ctx: AppContext, query: string): Promise<C
         WHERE u."displayName" ILIKE '%' || ${query} || '%'
            OR u."handle" ILIKE '%' || ${query} || '%'
     `)
-    return caUsers.map(u => ({
+
+    const views = caUsers.map(u => ({
         ...u,
         caProfile: u.CAProfileUri
     }))
+
+    dataplane.caUsers = joinMaps(
+        dataplane.caUsers,
+        new Map<string, CAProfileViewBasic>(views.map(a => [a.did, a]))
+    )
+
+    return views.map(a => a.did)
+}
+
+
+export async function searchUsersInBsky(agent: SessionAgent, query: string, dataplane: Dataplane): Promise<string[]> {
+    const {data} = await agent.bsky.searchActorsTypeahead({q: query})
+
+    dataplane.bskyUsers = joinMaps(
+        dataplane.bskyUsers,
+        new Map<string, ProfileViewBasic>(data.actors.map(a => [a.did, a]))
+    )
+
+    return data.actors.map(a => a.did)
 }
 
 
@@ -36,84 +56,28 @@ export const searchUsers: CAHandler<{
     params: { query: string }
 }, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
     const {query} = params
-    const {data} = await agent.bsky.searchActorsTypeahead({q: query})
-
-    let [caSearchResults, caUsers] = await Promise.all([
-        searchUsersInCA(ctx, query),
-        getCADataForUsers(ctx, data.actors.map(a => a.did))
-    ])
-
-    caUsers = [...caSearchResults, ...caUsers]
-
-    const hData: HydrationData = {
-        bskyUsers: new Map<string, ProfileViewBasic>(data.actors.map(a => [a.did, a])),
-        caUsers: new Map<string, CAProfileViewBasic>(caUsers.map(a => [a.did, a]))
-    }
-
-    const userList = unique([
-        ...caUsers.map(u => u.did),
-        ...data.actors.map(u => u.did)
-    ])
 
     const dataplane = new Dataplane(ctx, agent)
-    dataplane.data = hData // TO DO: Refactor
+
+    let [caSearchResults, bskySearchResults] = await Promise.all([
+        searchUsersInCA(ctx, query, dataplane),
+        searchUsersInBsky(agent, query, dataplane)
+    ])
+
+    const userList = unique([
+        ...caSearchResults,
+        ...bskySearchResults
+    ])
+
+    await dataplane.fetchUsersHydrationData(userList)
 
     const users = userList.map(did => hydrateProfileViewBasic(did, dataplane))
 
     return {data: users.filter(x => x != null)}
 }
 
-
-export function isJsonArray(value: Prisma.JsonValue): value is Prisma.JsonArray {
-    return Array.isArray(value);
-}
-
 export function isJsonObject(value: Prisma.JsonValue): value is Prisma.JsonObject {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-
-export function isJsonArrayOfObjects(value: Prisma.JsonValue): value is Prisma.JsonObject[] {
-    return (
-        Array.isArray(value) &&
-        value.every(
-            (item) =>
-                typeof item === 'object' &&
-                item !== null &&
-                !Array.isArray(item)
-        )
-    );
-}
-
-
-export function dbPropToTopicProp(p: JsonObject): TopicProp {
-    if(p.value && isJsonObject(p.value) && p.value.$type == "ar.cabildoabierto.wiki.topicVersion#stringProps" +
-        ""){
-        return {
-            name: p.name as string,
-            value: {
-                $type: "ar.cabildoabierto.wiki.topicVersion#stringProp",
-                value: p.value.value as string
-            }
-        }
-    } else if(p.value && isJsonObject(p.value) && p.value.$type == "ar.cabildoabierto.wiki.topicVersion#stringListProp"){
-        return {
-            name: p.name as string,
-            value: {
-                $type: "ar.cabildoabierto.wiki.topicVersion#stringProp",
-                value: p.value.value as string
-            }
-        }
-    } else if(p.value && isJsonObject(p.value) && p.value.$type){
-        return {
-            name: p.name as string,
-            value: {
-                $type: p.value.$type as string
-            }
-        }
-    } else {
-        throw Error("Propiedad inválida:", p)
-    }
 }
 
 

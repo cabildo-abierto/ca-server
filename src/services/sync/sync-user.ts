@@ -7,7 +7,6 @@ import {getUsers} from "#/services/user/users";
 import {UserRepo} from "#/lib/types";
 import {iterateAtpRepo} from "@atcute/car"
 import {getServiceEndpointForDid} from "#/services/blob";
-import {union} from "#/utils/arrays";
 import {getCollectionFromUri, shortCollectionToCollection} from "#/utils/uri";
 import {CAHandler} from "#/utils/handler";
 
@@ -137,12 +136,10 @@ export async function processRepo(ctx: AppContext, repo: UserRepo, did: string, 
     }
 
     let updates: any[] = []
-    let tags = new Set<string>()
     for(let i = 0; i < repo.length; i++){
         if(recordsReqUpdate == null || recordsReqUpdate.has(repo[i].uri)){
-            const r = await processCreate(ctx, repo[i])
-            updates = [...updates, ...r.updates]
-            union(tags, r.tags)
+            const r = await processCreate(ctx, {uri: repo[i].uri, cid: repo[i].cid}, repo[i].record)
+            updates = [...updates, ...r]
         }
     }
     const t1 = Date.now()

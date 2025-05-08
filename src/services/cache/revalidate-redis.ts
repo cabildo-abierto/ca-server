@@ -1,7 +1,7 @@
 import {AppContext} from "#/index";
 
 
-export const revalidateRedis = async (ctx: AppContext, keys: (string | string[])[]) => {
+/*export const revalidateRedis = async (ctx: AppContext, keys: (string | string[])[]) => {
     await ctx.redis.del(keys.map(k => Array.isArray(k) ? k.join(":") : k))
 }
 
@@ -25,4 +25,4 @@ async function deleteKeysByPrefix(ctx: AppContext, prefix: string) {
 
 export const revalidateRedisAll = async (ctx: AppContext) => {
     await deleteKeysByPrefix(ctx, "currentVersion:")
-}
+}*/

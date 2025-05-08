@@ -1,5 +1,5 @@
-import {SyncRecordProps} from "#/lib/types";
 import {decompress} from "#/utils/compression";
+import {UserRepoElement} from "#/lib/types";
 
 
 export const collectionsList = [
@@ -24,7 +24,7 @@ export const collectionsList = [
     "ar.cabildoabierto.feed.article"
 ]
 
-export function validRecord(r: SyncRecordProps){
+export function validRecord(r: UserRepoElement){
     if(!collectionsList.includes(r.collection)){
         return false
     }

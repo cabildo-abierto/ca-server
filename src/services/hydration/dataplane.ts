@@ -13,12 +13,10 @@ import {articleUris, getCollectionFromUri, getDidFromUri, isArticle, postUris, t
 import {AppBskyEmbedRecord} from "@atproto/api";
 import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
 import {TopicQueryResultBasic} from "#/services/topic/topics";
-import {authorQuery, logTimes, reactionsQuery, recordQuery} from "#/utils/utils";
+import {authorQuery, reactionsQuery, recordQuery} from "#/utils/utils";
 import { FeedViewPost, isPostView, PostView } from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {fetchTextBlobs} from "#/services/blob";
 import { Prisma } from "@prisma/client";
-
-
 
 
 export type FeedElementQueryResult = {
@@ -96,22 +94,6 @@ export function joinMaps<T>(a?: Map<string, T>, b?: Map<string, T>): Map<string,
 }
 
 
-export type HydrationData = {
-    caContents?: Map<string, FeedElementQueryResult>
-    bskyPosts?: Map<string, BskyPostView>
-    likes?: Map<string, string | null>
-    reposts?: Map<string, string | null>
-    bskyUsers?: Map<string, ProfileViewBasic>
-    caUsers?: Map<string, CAProfileViewBasic>
-    topicsByUri?: Map<string, TopicQueryResultBasic>
-    topicsById?: Map<string, TopicQueryResultBasic>
-    textBlobs?: Map<string, string>
-    datasets?: Map<string, DatasetQueryResult>
-    datasetContents?: Map<string, string[]>
-    topicsMentioned?: Map<string, TopicMentionedProps[]>
-}
-
-
 export function getBlobKey(blob: BlobRef) {
     return blob.cid + ":" + blob.authorId
 }
@@ -132,12 +114,34 @@ export function blobRefsFromContents(contents: {
 export class Dataplane {
     ctx: AppContext
     agent: SessionAgent
-    data: HydrationData
+    caContents: Map<string, FeedElementQueryResult>
+    bskyPosts: Map<string, BskyPostView>
+    likes: Map<string, string | null>
+    reposts: Map<string, string | null>
+    bskyUsers: Map<string, ProfileViewBasic>
+    caUsers: Map<string, CAProfileViewBasic>
+    topicsByUri: Map<string, TopicQueryResultBasic>
+    topicsById: Map<string, TopicQueryResultBasic>
+    textBlobs: Map<string, string>
+    datasets: Map<string, DatasetQueryResult>
+    datasetContents: Map<string, string[]>
+    topicsMentioned: Map<string, TopicMentionedProps[]>
 
     constructor(ctx: AppContext, agent: SessionAgent) {
         this.ctx = ctx
         this.agent = agent
-        this.data = {}
+        this.caContents = new Map()
+        this.bskyPosts = new Map()
+        this.likes = new Map()
+        this.reposts = new Map()
+        this.bskyUsers = new Map()
+        this.caUsers = new Map()
+        this.topicsByUri = new Map()
+        this.topicsById = new Map()
+        this.textBlobs = new Map()
+        this.datasets = new Map()
+        this.datasetContents = new Map()
+        this.topicsMentioned = new Map()
     }
 
     async fetchCAContentsAndBlobs(uris: string[]) {
@@ -145,15 +149,15 @@ export class Dataplane {
         await this.fetchCAContents(uris)
 
         const t2 = Date.now()
-        const contents = Array.from(this.data.caContents?.values() ?? [])
+        const contents = Array.from(this.caContents?.values() ?? [])
         const blobRefs = blobRefsFromContents(contents)
         await this.fetchTextBlobs(blobRefs)
         const t3 = Date.now()
-        logTimes("fetchCAContentsAndBlobs", [t1, t2, t3])
+        // logTimes("fetchCAContentsAndBlobs", [t1, t2, t3])
     }
 
     async fetchCAContents(uris: string[]) {
-        uris = uris.filter(u => !this.data.caContents?.has(u))
+        uris = uris.filter(u => !this.caContents?.has(u))
         if (uris.length == 0) return
 
         const posts = postUris(uris)
@@ -261,7 +265,7 @@ export class Dataplane {
         const m = new Map<string, FeedElementQueryResult>(
             contents.map(c => [c.uri, c])
         )
-        this.data.caContents = joinMaps(this.data.caContents, m)
+        this.caContents = joinMaps(this.caContents, m)
     }
 
     async fetchTextBlobs(blobs: BlobRef[]) {
@@ -270,7 +274,7 @@ export class Dataplane {
 
         const entries: [string, string | null][] = texts.map((t, i) => [keys[i], t])
         const m = removeNullValues(new Map<string, string | null>(entries))
-        this.data.textBlobs = joinMaps(this.data.textBlobs, m)
+        this.textBlobs = joinMaps(this.textBlobs, m)
     }
 
     async fetchPostAndArticleViewsHydrationData(uris: string[]) {
@@ -283,7 +287,7 @@ export class Dataplane {
     }
 
     async fetchTopicsBasicByUris(uris: string[]) {
-        uris = uris.filter(u => !this.data.topicsByUri?.has(u))
+        uris = uris.filter(u => !this.topicsByUri?.has(u))
 
         const t1 = Date.now()
 
@@ -319,7 +323,7 @@ export class Dataplane {
         })
 
         const t2 = Date.now()
-        logTimes("fetchTopicsBasicByUris", [t1, t2])
+        // logTimes("fetchTopicsBasicByUris", [t1, t2])
         const queryResults: { uri: string, topic: TopicQueryResultBasic }[] = []
 
         data.forEach(item => {
@@ -332,12 +336,12 @@ export class Dataplane {
         const mapByUri = new Map(queryResults.map(item => [item.uri, item.topic]))
         const mapById = new Map(queryResults.map(item => [item.topic.id, item.topic]))
 
-        this.data.topicsByUri = joinMaps(this.data.topicsByUri, mapByUri)
-        this.data.topicsById = joinMaps(this.data.topicsById, mapById)
+        this.topicsByUri = joinMaps(this.topicsByUri, mapByUri)
+        this.topicsById = joinMaps(this.topicsById, mapById)
     }
 
     async fetchTopicsBasicByIds(ids: string[]) {
-        ids = ids.filter(u => !this.data.topicsById?.has(u))
+        ids = ids.filter(u => !this.topicsById?.has(u))
 
         const data: TopicQueryResultBasic[] = await this.ctx.db.topic.findMany({
             select: {
@@ -366,7 +370,7 @@ export class Dataplane {
         })
 
         const mapById = new Map(data.map(item => [item.id, item]))
-        this.data.topicsById = joinMaps(this.data.topicsById, mapById)
+        this.topicsById = joinMaps(this.topicsById, mapById)
     }
 
     async expandUrisWithReplies(uris: string[]): Promise<string[]> {
@@ -386,7 +390,7 @@ export class Dataplane {
             })
         ])
 
-        const bskyPosts = uris.map(u => this.data.bskyPosts?.get(u)).filter(x => x != null)
+        const bskyPosts = uris.map(u => this.bskyPosts?.get(u)).filter(x => x != null)
 
         return unique([
             ...uris,
@@ -405,7 +409,7 @@ export class Dataplane {
         const t2 = Date.now()
         await this.fetchPostAndArticleViewsHydrationData(urisWithReplies)
         const t3 = Date.now()
-        logTimes("fetchFeedHydrationData", [t1, t2, t3])
+        // logTimes("fetchFeedHydrationData", [t1, t2, t3])
     }
 
 
@@ -436,7 +440,7 @@ export class Dataplane {
     }
 
     async fetchBskyPosts(uris: string[]) {
-        uris = uris.filter(u => !this.data.bskyPosts?.has(u))
+        uris = uris.filter(u => !this.bskyPosts?.has(u))
 
         const postsList = postUris(uris)
         if (postsList.length == 0) return
@@ -461,12 +465,12 @@ export class Dataplane {
 
         m = this.addEmbedsToPostsMap(m)
 
-        this.data.bskyPosts = joinMaps(this.data.bskyPosts, m)
+        this.bskyPosts = joinMaps(this.bskyPosts, m)
     }
 
     getFetchedBlob(blob: BlobRef): string | null {
         const key = getBlobKey(blob)
-        return this.data.textBlobs?.get(key) ?? null
+        return this.textBlobs?.get(key) ?? null
     }
 
     async fetchEngagement(uris: string[]) {
@@ -519,10 +523,10 @@ export class Dataplane {
             }
         })
 
-        this.data.likes = joinMaps(this.data.likes, likesMap)
-        this.data.reposts = joinMaps(this.data.reposts, repostsMap)
+        this.likes = joinMaps(this.likes, likesMap)
+        this.reposts = joinMaps(this.reposts, repostsMap)
         const t2 = Date.now()
-        logTimes("fetchEngagement", [t1, t2])
+        // logTimes("fetchEngagement", [t1, t2])
     }
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
@@ -554,11 +558,11 @@ export class Dataplane {
             }
         })
 
-        this.data.bskyPosts = joinMaps(this.data.bskyPosts, m)
+        this.bskyPosts = joinMaps(this.bskyPosts, m)
     }
 
     async fetchDatasetsHydrationData(uris: string[]) {
-        uris = uris.filter(u => !this.data.datasets?.has(u))
+        uris = uris.filter(u => !this.datasets?.has(u))
         if(uris.length == 0) return
         let datasets: DatasetQueryResult[] = await this.ctx.db.record.findMany({
             select: {
@@ -588,17 +592,17 @@ export class Dataplane {
                 }
             }
         })
-        this.data.datasets = joinMaps(this.data.datasets,
+        this.datasets = joinMaps(this.datasets,
             new Map(datasets.map(d => [d.uri, d]))
         )
     }
 
     async fetchDatasetContents(uri: string){
-        if(this.data.datasetContents?.has(uri)) return
+        if(this.datasetContents?.has(uri)) return
 
         await this.fetchDatasetsHydrationData([uri])
 
-        const d = this.data.datasets?.get(uri)
+        const d = this.datasets?.get(uri)
         if(!d || !d.dataset) return
 
         const authorId = getDidFromUri(uri)
@@ -611,8 +615,8 @@ export class Dataplane {
 
         const contents = (await fetchTextBlobs(this.ctx, blobs)).filter(c => c != null)
 
-        if(!this.data.datasetContents) this.data.datasetContents = new Map()
-        this.data.datasetContents.set(uri, contents)
+        if(!this.datasetContents) this.datasetContents = new Map()
+        this.datasetContents.set(uri, contents)
     }
 
 
@@ -635,7 +639,68 @@ export class Dataplane {
                 referencingContentId: uri
             }
         })
-        if(!this.data.topicsMentioned) this.data.topicsMentioned = new Map()
-        this.data.topicsMentioned.set(uri, topics)
+        if(!this.topicsMentioned) this.topicsMentioned = new Map()
+        this.topicsMentioned.set(uri, topics)
+    }
+
+    async fetchUsersHydrationDataFromCA(dids: string[]){
+        dids = dids.filter(d => !this.caUsers.has(d))
+        if(dids.length == 0) return
+
+        const data = await this.ctx.db.user.findMany({
+            select: {
+                did: true,
+                CAProfileUri: true,
+                displayName: true,
+                handle: true,
+                avatar: true
+            },
+            where: {
+                did: {
+                    in: dids
+                }
+            }
+        })
+
+        const res: CAProfileViewBasic[] = []
+
+        data.forEach(u => {
+            if (u.handle != null) res.push({
+                ...u,
+                handle: u.handle,
+                displayName: u.displayName ?? undefined,
+                avatar: u.avatar ?? undefined,
+                caProfile: u.CAProfileUri ?? undefined
+            })
+        })
+
+        this.caUsers = joinMaps(
+            this.caUsers,
+            new Map(res.map(r => [r.did, r]))
+        )
+    }
+
+    async fetchUsersHydrationDataFromBsky(dids: string[]){
+        dids = dids.filter(d => !this.bskyUsers.has(d))
+        if(dids.length == 0) return
+
+        const {data} = await this.agent.bsky.getProfiles({actors: dids})
+
+        const views: ProfileViewBasic[] = data.profiles.map(p => ({
+            ...p,
+            $type: "app.bsky.actor.defs#profileViewBasic"
+        }))
+
+        this.bskyUsers = joinMaps(
+            this.bskyUsers,
+            new Map(views.map(v => [v.did, v]))
+        )
+    }
+
+    async fetchUsersHydrationData(dids: string[]){
+        await Promise.all([
+            this.fetchUsersHydrationDataFromCA(dids),
+            this.fetchUsersHydrationDataFromBsky(dids)
+        ])
     }
 }

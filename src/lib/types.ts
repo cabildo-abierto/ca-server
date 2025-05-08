@@ -124,11 +124,13 @@ export type CommitEvent = JetstreamEvent & {
 }
 
 
-export type UserRepo = {
+export type UserRepo = UserRepoElement[]
+
+export type UserRepoElement = {
     did: string
     uri: string
     collection: string
     rkey: string
     record: any
     cid: string
-}[]
+}

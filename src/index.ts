@@ -12,9 +12,8 @@ import cors from 'cors'
 import {createServer} from "src/lex-server";
 import {Server as XrpcServer} from "src/lex-server"
 import {MirrorMachine} from "#/services/sync/mirror-machine";
-import {createClient as createRedisClient, RedisClientType} from "redis"
 import {Queue} from "bullmq";
-import IORedis from "ioredis";
+import Redis from "ioredis"
 import {setupWorker} from "#/jobs/worker";
 
 
@@ -27,8 +26,7 @@ export type AppContext = {
     oauthClient: OAuthClient
     resolver: BidirectionalResolver
     xrpc: XrpcServer
-    redis: RedisClientType,
-    ioredis: IORedis,
+    ioredis: Redis
     queue: Queue
 }
 
@@ -47,22 +45,11 @@ export class Server {
 
         const db = new PrismaClient()
 
-        const redisDB: RedisClientType = createRedisClient({
-            url: redisUrl,
-            password: process.env.REDIS_PASSWORD
-        })
-        redisDB.on("error", function(err) {
-            throw err;
-        });
-        await redisDB.connect()
+        const ioredis = new Redis(redisUrl, {maxRetriesPerRequest: null, family: 6});
 
-        const ioredis = new IORedis(redisUrl, {
-            password: process.env.REDIS_PASSWORD,
-            maxRetriesPerRequest: null
-        })
         const queue = new Queue('bgJobs', {connection: ioredis})
 
-        const oauthClient = await createClient(redisDB)
+        const oauthClient = await createClient(ioredis)
 
         const baseIdResolver = createIdResolver()
         const resolver = createBidirectionalResolver(baseIdResolver)
@@ -73,7 +60,6 @@ export class Server {
             oauthClient,
             resolver,
             xrpc,
-            redis: redisDB,
             ioredis: ioredis,
             queue
         }
@@ -95,10 +81,13 @@ export class Server {
             'http://localhost:8080',
             'http://127.0.0.1:8080',
             'https://cabildoabierto.ar',
+            'https://cabildoabierto.com.ar',
             'https://www.cabildoabierto.ar',
+            'https://www.cabildoabierto.com.ar',
             'https://ca-withered-wind.fly.dev',
             'https://api.cabildoabierto.ar',
-            'https://dev0.cabildoabierto.ar'
+            'https://dev0.cabildoabierto.ar',
+            'https://fly-ca-withered-wind-redis.upstash.io'
         ]
 
         app.use(cors({
@@ -120,7 +109,7 @@ export class Server {
         app.use(express.static('public'))
         app.use((_req, res) => res.sendStatus(404))
 
-        const server = app.listen(env.PORT)
+        const server = app.listen(env.PORT, HOST)
         await events.once(server, 'listening')
         logger.info(`Server (${NODE_ENV}) running on port http://${HOST}:${PORT}`)
 

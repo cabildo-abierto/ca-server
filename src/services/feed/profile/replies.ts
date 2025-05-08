@@ -1,38 +1,38 @@
-import {FeedSkeleton, GetSkeletonProps} from "#/services/feed/feed";
+import {GetSkeletonOutput, GetSkeletonProps} from "#/services/feed/feed";
 import {concat} from "#/utils/arrays";
-import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
 import {getSkeletonFromTimeline} from "#/services/feed/inicio/following";
 import {Dataplane} from "#/services/hydration/dataplane";
+import {getMainProfileFeedSkeletonCA} from "#/services/feed/profile/main";
 
 
-export async function getRepliesProfileFeedSkeletonBsky(agent: SessionAgent, did: string, data: Dataplane): Promise<FeedSkeleton> {
-    const res = await agent.bsky.getAuthorFeed({actor: did, filter: "posts_with_replies"})
+const getRepliesProfileFeedSkeletonBsky = async (agent: SessionAgent, data: Dataplane, did: string, cursor?: string): Promise<GetSkeletonOutput> => {
+    const res = await agent.bsky.getAuthorFeed({actor: did, filter: "posts_with_replies", cursor})
     const feed = res.data.feed
     data.storeFeedViewPosts(feed)
 
-    return getSkeletonFromTimeline(feed)
-}
-
-
-export async function getRepliesProfileFeedSkeletonCA(ctx: AppContext, did: string, data: Dataplane): Promise<FeedSkeleton> {
-    return (await ctx.db.record.findMany({
-        select: {
-            uri: true
-        },
-        where: {
-            authorId: did,
-            collection: "ar.com.cabildoabierto.article"
-        }
-    })).map(({uri}) => ({post: uri}))
+    return {
+        skeleton: getSkeletonFromTimeline(feed),
+        cursor: res.data.cursor
+    }
 }
 
 
 export const getRepliesProfileFeedSkeleton = (did: string) : GetSkeletonProps => {
-    return async (ctx, agent, data) => {
-        return concat(await Promise.all([
-            getRepliesProfileFeedSkeletonBsky(agent, did, data),
-            getRepliesProfileFeedSkeletonCA(ctx, did, data)
-        ]))
+    return async (ctx, agent, data, cursor) => {
+
+        let [bskySkeleton, CASkeleton] = await Promise.all([
+            getRepliesProfileFeedSkeletonBsky(agent, data, did, cursor),
+            getMainProfileFeedSkeletonCA(ctx, did, cursor)
+        ])
+
+        if(bskySkeleton.cursor != undefined){
+            const newCursorDate = new Date(bskySkeleton.cursor)
+            CASkeleton = CASkeleton.filter(x => new Date(x.createdAt) <= newCursorDate)
+        }
+        return {
+            skeleton: concat([bskySkeleton.skeleton, CASkeleton]),
+            cursor: bskySkeleton.cursor
+        }
     }
 }

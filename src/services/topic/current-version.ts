@@ -4,7 +4,7 @@ import {AppContext} from "#/index";
 import {getDidFromUri} from "#/utils/uri";
 import {SessionAgent} from "#/utils/session-agent";
 import {TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {revalidateRedis} from "#/services/cache/revalidate-redis";
+//import {revalidateRedis} from "#/services/cache/revalidate-redis";
 
 
 export function getTopicLastEditFromVersions(topic: {versions: {content: {record: {createdAt: Date}}}[]}){
@@ -31,6 +31,7 @@ export async function deleteTopicVersion(ctx: AppContext, agent: SessionAgent, u
     console.log("setting new current version", currentVersionId)
 
     const updates = [
+        ctx.db.reference.deleteMany({where: {referencingContentId: uri}}),
         ctx.db.topicVersion.delete({where: {uri}}),
         ctx.db.content.delete({where: {uri}}),
         ctx.db.record.delete({where: {uri}}),
@@ -47,7 +48,7 @@ export async function deleteTopicVersion(ctx: AppContext, agent: SessionAgent, u
 
     await ctx.db.$transaction(updates)
 
-    await revalidateRedis(ctx, ["currentVersion:"+topicVersion.id])
+    // await revalidateRedis(ctx, ["currentVersion:"+topicVersion.id])
     // await revalidateTags(["topic:"+topic.id, "topics", ...(changedCategories ? ["categories"] : [])])
 }
 

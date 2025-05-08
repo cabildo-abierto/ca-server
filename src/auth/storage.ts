@@ -5,10 +5,10 @@ import type {
     NodeSavedStateStore,
     RuntimeLock,
 } from '@atproto/oauth-client-node';
-import {RedisClientType} from 'redis';
+import IORedis from "ioredis";
 
 export class StateStore implements NodeSavedStateStore {
-    constructor(private db: RedisClientType) {}
+    constructor(private db: IORedis) {}
 
     async get(key: string): Promise<NodeSavedState | undefined> {
         const result = await this.db.get(`authState:${key}`);
@@ -27,7 +27,7 @@ export class StateStore implements NodeSavedStateStore {
 }
 
 export class SessionStore implements NodeSavedSessionStore {
-    constructor(private db: RedisClientType) {}
+    constructor(private db: IORedis) {}
 
     async get(key: string): Promise<NodeSavedSession | undefined> {
         const result = await this.db.get(`authSession:${key}`);
@@ -46,9 +46,9 @@ export class SessionStore implements NodeSavedSessionStore {
 }
 
 
-const LOCK_TIMEOUT = 10000; // in ms
+const LOCK_TIMEOUT = 10; // ms
 
-export const createSessionLock = (redis: RedisClientType): RuntimeLock => {
+export const createSessionLock = (redis: IORedis): RuntimeLock => {
     return async (name, fn) => {
         const lockKey = `sessionLock:${name}`;
         const token = Math.random().toString(36).slice(2);
@@ -60,10 +60,7 @@ export const createSessionLock = (redis: RedisClientType): RuntimeLock => {
         let retries = 0;
 
         while (!acquired && retries < maxRetries) {
-            const result = await redis.set(lockKey, token, {
-                NX: true,
-                PX: expireMs,
-            });
+            const result = await redis.set(lockKey, token, 'EX', expireMs, 'NX');
 
             if (result === 'OK') {
                 acquired = true;

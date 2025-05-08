@@ -2,9 +2,8 @@ import {FeedPipelineProps, GetSkeletonProps} from "#/services/feed/feed";
 import {rootCreationDateSortKey} from "#/services/feed/utils";
 
 
-
-export const getEnDiscusionSkeleton: GetSkeletonProps = async (ctx) => {
-    return ctx.db.record.findMany({
+export const getEnDiscusionSkeleton: GetSkeletonProps = async (ctx, agent, data, cursor) => {
+    const skeleton = await ctx.db.record.findMany({
         select: {
             uri: true
         },
@@ -12,6 +11,8 @@ export const getEnDiscusionSkeleton: GetSkeletonProps = async (ctx) => {
             enDiscusion: true
         }
     }).then(x => x.map(r => ({post: r.uri})))
+
+    return {skeleton, cursor}
 }
 
 

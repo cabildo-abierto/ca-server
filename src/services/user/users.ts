@@ -9,10 +9,11 @@ import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
 import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {listOrderDesc, sortByKey} from "#/utils/arrays";
-import {Dataplane} from "#/services/hydration/dataplane";
+import {listOrderDesc, sortByKey, unique} from "#/utils/arrays";
+import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {getIronSession} from "iron-session";
 import {createCAUser} from "#/services/user/access";
+import {dbUserToProfileViewBasic} from "#/services/topic/topics";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -820,66 +821,87 @@ export const setSeenTutorial: CAHandler = async (ctx, agent) => {
 }
 
 
-export async function getCADataForUsers(ctx: AppContext, users: string[]) {
-    const data = await ctx.db.user.findMany({
-        select: {
-            did: true,
-            CAProfileUri: true,
-            displayName: true,
-            handle: true,
-            avatar: true
-        },
-        where: {
-            did: {
-                in: users
+async function getFollowxFromCA(ctx: AppContext, did: string, data: Dataplane, kind: "follows" | "followers"){
+    const users = kind == "follows" ?
+        (await ctx.db.follow.findMany({
+            select: {
+                userFollowed: {
+                    select: {
+                        did: true,
+                        handle: true,
+                        displayName: true,
+                        CAProfileUri: true,
+                        avatar: true
+                    }
+                }
+            },
+            where: {
+                record: {
+                    authorId: did
+                }
             }
-        }
-    })
+        })).map(u => u.userFollowed) :
+        (await ctx.db.follow.findMany({
+            select: {
+                record: {
+                    select: {
+                        author: {
+                            select: {
+                                did: true,
+                                handle: true,
+                                displayName: true,
+                                CAProfileUri: true,
+                                avatar: true
+                            }
+                        }
+                    }
+                }
+            },
+            where: {
+                userFollowedId: did
+            }
+        })).map(u => u.record.author)
 
-    const res: CAProfileViewBasic[] = []
+    const views: CAProfileViewBasic[] = users.map(dbUserToProfileViewBasic).filter(u => u != null)
 
-    data.forEach(u => {
-        if (u.handle != null) res.push({
+    data.caUsers = joinMaps(data.caUsers, new Map(views.map(u => [u.did, u])))
+    return views.map(u => u.did)
+}
+
+
+async function getFollowxFromBsky(agent: SessionAgent, did: string, data: Dataplane, kind: "follows" | "followers"){
+    const users = kind == "follows" ?
+        (await agent.bsky.getFollows({actor: did})).data.follows :
+        (await agent.bsky.getFollowers({actor: did})).data.followers
+
+    data.bskyUsers = joinMaps(data.bskyUsers,
+        new Map(users.map(u => [u.did, {
             ...u,
-            handle: u.handle,
-            displayName: u.displayName ?? undefined,
-            avatar: u.avatar ?? undefined,
-            caProfile: u.CAProfileUri ?? undefined
-        })
-    })
-
-    return res
+            $type: "app.bsky.actor.defs#profileViewBasic"
+        }])))
+    return users.map(u => u.did)
 }
 
 
 export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOrDid, kind}: {
     handleOrDid: string,
     kind: "follows" | "followers"
-}) => {
+}): Promise<{data?: CAProfileViewBasic[], error?: string}> => {
     const did = await handleToDid(ctx, agent, handleOrDid)
     if (!did) return {error: "No se encontró el usuario."}
 
-    const users = kind == "follows" ?
-        (await agent.bsky.getFollows({actor: did})).data.follows :
-        (await agent.bsky.getFollowers({actor: did})).data.followers
+    const data = new Dataplane(ctx, agent)
 
-    const bskyMap = new Map<string, ProfileViewBasic>(users.map(u => [u.did, {
-        ...u,
-        $type: "app.bsky.actor.defs#profileViewBasic"
-    }]))
-    const caData = await getCADataForUsers(ctx, users.map(u => u.did))
-    const caMap = new Map(caData.map(a => [a.did, a]))
+    const [caUsers, bskyUsers] = await Promise.all([
+        getFollowxFromCA(ctx, did, data, kind),
+        getFollowxFromBsky(agent, did, data, kind)
+    ])
 
-    const dataplane = new Dataplane(ctx, agent)
-    dataplane.data = {
-        bskyUsers: bskyMap,
-        caUsers: caMap
-    } // TO DO: Refactor
+    const userList = unique([...caUsers, ...bskyUsers])
 
-    let data = users.map(u => hydrateProfileViewBasic(u.did, dataplane)).filter(x => x != null)
-    data = sortByKey(data, (u => [u.caProfile != null ? 1 : 0]), listOrderDesc)
+    await data.fetchUsersHydrationData(userList)
 
-    return {data}
+    return {data: userList.map(u => hydrateProfileViewBasic(u, data)).filter(u => u != null)}
 }
 
 

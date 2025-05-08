@@ -78,7 +78,7 @@ export type TopicQueryResultBasic = {
 
 
 export function hydrateTopicViewBasicFromUri(uri: string, data: Dataplane): {data?: $Typed<TopicViewBasic>, error?: string} {
-    const q = data.data.topicsByUri?.get(uri)
+    const q = data.topicsByUri.get(uri)
     if(!q) return {error: "No se pudo encontrar el tema."}
 
     return {data: topicQueryResultToTopicViewBasic(q)}
@@ -86,7 +86,7 @@ export function hydrateTopicViewBasicFromUri(uri: string, data: Dataplane): {dat
 
 
 export function hydrateTopicViewBasicFromTopicId(id: string, data: Dataplane) {
-    const q = data.data.topicsById?.get(id)
+    const q = data.topicsById.get(id)
     if(!q) return null
 
     return topicQueryResultToTopicViewBasic(q)
@@ -215,8 +215,8 @@ export function dbUserToProfileViewBasic(author: {
     handle: string | null,
     displayName: string | null,
     avatar: string | null
-}) {
-    if (!author.handle) return null
+} | null) {
+    if (!author || !author.handle) return null
     return {
         did: author.did,
         handle: author.handle,
@@ -363,11 +363,11 @@ async function cached<T>(ctx: AppContext, key: string[], fn: () => Promise<{ dat
         return await fn()
     }
     const strKey = key.join(":")
-    const cur = await ctx.redis.get(strKey)
+    const cur = await ctx.ioredis.get(strKey)
     if (cur) return {data: JSON.parse(cur) as T}
     const res = await fn()
     if (res.data) {
-        await ctx.redis.set(strKey, JSON.stringify(res))
+        await ctx.ioredis.set(strKey, JSON.stringify(res), "EX", redisCacheTTL)
     }
     return res
 }
@@ -423,7 +423,7 @@ export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string)
 
     const t4 = Date.now()
 
-    logTimes("getTopic", [t1, t2, t3, t4])
+    // logTimes("getTopic", [t1, t2, t3, t4])
     return res
 }
 

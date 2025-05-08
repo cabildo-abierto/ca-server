@@ -1,6 +1,6 @@
 import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {CAHandler} from "#/utils/handler";
-import {getFeed} from "#/services/feed/feed";
+import {FeedSkeleton, getFeed} from "#/services/feed/feed";
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
 import {creationDateSortKey} from "#/services/feed/utils";
@@ -8,6 +8,7 @@ import {hydrateFeedViewContent} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {isNotFoundPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {Dataplane} from "#/services/hydration/dataplane";
+import {SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
 
 
 const getTopicRepliesSkeleton = async (ctx: AppContext, agent: SessionAgent, id: string) => {
@@ -41,7 +42,7 @@ const getTopicRepliesSkeleton = async (ctx: AppContext, agent: SessionAgent, id:
 }
 
 
-const getTopicMentionsSkeleton = async (ctx: AppContext, agent: SessionAgent, id: string) => {
+const getTopicMentionsSkeleton = async (ctx: AppContext, agent: SessionAgent, data: Dataplane, id: string): Promise<FeedSkeleton> => {
     const mentions = await ctx.db.record.findMany({
         select: {
             uri: true
@@ -128,7 +129,7 @@ export const getTopicFeed: CAHandler<{ params: { id: string } }, {
             getTopicVersionReplies(ctx, agent, id),
             getFeed({
                 ctx, agent, pipeline: {
-                    getSkeleton: (ctx, agent) => getTopicMentionsSkeleton(ctx, agent, id),
+                    getSkeleton: async (ctx, agent, data, cursor) => ({skeleton: await getTopicMentionsSkeleton(ctx, agent, data, id), cursor: undefined}),
                     sortKey: creationDateSortKey
                 }
             }),
@@ -139,7 +140,7 @@ export const getTopicFeed: CAHandler<{ params: { id: string } }, {
         if(!replies.data) return {error: replies.error}
         return {
             data: {
-                mentions: mentions.data,
+                mentions: mentions.data.feed,
                 replies: replies.data,
                 topics: topicMentions.map(t => t.topicVersion?.topicId).filter(x => x != null)
             }

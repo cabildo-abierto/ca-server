@@ -66,7 +66,6 @@ export async function fetchTextBlob(ref: {cid: string, authorId: string}, retrie
 export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries: number = 0): Promise<(string | null)[]> {
     if(blobs.length == 0) return []
     const keys: string[] = blobs.map(b => getBlobKey(b))
-    console.log("Fetching blobs:", blobs.length)
 
     const t1 = Date.now()
     const blobContents = await ctx.ioredis.mget(keys)
@@ -78,11 +77,9 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
             pending.push({i, blob: blobs[i]})
         }
     }
-    console.log(`Found cache misses after ${t2-t1}. Fetching ${pending.length} blobs.`)
 
     const res = await Promise.all(pending.map(p => fetchTextBlob(p.blob, retries)))
     const t3 = Date.now()
-    console.log(`Fetched blobs after ${t3-t2}.`)
 
     for(let i = 0; i < pending.length; i++){
         const r = res[i]
@@ -101,7 +98,6 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
     }
     await pipeline.exec()
     const t4 = Date.now()
-    console.log(`Set cache after ${t4-t3}.`)
 
     return blobContents
 }

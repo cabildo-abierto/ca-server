@@ -3,7 +3,6 @@ import {followingFeedPipeline} from "#/services/feed/inicio/following";
 import {SessionAgent} from "#/utils/session-agent";
 import {hydrateFeed} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
-import {logTimes} from "#/utils/utils";
 import {AppContext} from "#/index";
 import {enDiscusionFeedPipeline} from "#/services/feed/inicio/discusion";
 import {discoverFeedPipeline} from "#/services/feed/inicio/discover";
@@ -12,9 +11,10 @@ import {CAHandler, CAHandlerOutput} from "#/utils/handler";
 import {Dataplane} from "#/services/hydration/dataplane";
 
 
-export const getFeedByKind: CAHandler<{params: {kind: string}}, FeedViewContent[]> = async (ctx, agent, {params}) => {
+export const getFeedByKind: CAHandler<{params: {kind: string}, query: {cursor?: string}}, GetFeedOutput> = async (ctx, agent, {params, query}) => {
     let pipeline: FeedPipelineProps
     const {kind} = params
+    const {cursor} = query
     if(kind == "discusion"){
         pipeline = enDiscusionFeedPipeline
     } else if(kind == "siguiendo"){
@@ -24,14 +24,15 @@ export const getFeedByKind: CAHandler<{params: {kind: string}}, FeedViewContent[
     } else {
         return {error: "Invalid feed kind:" + kind}
     }
-    return getFeed({ctx, agent, pipeline})
+    return getFeed({ctx, agent, pipeline, cursor})
 }
 
 
 export type FeedSkeleton = SkeletonFeedPost[]
 
 
-export type GetSkeletonProps = (ctx: AppContext, agent: SessionAgent, data: Dataplane) => Promise<FeedSkeleton>
+export type GetSkeletonOutput = {skeleton: FeedSkeleton, cursor: string | undefined}
+export type GetSkeletonProps = (ctx: AppContext, agent: SessionAgent, data: Dataplane, cursor?: string) => Promise<GetSkeletonOutput>
 
 
 export type FeedPipelineProps = {
@@ -45,14 +46,19 @@ export type GetFeedProps = {
     pipeline: FeedPipelineProps
     agent: SessionAgent
     ctx: AppContext
+    cursor?: string
 }
 
+export type GetFeedOutput = {
+    feed: FeedViewContent[]
+    cursor?: string
+}
 
-export const getFeed = async ({ctx, agent, pipeline}: GetFeedProps): CAHandlerOutput<FeedViewContent[]> => {
+export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAHandlerOutput<GetFeedOutput> => {
     const t1 = Date.now()
 
     const data = new Dataplane(ctx, agent)
-    const skeleton = await pipeline.getSkeleton(ctx, agent, data)
+    const {skeleton, cursor: newCursor} = await pipeline.getSkeleton(ctx, agent, data, cursor)
     const t2 = Date.now()
 
     let feed: FeedViewContent[] = await hydrateFeed(skeleton, data)
@@ -65,6 +71,6 @@ export const getFeed = async ({ctx, agent, pipeline}: GetFeedProps): CAHandlerOu
     if(pipeline.filter){
         feed = pipeline.filter(feed)
     }
-    logTimes("get feed", [t1, t2, t3])
-    return {data: feed}
+    // logTimes("get feed", [t1, t2, t3])
+    return {data: {feed, cursor: newCursor}}
 }

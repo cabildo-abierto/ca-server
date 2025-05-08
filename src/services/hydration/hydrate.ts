@@ -48,8 +48,8 @@ const queryResultToProfileViewBasic = (e: FeedElementQueryResult["author"]): CAP
 
 export function hydrateViewer(uri: string, data: Dataplane): {repost?: string, like?: string} {
     return {
-        repost: data.data.reposts?.get(uri) ?? undefined,
-        like: data.data.likes?.get(uri) ?? undefined
+        repost: data.reposts?.get(uri) ?? undefined,
+        like: data.likes?.get(uri) ?? undefined
     }
 }
 
@@ -58,10 +58,10 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
     data?: $Typed<FullArticleView>
     error?: string
 } {
-    const e = data.data.caContents?.get(uri)
+    const e = data.caContents?.get(uri)
     if (!e) return {error: "Ocurrió un error al cargar el contenido."}
 
-    const topicsMentioned = data.data.topicsMentioned?.get(uri) ?? []
+    const topicsMentioned = data.topicsMentioned?.get(uri) ?? []
 
     const viewer = hydrateViewer(e.uri, data)
     const author = queryResultToProfileViewBasic(e.author)
@@ -106,7 +106,7 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
     data?: $Typed<ArticleView>
     error?: string
 } {
-    const e = data.data.caContents?.get(uri)
+    const e = data.caContents?.get(uri)
     if (!e) return {error: "Ocurrió un error al cargar el contenido."}
 
     const viewer = hydrateViewer(e.uri, data)
@@ -153,7 +153,7 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
 
 
 function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedContent: string, data: Dataplane): $Typed<SelectionQuoteEmbedView> | null {
-    const caData = data.data.caContents?.get(quotedContent)
+    const caData = data.caContents?.get(quotedContent)
 
     if (caData && caData.content && caData.content) {
         const author = queryResultToProfileViewBasic(caData.author)
@@ -196,8 +196,8 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
 
 
 function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView>, error?: string } {
-    const post = data.data.bskyPosts?.get(uri)
-    const caData = data.data.caContents?.get(uri)
+    const post = data.bskyPosts?.get(uri)
+    const caData = data.caContents?.get(uri)
 
     if (!post) {
         console.log("Warning: No se encontró el post en Bluesky. Uri: ", uri)
@@ -275,7 +275,7 @@ export function notFoundPost(uri: string): $Typed<NotFoundPost> {
 export function hydrateFeedViewContent(e: SkeletonFeedPost, data: Dataplane): $Typed<FeedViewContent> | $Typed<NotFoundPost> {
     const reason = e.reason
 
-    const childBsky = data.data.bskyPosts?.get(e.post)
+    const childBsky = data.bskyPosts?.get(e.post)
     const reply = childBsky ? (childBsky.record as PostRecord).reply : null
 
     if(isPost(getCollectionFromUri(e.post)) && !childBsky) {

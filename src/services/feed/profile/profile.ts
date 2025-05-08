@@ -1,16 +1,16 @@
 import {handleToDid} from "#/services/user/users";
 import {getMainProfileFeedSkeleton} from "#/services/feed/profile/main";
 import {getRepliesProfileFeedSkeleton} from "#/services/feed/profile/replies";
-import {FeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {FeedPipelineProps, getFeed} from "#/services/feed/feed";
+import {FeedPipelineProps, getFeed, GetFeedOutput} from "#/services/feed/feed";
 import {rootCreationDateSortKey} from "#/services/feed/utils";
 import {getEditsProfileFeedSkeleton} from "#/services/feed/profile/edits";
 import {CAHandler} from "#/utils/handler";
 import {filterFeed} from "#/services/feed/inicio/following";
 
 
-export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: string}}, FeedViewContent[]> = async (ctx, agent, {params}) => {
+export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: string}, query: {cursor?: string}}, GetFeedOutput> = async (ctx, agent, {params, query}) => {
     const {handleOrDid, kind} = params
+    const {cursor} = query
     const did = await handleToDid(ctx, agent, handleOrDid)
     if(!did) return {error: "No se encontró el usuario."}
 
@@ -36,5 +36,5 @@ export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: stri
         return {error: "Feed inválido."}
     }
 
-    return getFeed({ctx, agent, pipeline})
+    return getFeed({ctx, agent, pipeline, cursor})
 }

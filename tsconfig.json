@@ -1,13 +1,13 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "CommonJS",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "baseUrl": ".",
     "paths": {
       "#/*": ["src/*"],
       "@atcute/car": ["node_modules/@atcute/car/dist/index.d.ts"]
     },
-    "moduleResolution": "Node10",
     "outDir": "dist",
     "importsNotUsedAsValues": "remove",
     "strict": true,
