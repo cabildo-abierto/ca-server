@@ -67,7 +67,7 @@ export const searchUsers: CAHandler<{
     const userList = unique([
         ...caSearchResults,
         ...bskySearchResults
-    ])
+    ]).slice(0, 25)
 
     await dataplane.fetchUsersHydrationData(userList)
 

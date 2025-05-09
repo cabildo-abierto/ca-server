@@ -166,7 +166,8 @@ export const getCategoryGraph: CAHandler<{params: {c: string}}, TopicsGraph> = a
             categories: {
                 some: {categoryId: cat}
             }
-        }
+        },
+        take: 500
     })
     const t2 = Date.now()
 
@@ -196,8 +197,8 @@ export const getCategoryGraph: CAHandler<{params: {c: string}}, TopicsGraph> = a
     logTimes("get category " + cat, [t1, t2, t3])
     return {
         data: {
-            nodeIds: topics.slice(0, 500).map(t => t.id),
-                edges: edges.slice(0, 100)
+            nodeIds: topics.map(t => t.id),
+                edges: edges.slice(0, 300)
         }
     }
 }

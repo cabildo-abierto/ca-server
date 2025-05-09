@@ -190,21 +190,6 @@ export const getConversations = async (ctx: AppContext, userId: string) => {
 }
 
 
-export async function getATProtoUserById(agent: SessionAgent, userId: string): Promise<{
-    profile?: ProfileViewDetailed,
-    error?: string
-}> {
-    try {
-        const {data} = await agent.bsky.getProfile({
-            actor: userId
-        })
-        return {profile: data}
-    } catch {
-        return {error: "Error getting ATProto user"}
-    }
-}
-
-
 // TO DO: Eliminar esta función, está repetida
 export function createRecord({ctx, uri, cid, createdAt, collection}: {
     ctx: AppContext
@@ -310,16 +295,18 @@ export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile>
             })
         ])
 
-        return {
-            data: {
-                bsky: bskyProfile.data,
-                ca: caProfile ? {
-                    ...caProfile,
-                    inCA: caProfile.inCA,
-                    followsCount: caFollowsCount,
-                    followersCount: caFollowersCount
-                } : null
+        const profile: Profile = {
+            bsky: bskyProfile.data,
+            ca: {
+                ...caProfile,
+                inCA: caProfile?.inCA ?? false,
+                followsCount: caFollowsCount,
+                followersCount: caFollowersCount
             }
+        }
+
+        return {
+            data: profile
         }
     } catch (err) {
         return {error: "No se encontró el usuario."}

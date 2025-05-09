@@ -18,7 +18,7 @@ export type CAProfile = {
     inCA: boolean
     followersCount: number
     followsCount: number
-    editorStatus: EditorStatus
+    editorStatus?: EditorStatus
 }
 
 
