@@ -16,6 +16,7 @@ export async function createTopicVersionATProto(agent: SessionAgent, {id, text, 
 
     if(text && !blob) return {error: "Ocurrió un error al publicar el tema."}
 
+    console.log("Creating topic version with blob", blob)
     const record: TopicVersionRecord = {
         $type: "ar.cabildoabierto.wiki.topicVersion",
         text: text && blob ? blob : undefined,

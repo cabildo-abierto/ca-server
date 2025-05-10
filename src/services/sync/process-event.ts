@@ -20,19 +20,24 @@ import {getCollectionFromUri, getDidFromUri, getRkeyFromUri, splitUri} from "#/u
 import {JsonArray} from "@prisma/client/runtime/library";
 import {Prisma} from '@prisma/client';
 import {didToHandle} from "#/services/user/users";
+import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
+import {BlobRef} from "@atproto/lexicon";
 
+function isProfile(collection: string){
+    return collection == "ar.com.cabildoabierto.profile" || collection == "ar.cabildoabierto.actor.caProfile"
+}
 
 export async function processEvent(ctx: AppContext, e: JetstreamEvent) {
     if (e.kind == "commit") {
         const c = e as CommitEvent
 
-        if (c.commit.collection == "ar.com.cabildoabierto.profile" && c.commit.rkey == "self") {
+        if (isProfile(c.commit.collection) && c.commit.rkey == "self") {
             await newUser(ctx, e.did, true)
-            const status = await getUserMirrorStatus(ctx, e.did)
+            //const status = await getUserMirrorStatus(ctx, e.did)
 
-            if (status == "Dirty" || status == "Failed") {
+            /*if (status == "Dirty" || status == "Failed") {
                 await syncUser(ctx, e.did)
-            }
+            }*/
             return
         }
     }
@@ -41,7 +46,7 @@ export async function processEvent(ctx: AppContext, e: JetstreamEvent) {
         const c = e as CommitEvent
 
         const uri = c.commit.uri ? c.commit.uri : "at://" + c.did + "/" + c.commit.collection + "/" + c.commit.rkey
-        if (c.commit.operation == "create") {
+        if (c.commit.operation == "create" || c.commit.operation == "update") {
             const record = {
                 did: c.did,
                 uri: uri,
@@ -102,12 +107,16 @@ export const processCAProfile: RecordProcessor<CAProfileRecord> = (ctx, ref, r) 
     ]
 }
 
+export function getCidFromBlobRef(o?: BlobRef){
+    if(!o) return undefined
+    return o.ref.$link ? o.ref.$link : o.ref.toString()
+}
 
 export const processBskyProfile: RecordProcessor<BskyProfileRecord> = async (ctx, ref, r) => {
     const did = getDidFromUri(ref.uri)
-    const avatarCid = r.avatar ? r.avatar.ref.toString() : undefined
+    const avatarCid = getCidFromBlobRef(r.avatar)
     const avatar = avatarCid ? avatarUrl(did, avatarCid) : undefined
-    const bannerCid = r.banner ? r.banner.ref.toString() : undefined
+    const bannerCid = getCidFromBlobRef(r.banner)
     const banner = bannerCid ? bannerUrl(did, bannerCid) : undefined
 
     const handle = await didToHandle(ctx, did)
@@ -262,6 +271,7 @@ type ContentProps = {
         cid: string
         authorId: string
     }
+    selfLabels?: string[]
 }
 
 
@@ -270,7 +280,8 @@ export const processContent: RecordProcessor<ContentProps> = (ctx, ref, r: Conte
         text: r.text,
         textBlobId: r.textBlob?.cid,
         uri: ref.uri,
-        format: r.format
+        format: r.format,
+        selfLabels: r.selfLabels
     }
 
     const contentUpd = ctx.db.content.upsert({
@@ -305,7 +316,8 @@ export const processPost: RecordProcessor<PostRecord> = async (ctx, ref, r) => {
 
     const content: ContentProps = {
         format: "plain-text",
-        text: r.text
+        text: r.text,
+        selfLabels: isSelfLabels(r.labels) ? r.labels.values.map(l => l.val) : undefined
     }
 
     updates = [...updates, ...await processContent(ctx, ref, content)]
@@ -336,7 +348,8 @@ export const processArticle: RecordProcessor<ArticleRecord> = async (ctx, ref, r
         textBlob: {
             cid: r.text.ref.toString(),
             authorId: getDidFromUri(ref.uri)
-        }
+        },
+        selfLabels: isSelfLabels(r.labels) ? r.labels.values.map(l => l.val) : undefined
     }
 
     const updates: any[] = await processContent(ctx, ref, content)
@@ -362,11 +375,10 @@ export const processTopicVersion: RecordProcessor<TopicVersionRecord> = async (c
     const content: ContentProps = {
         format: r.format,
         textBlob: r.text ? {
-            cid: r.text.ref.toString(),
+            cid: getCidFromBlobRef(r.text),
             authorId: getDidFromUri(ref.uri)
         } : undefined
     }
-
     let updates: any[] = await processContent(ctx, ref, content)
 
     const isNewCurrentVersion = true // TO DO: esto debería depender de los permisos del usuario, o no hacerse si preferimos esperar a un voto
@@ -539,18 +551,16 @@ const recordProcessors = new Map<string, RecordProcessor<any>>([
     ["app.bsky.actor.profile", processBskyProfile],
     ["ar.cabildoabierto.data.dataset", processDataset],
     ["ar.cabildoabierto.wiki.topicVersion", processTopicVersion],
-    ["ar.cabildoabierto.wiki.vote", processTopicVote],
-    ["ar.com.cabildoabierto.topic", processTopicVersion]
+    ["ar.cabildoabierto.wiki.vote", processTopicVote]
 ])
 
 
 export const processCreate: RecordProcessor<any> = async (ctx, ref, record) => {
-    console.log("Processing record", ref.uri)
     const collection = getCollectionFromUri(ref.uri)
-    let updates = processRecord(ctx, ref, record)
     const processor = recordProcessors.get(collection)
     try {
         if (processor) {
+            let updates = processRecord(ctx, ref, record)
             return [...updates, ...await processor(ctx, ref, record)]
         } else {
             console.log("Couldn't find processor for collection", collection)

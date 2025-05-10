@@ -84,12 +84,12 @@ export const reactionsQuery = {
 export const enDiscusionQuery = {
     ...recordQuery,
     ...reactionsQuery,
-    enDiscusion: true,
     content: {
         select: {
             text: true,
             format: true,
             textBlob: true,
+            selfLabels: true,
             article: {
                 select: {
                     title: true

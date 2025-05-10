@@ -36,6 +36,7 @@ export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (c
         })
         return {data: {url}}
     } catch (err) {
+        console.error(`Error authorizing ${handle}`, err)
         return {error: "Ocurrió un error al iniciar sesión."}
     }
 }

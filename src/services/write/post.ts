@@ -132,7 +132,8 @@ export async function createPostAT({
         facets: rt.facets,
         createdAt: new Date().toISOString(),
         reply: post.reply,
-        embed
+        embed,
+        labels: post.enDiscusion ? {$type: "com.atproto.label.defs#selfLabels", values: [{val: "ca:en discusión"}]} : undefined
     }
 
     return await agent.bsky.post({...record})

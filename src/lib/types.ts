@@ -112,7 +112,7 @@ export type JetstreamEvent = {
 export type CommitEvent = JetstreamEvent & {
     commit: {
         collection: string
-        operation: "create" | "delete"
+        operation: "create" | "delete" | "update"
         rkey: string
         cid: string
         uri: string

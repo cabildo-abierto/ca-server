@@ -1,10 +1,9 @@
-import {getCachedTopicVersion, getTopicHistory, getTopicVersion} from "./topics";
+import {getTopicHistory} from "./topics";
 import {max, unique} from "#/utils/arrays";
 import {AppContext} from "#/index";
 import {getDidFromUri} from "#/utils/uri";
 import {SessionAgent} from "#/utils/session-agent";
 import {TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-//import {revalidateRedis} from "#/services/cache/revalidate-redis";
 
 
 export function getTopicLastEditFromVersions(topic: {versions: {content: {record: {createdAt: Date}}}[]}){
@@ -13,10 +12,23 @@ export function getTopicLastEditFromVersions(topic: {versions: {content: {record
 }
 
 
+export async function getTopicIdFromTopicVersionUri(ctx: AppContext, uri: string){
+    const res = await ctx.db.topicVersion.findUnique({
+        select: {
+            topicId: true
+        },
+        where: {
+            uri
+        }
+    })
+    return res ? res.topicId : null
+}
+
+
 export async function deleteTopicVersion(ctx: AppContext, agent: SessionAgent, uri: string){
-    const {data: topicVersion} = await getCachedTopicVersion(ctx, agent, uri)
-    if(!topicVersion) return {error: "Ocurrió un error al borrar la versión."}
-    const {data: topicHistory} = await getTopicHistory(ctx, agent, {params: {id: topicVersion.id}})
+    const id = await getTopicIdFromTopicVersionUri(ctx, uri)
+    if(!id) return {error: "Ocurrió un error al borrar la versión."}
+    const {data: topicHistory} = await getTopicHistory(ctx, agent, {params: {id}})
     if(!topicHistory) return {error: "Ocurrió un error al borrar la versión."}
 
     const currentVersion = getTopicCurrentVersion(topicHistory.versions)
@@ -37,7 +49,7 @@ export async function deleteTopicVersion(ctx: AppContext, agent: SessionAgent, u
         ctx.db.record.delete({where: {uri}}),
         ctx.db.topic.update({
             where: {
-                id: topicVersion.id,
+                id,
             },
             data: {
                 lastEdit: new Date(),

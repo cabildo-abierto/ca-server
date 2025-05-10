@@ -189,8 +189,6 @@ model Record {
   lastInThreadId         String? @unique
   secondToLastInThreadId String? @unique
   secondToLastInThread   Post?   @relation("secondToLastInThread", fields: [secondToLastInThreadId], references: [uri])
-
-  enDiscusion Boolean @default(false)
 }
 
 model Content {
@@ -206,6 +204,7 @@ model Content {
   post                 Post?
   references           Reference[]
   lastReferencesUpdate DateTime?
+  selfLabels           String[]
 }
 
 model Post {

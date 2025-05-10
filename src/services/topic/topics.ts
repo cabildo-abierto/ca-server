@@ -15,9 +15,8 @@ import {getTopicCurrentVersion} from "#/services/topic/current-version";
 import {SessionAgent} from "#/utils/session-agent";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import { Prisma } from "@prisma/client";
-import {Dataplane, getBlobKey} from "#/services/hydration/dataplane";
+import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
-import {logTimes} from "#/utils/utils";
 
 
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
@@ -617,7 +616,7 @@ export const getTopicVersionAuthors: CAHandler<{
 
     return {
         data: {
-            text: "Sin implementar",
+            text: "En construcción",
             format: "markdown"
         }
     }
@@ -631,7 +630,7 @@ export const getTopicVersionChanges: CAHandler<{
 
     return {
         data: {
-            text: "Sin implementar",
+            text: "En construcción.",
             format: "markdown"
         }
     }

@@ -41,6 +41,7 @@ export type FeedElementQueryResult = {
         text: string | null
         textBlobId?: string | null
         format?: string | null
+        selfLabels: string[]
         article?: {
             title: string
         } | null
@@ -49,7 +50,6 @@ export type FeedElementQueryResult = {
             topicId: string
         } | null
     } | null
-    enDiscusion: boolean | null
 }
 
 
@@ -173,10 +173,10 @@ export class Dataplane {
                     ...authorQuery,
                     ...reactionsQuery,
                     record: true,
-                    enDiscusion: true,
                     content: {
                         select: {
-                            text: true
+                            text: true,
+                            selfLabels: true
                         }
                     }
                 },
@@ -194,12 +194,12 @@ export class Dataplane {
                     ...authorQuery,
                     ...reactionsQuery,
                     record: true,
-                    enDiscusion: true,
                     content: {
                         select: {
                             text: true,
                             format: true,
                             textBlobId: true,
+                            selfLabels: true,
                             article: {
                                 select: {
                                     title: true
@@ -222,11 +222,11 @@ export class Dataplane {
                     ...authorQuery,
                     ...reactionsQuery,
                     record: true,
-                    enDiscusion: true,
                     content: {
                         select: {
                             text: true,
                             format: true,
+                            selfLabels: true,
                             textBlobId: true,
                             topicVersion: {
                                 select: {

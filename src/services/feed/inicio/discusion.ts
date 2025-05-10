@@ -1,5 +1,10 @@
 import {FeedPipelineProps, GetSkeletonProps} from "#/services/feed/feed";
 import {rootCreationDateSortKey} from "#/services/feed/utils";
+import {CAHandler} from "#/utils/handler";
+import {Record as PostRecord, validateRecord as validatePostRecord} from "#/lex-api/types/app/bsky/feed/post";
+import {Record as ArticleRecord, validateRecord as validateArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
+import {processCreate} from "#/services/sync/process-event";
+import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 
 
 export const getEnDiscusionSkeleton: GetSkeletonProps = async (ctx, agent, data, cursor) => {
@@ -8,7 +13,11 @@ export const getEnDiscusionSkeleton: GetSkeletonProps = async (ctx, agent, data,
             uri: true
         },
         where: {
-            enDiscusion: true
+            content: {
+                selfLabels: {
+                    has: "ca:en discusión"
+                }
+            }
         }
     }).then(x => x.map(r => ({post: r.uri})))
 
@@ -22,11 +31,104 @@ export const enDiscusionFeedPipeline: FeedPipelineProps = {
 }
 
 
-export async function addToEnDiscusion(uri: string){
-    // TO DO
+export const addToEnDiscusion: CAHandler<{params: {collection: string, rkey: string}}, {}> = async (ctx, agent, {params} ) => {
+    const {collection, rkey} = params
+    const did = agent.did
+
+    const res = await agent.bsky.com.atproto.repo.getRecord({
+        repo: did,
+        collection,
+        rkey
+    })
+
+    if(!res.success){
+        return {error: "No se pudo agregar a en discusión."}
+    }
+
+    const record = res.data.value
+
+    const validatePost = validatePostRecord(record)
+    const validateArticle = validateArticleRecord(record)
+
+    let validRecord: PostRecord | ArticleRecord | undefined
+    if(validatePost.success) {
+        validRecord = validatePost.value
+    } else if(validateArticle.success){
+        validRecord = validateArticle.value
+    }
+
+    if(validRecord) {
+        if(validRecord.labels && isSelfLabels(validRecord.labels)){
+            validRecord.labels.values.push({val: "ca:en discusión"})
+        } else if(!validRecord.labels){
+            validRecord.labels = {
+                $type: "com.atproto.label.defs#selfLabels",
+                values: [{val: "ca:en discusión"}]
+            }
+        }
+
+        const ref = await agent.bsky.com.atproto.repo.putRecord({
+            repo: did,
+            collection,
+            rkey,
+            record: validRecord
+        })
+
+        const updates = await processCreate(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
+        await ctx.db.$transaction(updates)
+    } else {
+        return {error: "No se pudo agregar a en discusión."}
+    }
+
+
+    return {data: {}}
 }
 
 
-export async function removeFromEnDiscusion(uri: string){
-    // TO DO
+export const removeFromEnDiscusion: CAHandler<{params: {collection: string, rkey: string}}, {}> = async (ctx, agent, {params} ) => {
+    const {collection, rkey} = params
+    const did = agent.did
+
+    const res = await agent.bsky.com.atproto.repo.getRecord({
+        repo: did,
+        collection,
+        rkey
+    })
+
+    if(!res.success){
+        return {error: "No se pudo remover de en discusión."}
+    }
+
+    const record = res.data.value
+
+    const validatePost = validatePostRecord(record)
+    const validateArticle = validateArticleRecord(record)
+
+    let validRecord: PostRecord | ArticleRecord | undefined
+    if(validatePost.success) {
+        validRecord = validatePost.value
+    } else if(validateArticle.success){
+        validRecord = validateArticle.value
+    }
+
+    if(validRecord) {
+        if(validRecord.labels && isSelfLabels(validRecord.labels)){
+            validRecord.labels.values = validRecord.labels.values.filter(v => v.val != "ca:en discusión")
+        }
+
+        const ref = await agent.bsky.com.atproto.repo.putRecord({
+            repo: did,
+            collection,
+            rkey,
+            record: validRecord
+        })
+
+        const updates = await processCreate(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
+        await ctx.db.$transaction(updates)
+    } else {
+        return {error: "No se pudo remover de en discusión."}
+    }
+
+
+    return {data: {}}
 }

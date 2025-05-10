@@ -1,11 +1,13 @@
 import {processCreate} from "#/services/sync/process-event";
 import {uploadStringBlob} from "#/services/blob";
 import {CAHandler} from "#/utils/handler";
+import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 
 export type CreateArticleProps = {
     title: string
     format: string
     text: string
+    enDiscusion: boolean
 }
 
 export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, article) => {
@@ -15,17 +17,13 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
     try {
         const blobRef = await uploadStringBlob(agent, text)
 
-        const record = {
+        const record: ArticleRecord = {
             "$type": "ar.cabildoabierto.feed.article",
             title: article.title,
             format: article.format,
-            text: {
-                ref: blobRef.ref,
-                mimeType: blobRef.mimeType,
-                size: blobRef.size,
-                $type: "blob"
-            },
-            createdAt: new Date().toISOString()
+            text: blobRef,
+            createdAt: new Date().toISOString(),
+            labels: article.enDiscusion ? {$type: "com.atproto.label.defs#selfLabels", values: [{val: "ca:en discusión"}]} : undefined
         }
 
         const {data} = await agent.bsky.com.atproto.repo.createRecord({

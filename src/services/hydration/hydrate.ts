@@ -8,7 +8,7 @@ import {
     ThreadViewContent
 } from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs"
-import {getCollectionFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri";
+import {getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri";
 import {
     isNotFoundPost,
     isReasonRepost,
@@ -34,7 +34,7 @@ import {getTopicTitle} from "#/services/topic/utils";
 
 
 const queryResultToProfileViewBasic = (e: FeedElementQueryResult["author"]): CAProfileViewBasic | null => {
-    if(!e.handle) return null
+    if (!e.handle) return null
     return {
         $type: "ar.cabildoabierto.actor.defs#profileViewBasic",
         did: e.did,
@@ -46,7 +46,7 @@ const queryResultToProfileViewBasic = (e: FeedElementQueryResult["author"]): CAP
 }
 
 
-export function hydrateViewer(uri: string, data: Dataplane): {repost?: string, like?: string} {
+export function hydrateViewer(uri: string, data: Dataplane): { repost?: string, like?: string } {
     return {
         repost: data.reposts?.get(uri) ?? undefined,
         like: data.likes?.get(uri) ?? undefined
@@ -65,16 +65,16 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
 
     const viewer = hydrateViewer(e.uri, data)
     const author = queryResultToProfileViewBasic(e.author)
-    if(!author) return {error: "Ocurrió un error al cargar el contenido."}
+    if (!author) return {error: "Ocurrió un error al cargar el contenido."}
 
     let text: string | null = null
-    if(e.content?.textBlobId){
+    if (e.content?.textBlobId) {
         text = data.getFetchedBlob({cid: e.content?.textBlobId, authorId: e.author.did})
-    } else if(e.content?.text){
+    } else if (e.content?.text) {
         text = e.content.text
     }
 
-    if(!text || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
+    if (!text || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
 
     return {
         data: {
@@ -85,6 +85,7 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
             text,
             format: e.content?.format ?? undefined,
             author,
+            labels: dbLabelsToLabelsView(e.content?.selfLabels ?? [], uri),
             record: e.record ? JSON.parse(e.record) : {},
             indexedAt: new Date(e.createdAt).toISOString(),
             likeCount: e._count.likes,
@@ -102,6 +103,14 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
 }
 
 
+function dbLabelsToLabelsView(labels: string[], uri: string){
+    const did = getDidFromUri(uri)
+    return labels.map(l => ({
+        val: l, src: did, uri: uri, cts: new Date().toISOString() // TO DO: Almacenar las timestamps de las labels
+    }))
+}
+
+
 export function hydrateArticleView(uri: string, data: Dataplane): {
     data?: $Typed<ArticleView>
     error?: string
@@ -111,24 +120,24 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
 
     const viewer = hydrateViewer(e.uri, data)
     const author = queryResultToProfileViewBasic(e.author)
-    if(!author) return {error: "Ocurrió un error al cargar el contenido."}
+    if (!author) return {error: "Ocurrió un error al cargar el contenido."}
 
     let text: string | null = null
-    if(e.content?.textBlobId){
+    if (e.content?.textBlobId) {
         text = data.getFetchedBlob({cid: e.content?.textBlobId, authorId: e.author.did})
-    } else if(e.content?.text){
+    } else if (e.content?.text) {
         text = e.content.text
     }
 
-    if(!text || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
+    if (!text || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
 
     const format = e.content?.format
     let summary = ""
     if (format == "markdown") {
-        summary = markdownToPlainText(text).slice(0, 150).replace("\n", " ")
+        summary = markdownToPlainText(text).slice(0, 150).replaceAll("\n", " ")
     } else if (!format || format == "lexical-compressed") {
         const summaryJson = JSON.parse(decompress(text))
-        summary = getAllText(summaryJson.root).slice(0, 150)
+        summary = getAllText(summaryJson.root).slice(0, 150).replaceAll("\n", " ")
     }
 
     return {
@@ -139,6 +148,7 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
             title: e.content.article.title,
             summary: summary,
             summaryFormat: "plain-text",
+            labels: dbLabelsToLabelsView(e.content?.selfLabels ?? [], uri),
             author,
             record: e.record ? JSON.parse(e.record) : {},
             indexedAt: new Date(e.createdAt).toISOString(),
@@ -157,27 +167,27 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
 
     if (caData && caData.content && caData.content) {
         const author = queryResultToProfileViewBasic(caData.author)
-        if(!author) return null
+        if (!author) return null
 
         let text: string | null = null
-        if(caData.content?.textBlobId){
+        if (caData.content?.textBlobId) {
             text = data.getFetchedBlob({cid: caData.content.textBlobId, authorId: caData.author.did})
-        } else if(caData.content?.text){
+        } else if (caData.content?.text) {
             text = caData.content.text
         }
-        if(!text) return null
+        if (!text) return null
 
         const collection = getCollectionFromUri(quotedContent)
         let title: string | undefined
-        if(isArticle(collection)){
+        if (isArticle(collection)) {
             title = caData.content.article?.title
-        } else if(isTopicVersion(collection) && caData.content.topicVersion?.topicId){
+        } else if (isTopicVersion(collection) && caData.content.topicVersion?.topicId) {
             title = getTopicTitle({
                 id: caData.content.topicVersion.topicId,
                 props: caData.content.topicVersion.props as unknown as TopicProp[]
             })
         }
-        if(!title) return null
+        if (!title) return null
 
         return {
             $type: "ar.cabildoabierto.embed.selectionQuote#view",
@@ -225,6 +235,7 @@ function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView
                 caProfile: caData?.author.CAProfileUri ?? undefined,
                 $type: "ar.cabildoabierto.actor.defs#profileViewBasic"
             },
+            labels: dbLabelsToLabelsView(caData?.content?.selfLabels ?? [], uri),
             $type: "ar.cabildoabierto.feed.defs#postView",
             embed: embedView,
             ...(caData ? {
@@ -278,7 +289,7 @@ export function hydrateFeedViewContent(e: SkeletonFeedPost, data: Dataplane): $T
     const childBsky = data.bskyPosts?.get(e.post)
     const reply = childBsky ? (childBsky.record as PostRecord).reply : null
 
-    if(isPost(getCollectionFromUri(e.post)) && !childBsky) {
+    if (isPost(getCollectionFromUri(e.post)) && !childBsky) {
         console.log("Warning: No se encontró el post en Bluesky. Uri: ", e.post)
     }
 

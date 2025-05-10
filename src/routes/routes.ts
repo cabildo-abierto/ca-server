@@ -44,6 +44,7 @@ import { fetchURLMetadata } from '#/services/write/metadata';
 import {getDataset, getDatasets } from '#/services/dataset/read';
 import { createDataset } from '#/services/dataset/write';
 import {searchContents} from "#/services/feed/search";
+import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion";
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -277,6 +278,14 @@ export const createRouter = (ctx: AppContext) => {
 
     router.post('/dataset',
         makeHandler(ctx, createDataset)
+    )
+
+    router.post('/set-en-discusion/:collection/:rkey',
+        makeHandler(ctx, addToEnDiscusion)
+    )
+
+    router.post('/unset-en-discusion/:collection/:rkey',
+        makeHandler(ctx, removeFromEnDiscusion)
     )
 
     router.get('/metadata', makeHandler(ctx, fetchURLMetadata));

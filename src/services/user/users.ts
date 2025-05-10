@@ -1,5 +1,5 @@
 import {AppContext} from "#/index";
-import {ProfileView, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+import {ProfileView} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {Account, MentionProps, Profile, Session, UserStats} from "#/lib/types";
 import {cookieOptions, SessionAgent} from "#/utils/session-agent";
 import {getDidFromUri, getRkeyFromUri} from "#/utils/uri";
@@ -7,9 +7,8 @@ import {deleteRecords} from "#/services/delete";
 import {cleanText} from "#/utils/strings";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
-import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {listOrderDesc, sortByKey, unique} from "#/utils/arrays";
+import {unique} from "#/utils/arrays";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {getIronSession} from "iron-session";
 import {createCAUser} from "#/services/user/access";
