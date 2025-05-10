@@ -17,6 +17,11 @@ import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import { Prisma } from "@prisma/client";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
+import {getTopicTitle} from "#/services/topic/utils";
+import {getSynonymsToTopicsMap, getTopicsReferencedInText} from "#/services/topic/references";
+import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
+import {logTimes} from "#/utils/utils";
+import {gett} from "#/utils/arrays";
 
 
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
@@ -633,5 +638,41 @@ export const getTopicVersionChanges: CAHandler<{
             text: "En construcción.",
             format: "markdown"
         }
+    }
+}
+
+
+export async function getTopicsTitles(ctx: AppContext, ids: string[]) {
+    const res = await ctx.db.topic.findMany({
+        select: {
+            id: true,
+            currentVersion: {
+                select: {
+                    props: true
+                }
+            }
+        },
+        where: {
+            id: {
+                in: ids
+            }
+        }
+    })
+    return new Map<string, string>(res.map(r => [r.id, getTopicTitle(r)]))
+}
+
+
+export const getTopicsMentioned: CAHandler<{title: string, text: string}, TopicMention[]> = async (ctx, agent, {title, text}) => {
+    const t1 = Date.now()
+    const m = await getSynonymsToTopicsMap(ctx)
+    const refs = getTopicsReferencedInText(text + " " + title, m)
+    const t2 = Date.now()
+    const titles = await getTopicsTitles(ctx, refs.map(r => r.topicId))
+    const t3 = Date.now()
+    const data = refs
+        .map(r => ({id: r.topicId, count: r.count, title: gett(titles, r.topicId)}))
+        .sort((a, b) => (b.count - a.count))
+    return {
+        data
     }
 }

@@ -7,7 +7,7 @@ import {deleteRecords} from "#/services/delete";
 import {Record as CAProfileRecord} from "#/lex-api/types/ar/cabildoabierto/actor/caProfile"
 import {Record as DatasetRecord} from "#/lex-api/types/ar/cabildoabierto/data/dataset"
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
-import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+import {TopicProp, Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {Record as VoteRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/vote"
 import {Record as PostRecord} from "#/lex-api/types/app/bsky/feed/post"
 import {Record as LikeRecord} from "#/lex-api/types/app/bsky/feed/like"

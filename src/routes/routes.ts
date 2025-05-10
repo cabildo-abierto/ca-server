@@ -31,7 +31,7 @@ import {
     getTopicVersionChanges,
     getTopTrendingTopics,
     getTopicsHandler,
-    getCategories
+    getCategories, getTopicsMentioned
 } from "#/services/topic/topics";
 import {getTopicFeed} from "#/services/feed/topic";
 import {deleteRecord, deleteRecordsHandler} from "#/services/delete";
@@ -286,6 +286,11 @@ export const createRouter = (ctx: AppContext) => {
 
     router.post('/unset-en-discusion/:collection/:rkey',
         makeHandler(ctx, removeFromEnDiscusion)
+    )
+
+    router.post(
+        '/get-topics-mentioned',
+        handler(makeHandler(ctx, getTopicsMentioned))
     )
 
     router.get('/metadata', makeHandler(ctx, fetchURLMetadata));

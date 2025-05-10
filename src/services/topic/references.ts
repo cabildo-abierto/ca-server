@@ -8,6 +8,7 @@ import {getCollectionFromUri, getDidFromUri, isPost} from "#/utils/uri";
 import {BlobRef} from "#/services/hydration/hydrate";
 import {fetchTextBlobs} from "#/services/blob";
 import {formatIsoDate} from "#/utils/dates";
+import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 
 
 function getSynonymRegex(synonym: string){
@@ -101,22 +102,28 @@ async function updateReferencesForContentsAndTopics(ctx: AppContext, contents: C
 }
 
 
-function getTopicsReferencedInText(text: string, content: ContentProps, synonymsMap: Map<string, {topics: Set<string>, regex: RegExp}>){
-    if(content.content?.article?.title) text += content.content.article.title
+export function getTopicsReferencedInText(text: string, synonymsMap: Map<string, {topics: Set<string>, regex: RegExp}>){
     const textCleaned = cleanText(text)
-    const refs: {topicId: string, count: number}[] = []
-
+    const refs = new Map<string, number>
     synonymsMap.values().forEach(({topics, regex}) => {
         const count = countSynonymInText(regex, textCleaned)
         if(count > 0){
-            topics.forEach(t => refs.push({topicId: t, count}))
+            topics.forEach(t => {
+                refs.set(t, (refs.get(t) ?? 0) + count)
+            })
         }
     })
 
-    return refs
+    return Array.from(refs.entries()).map(([topicId, count]) => ({topicId, count}))
 }
 
 type SynonymsMap = Map<string, {topics: Set<string>, regex: RegExp}>
+
+function withExtra(text: string, content: ContentProps){
+    if(content.content?.article?.title) return text + " " + content.content.article.title
+    return text
+}
+
 
 export async function applyReferencesUpdate(ctx: AppContext, contents: ContentProps[], texts: string[], synonymsMap: SynonymsMap) {
     const contentUris: string[] = []
@@ -127,9 +134,9 @@ export async function applyReferencesUpdate(ctx: AppContext, contents: ContentPr
     const t1 = Date.now()
     for(let i = 0; i < contents.length; i++){
         const c = contents[i]
-        const text = texts[i]
+        let text = texts[i]
 
-        const references: {topicId: string, count: number}[] = getTopicsReferencedInText(text, c, synonymsMap)
+        const references: {topicId: string, count: number}[] = getTopicsReferencedInText(withExtra(text, c), synonymsMap)
         references.forEach(r => {
             console.log(`Found reference! URI: ${c.uri}. Topic: ${r.topicId}. Count: ${r.count}`)
         })
@@ -294,7 +301,7 @@ export async function updateReferences(ctx: AppContext){
 }
 
 
-async function getSynonymsToTopicsMap(ctx: AppContext, topicsList?: string[]): Promise<SynonymsMap> {
+export async function getSynonymsToTopicsMap(ctx: AppContext, topicsList?: string[]): Promise<SynonymsMap> {
     const topics = await ctx.db.topic.findMany({
         select: {
             id: true,
@@ -308,14 +315,23 @@ async function getSynonymsToTopicsMap(ctx: AppContext, topicsList?: string[]): P
         where: topicsList ? {
             id: {
                 in: topicsList
+            },
+            currentVersionId: {
+                not: null
             }
-        } : undefined
+        } : {
+            currentVersionId: {
+                not: null
+            }
+        }
     })
 
     const synonymsToTopicsMap: SynonymsMap = new Map()
 
     topics.forEach((t) => {
-        const synonyms = unique(getTopicSynonyms(t).map(cleanText))
+        const synonyms = unique(getTopicSynonyms({
+            id: t.id, synonyms: t.synonyms, props: t.currentVersion?.props as (TopicProp[] | undefined)
+        }).map(cleanText))
 
         synonyms.forEach(s => {
             if(synonymsToTopicsMap.has(s)){
