@@ -5,6 +5,12 @@ export function union<T>(s: Set<T>, t: Set<T>): Set<T> {
 }
 
 
+export function max<T>(a: T[], f?: (x: T) => number): T | undefined {
+    if (a.length === 0) return undefined
+    return a.reduce((max, current) => ((f ? f(current) > f(max) : current > max) ? current : max));
+}
+
+
 
 export const removeNullValues = <K, V>(m: Map<K, V | null>): Map<K, V> => {
     const res = new Map<K, V>()
@@ -43,11 +49,6 @@ export function areArraysEqual(a: any[] | null | undefined, b: any[] | null | un
         if (a[i] != b[i]) return false
     }
     return true
-}
-
-export function max<T>(arr: T[]): T | undefined {
-    if (arr.length === 0) return undefined;
-    return arr.reduce((max, current) => (current > max ? current : max));
 }
 
 export function makeMatrix(n: number, m: number, v: number){

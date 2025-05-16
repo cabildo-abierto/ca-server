@@ -14,9 +14,9 @@ import {AppBskyEmbedRecord} from "@atproto/api";
 import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
 import {TopicQueryResultBasic} from "#/services/topic/topics";
 import {authorQuery, reactionsQuery, recordQuery} from "#/utils/utils";
-import { FeedViewPost, isPostView, PostView } from "@atproto/api/dist/client/types/app/bsky/feed/defs";
+import {FeedViewPost, isPostView, PostView} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {fetchTextBlobs} from "#/services/blob";
-import { Prisma } from "@prisma/client";
+import {Prisma} from "@prisma/client";
 
 
 export type FeedElementQueryResult = {
@@ -32,15 +32,16 @@ export type FeedElementQueryResult = {
         CAProfileUri: string | null
     }
     _count: {
-        likes: number
-        reposts: number
         replies: number
     }
-    uniqueViewsCount: number | null
+    uniqueViewsCount: number
+    uniqueLikesCount: number
+    uniqueRepostsCount: number
     content: {
         text: string | null
         textBlobId?: string | null
         format?: string | null
+        selfLabels: string[]
         article?: {
             title: string
         } | null
@@ -49,7 +50,6 @@ export type FeedElementQueryResult = {
             topicId: string
         } | null
     } | null
-    enDiscusion: boolean | null
 }
 
 
@@ -173,10 +173,10 @@ export class Dataplane {
                     ...authorQuery,
                     ...reactionsQuery,
                     record: true,
-                    enDiscusion: true,
                     content: {
                         select: {
-                            text: true
+                            text: true,
+                            selfLabels: true
                         }
                     }
                 },
@@ -194,12 +194,12 @@ export class Dataplane {
                     ...authorQuery,
                     ...reactionsQuery,
                     record: true,
-                    enDiscusion: true,
                     content: {
                         select: {
                             text: true,
                             format: true,
                             textBlobId: true,
+                            selfLabels: true,
                             article: {
                                 select: {
                                     title: true
@@ -222,11 +222,11 @@ export class Dataplane {
                     ...authorQuery,
                     ...reactionsQuery,
                     record: true,
-                    enDiscusion: true,
                     content: {
                         select: {
                             text: true,
                             format: true,
+                            selfLabels: true,
                             textBlobId: true,
                             topicVersion: {
                                 select: {
@@ -474,59 +474,38 @@ export class Dataplane {
     }
 
     async fetchEngagement(uris: string[]) {
-        const t1 = Date.now()
         const did = this.agent.did
-        const getLikes = this.ctx.db.like.findMany({
+        const reactions = await this.ctx.db.reaction.findMany({
             select: {
-                likedRecordId: true,
+                subjectId: true,
                 uri: true
             },
             where: {
                 record: {
-                    authorId: did
-                },
-                likedRecordId: {
-                    in: uris
+                    authorId: did,
+                    collection: {
+                        in: ["app.bsky.feed.like", "app.bsky.feed.repost"]
+                    }
                 }
             }
         })
-
-        const getReposts = this.ctx.db.repost.findMany({
-            select: {
-                repostedRecordId: true,
-                uri: true
-            },
-            where: {
-                record: {
-                    authorId: did
-                },
-                repostedRecordId: {
-                    in: uris
-                }
-            }
-        })
-
-        const [likes, reposts] = await Promise.all([getLikes, getReposts])
 
         const likesMap = new Map<string, string | null>(uris.map(uri => [uri, null]))
         const repostsMap = new Map<string, string | null>(uris.map(uri => [uri, null]))
 
-        likes.forEach(l => {
-            if (l.likedRecordId) {
-                likesMap.set(l.likedRecordId, l.uri)
-            }
-        })
-
-        reposts.forEach(l => {
-            if (l.repostedRecordId) {
-                repostsMap.set(l.repostedRecordId, l.uri)
+        reactions.forEach(l => {
+            if (l.subjectId) {
+                if (getCollectionFromUri(l.uri) == "app.bsky.feed.like") {
+                    likesMap.set(l.subjectId, l.uri)
+                }
+                if (getCollectionFromUri(l.uri) == "app.bsky.feed.repost") {
+                    repostsMap.set(l.subjectId, l.uri)
+                }
             }
         })
 
         this.likes = joinMaps(this.likes, likesMap)
         this.reposts = joinMaps(this.reposts, repostsMap)
-        const t2 = Date.now()
-        // logTimes("fetchEngagement", [t1, t2])
     }
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
@@ -544,15 +523,15 @@ export class Dataplane {
         ])
     }
 
-    storeFeedViewPosts(feed: FeedViewPost[]){
+    storeFeedViewPosts(feed: FeedViewPost[]) {
         const m = new Map<string, PostView>()
         feed.forEach(f => {
             m.set(f.post.uri, f.post)
-            if(f.reply){
-                if(isPostView(f.reply.parent)){
+            if (f.reply) {
+                if (isPostView(f.reply.parent)) {
                     m.set(f.reply.parent.uri, f.reply.parent)
                 }
-                if(isPostView(f.reply.root)){
+                if (isPostView(f.reply.root)) {
                     m.set(f.reply.root.uri, f.reply.root)
                 }
             }
@@ -563,7 +542,7 @@ export class Dataplane {
 
     async fetchDatasetsHydrationData(uris: string[]) {
         uris = uris.filter(u => !this.datasets?.has(u))
-        if(uris.length == 0) return
+        if (uris.length == 0) return
         let datasets: DatasetQueryResult[] = await this.ctx.db.record.findMany({
             select: {
                 ...recordQuery,
@@ -597,13 +576,13 @@ export class Dataplane {
         )
     }
 
-    async fetchDatasetContents(uri: string){
-        if(this.datasetContents?.has(uri)) return
+    async fetchDatasetContents(uri: string) {
+        if (this.datasetContents?.has(uri)) return
 
         await this.fetchDatasetsHydrationData([uri])
 
         const d = this.datasets?.get(uri)
-        if(!d || !d.dataset) return
+        if (!d || !d.dataset) return
 
         const authorId = getDidFromUri(uri)
         const blocks = d.dataset.dataBlocks
@@ -615,12 +594,12 @@ export class Dataplane {
 
         const contents = (await fetchTextBlobs(this.ctx, blobs)).filter(c => c != null)
 
-        if(!this.datasetContents) this.datasetContents = new Map()
+        if (!this.datasetContents) this.datasetContents = new Map()
         this.datasetContents.set(uri, contents)
     }
 
 
-    async fetchTopicsMentioned(uri: string){
+    async fetchTopicsMentioned(uri: string) {
         const topics: TopicMentionedProps[] = await this.ctx.db.reference.findMany({
             select: {
                 referencedTopic: {
@@ -639,13 +618,13 @@ export class Dataplane {
                 referencingContentId: uri
             }
         })
-        if(!this.topicsMentioned) this.topicsMentioned = new Map()
+        if (!this.topicsMentioned) this.topicsMentioned = new Map()
         this.topicsMentioned.set(uri, topics)
     }
 
-    async fetchUsersHydrationDataFromCA(dids: string[]){
+    async fetchUsersHydrationDataFromCA(dids: string[]) {
         dids = dids.filter(d => !this.caUsers.has(d))
-        if(dids.length == 0) return
+        if (dids.length == 0) return
 
         const data = await this.ctx.db.user.findMany({
             select: {
@@ -680,9 +659,9 @@ export class Dataplane {
         )
     }
 
-    async fetchUsersHydrationDataFromBsky(dids: string[]){
+    async fetchUsersHydrationDataFromBsky(dids: string[]) {
         dids = dids.filter(d => !this.bskyUsers.has(d))
-        if(dids.length == 0) return
+        if (dids.length == 0) return
 
         const {data} = await this.agent.bsky.getProfiles({actors: dids})
 
@@ -697,7 +676,7 @@ export class Dataplane {
         )
     }
 
-    async fetchUsersHydrationData(dids: string[]){
+    async fetchUsersHydrationData(dids: string[]) {
         await Promise.all([
             this.fetchUsersHydrationDataFromCA(dids),
             this.fetchUsersHydrationDataFromBsky(dids)

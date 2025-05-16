@@ -1,92 +1,99 @@
-import {deleteRecords} from "../delete";
-import {processCreate} from "../sync/process-event";
-import {updateTopicCurrentVersion} from "./current-version";
 import {ATProtoStrongRef} from "#/lib/types";
 import {SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
-import {getCollectionFromUri, getRkeyFromUri, getUri} from "#/utils/uri";
+import {getUri} from "#/utils/uri";
 import {CAHandler} from "#/utils/handler";
+import {addReaction, removeReaction} from "#/services/reactions/reactions";
+import {Record as VoteAcceptRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept"
+import {Record as VoteRejectRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject"
 
-export const voteEdit: CAHandler<{message?: string, labels?: string[], params: {id: string, vote: string, rkey: string, did: string, cid: string}}, {acceptUri: string}> = async (ctx: AppContext, agent: SessionAgent, {message, labels, params}) => {
-    const {id, vote, rkey, did, cid} = params
+export type TopicVoteType = "ar.cabildoabierto.wiki.voteAccept" | "ar.cabildoabierto.wiki.voteReject"
 
-    if(vote !== "accept" && vote !== "reject"){
+export function isTopicVote(collection: string): collection is TopicVoteType {
+    return collection == "ar.cabildoabierto.wiki.voteAccept" || collection == "ar.cabildoabierto.wiki.voteReject"
+}
+
+function opVote(type: TopicVoteType): TopicVoteType {
+    if (type == "ar.cabildoabierto.wiki.voteAccept") {
+        return "ar.cabildoabierto.wiki.voteReject"
+    } else {
+        return "ar.cabildoabierto.wiki.voteAccept"
+    }
+}
+
+
+export const createVoteAcceptAT = async (agent: SessionAgent, ref: ATProtoStrongRef): Promise<ATProtoStrongRef> => {
+    const record: VoteAcceptRecord = {
+        $type: "ar.cabildoabierto.wiki.voteAccept",
+        createdAt: new Date().toISOString(),
+        subject: ref
+    }
+
+    const {data} = await agent.bsky.com.atproto.repo.createRecord({
+        record,
+        collection: "ar.cabildoabierto.wiki.voteAccept",
+        repo: agent.did
+    })
+
+    return {uri: data.uri, cid: data.cid}
+}
+
+
+export const createVoteRejectAT = async (agent: SessionAgent, ref: ATProtoStrongRef, voteRejectProps?: VoteRejectProps): Promise<ATProtoStrongRef> => {
+    const record: VoteRejectRecord = {
+        $type: "ar.cabildoabierto.wiki.voteReject",
+        createdAt: new Date().toISOString(),
+        subject: ref,
+        ...voteRejectProps
+    }
+
+    const {data} = await agent.bsky.com.atproto.repo.createRecord({
+        record,
+        collection: "ar.cabildoabierto.wiki.voteReject",
+        repo: agent.did
+    })
+
+    return {uri: data.uri, cid: data.cid}
+}
+
+
+export type VoteRejectProps = {
+    message?: string,
+    labels?: string[]
+}
+
+
+export const voteEdit: CAHandler<{
+    message?: string,
+    labels?: string[],
+    params: { vote: string, rkey: string, did: string, cid: string }
+}, { uri: string }> = async (
+    ctx: AppContext, agent: SessionAgent, {message, labels, params}) => {
+    const {vote, rkey, did, cid} = params
+
+    if (vote !== "accept" && vote !== "reject") {
         return {error: `Voto inválido: ${vote}.`}
     }
 
-    if(vote == "accept" && (message != null || labels != null)){
+    if (vote == "accept" && (message != null || labels != null)) {
         return {error: "Por ahora no se permiten etiquetas ni mensajes en un voto positivo."}
     }
 
     const uri = getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey)
     const versionRef = {uri, cid}
 
-    const [rejects, accepts, _] = await Promise.all([
-        ctx.db.topicReject.findMany({
-            select: {
-                uri: true
-            },
-            where: {
-                rejectedRecordId: uri,
-                record: {
-                    authorId: agent.did
-                }
-            }
-        }),
-        ctx.db.topicAccept.findMany({
-            select: {
-                uri: true
-            },
-            where: {
-                acceptedRecordId: uri,
-                record: {
-                    authorId: agent.did
-                }
-            }
-        }),
-        createTopicVote(ctx, agent, id, versionRef, vote, message, labels)
-    ])
+    const type: TopicVoteType = vote == "accept" ? "ar.cabildoabierto.wiki.voteAccept" : "ar.cabildoabierto.wiki.voteReject"
 
-    if(vote == "accept" && rejects.length > 0){
-        await deleteRecords({ctx, agent, uris: rejects.map(a => a.uri), atproto: true})
-    } else if(vote == "reject" && accepts.length > 0){
-        await deleteRecords({ctx, agent, uris: accepts.map(a => a.uri), atproto: true})
-    }
+    const rejectProps = {message, labels}
 
-    await updateTopicCurrentVersion(ctx, agent, id)
-
-    return {}
+    return await addReaction(ctx, agent, versionRef, type, rejectProps)
+    // TO DO: Eliminar reacciones opuestas
 }
 
-export async function createTopicVote(ctx: AppContext, agent: SessionAgent, topicId: string, versionRef: ATProtoStrongRef, value: string, message: string | undefined, labels: string[] | undefined): Promise<{error?: string}>{
-
-    const record = {
-        $type: "ar.cabildoabierto.wiki.vote",
-        createdAt: new Date().toISOString(),
-        value,
-        subject: versionRef,
-        message: message,
-        labels: labels
-    }
-
-    const {data} = await agent.bsky.com.atproto.repo.createRecord({
-        record,
-        collection: "ar.cabildoabierto.wiki.vote",
-        repo: agent.did
-    })
-
-    let updates = await processCreate(ctx, {
-        uri: data.uri,
-        cid: data.cid
-    }, record)
-
-    await ctx.db.$transaction(updates)
-
-    return {}
-}
-
-export const cancelEditVote: CAHandler<{params: {id: string, rkey: string}}> = async (ctx: AppContext, agent: SessionAgent, {params}) => {
-    const {rkey} = params
-    const uri = getUri(agent.did, "ar.cabildoabierto.wiki.vote", rkey)
-    return await deleteRecords({ctx, agent, uris: [uri], atproto: true})
+export const cancelEditVote: CAHandler<{
+    params: { collection: string, rkey: string }
+}> = async (ctx: AppContext, agent: SessionAgent, {params}) => {
+    const {collection, rkey} = params
+    const uri = getUri(agent.did, collection, rkey)
+    return await removeReaction(ctx, agent, uri)
 }

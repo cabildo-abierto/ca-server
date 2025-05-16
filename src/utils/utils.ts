@@ -71,10 +71,10 @@ export const datasetQuery = {
 
 export const reactionsQuery = {
     uniqueViewsCount: true,
+    uniqueLikesCount: true,
+    uniqueRepostsCount: true,
     _count: {
         select: {
-            reposts: true,
-            likes: true,
             replies: true
         }
     }
@@ -84,12 +84,12 @@ export const reactionsQuery = {
 export const enDiscusionQuery = {
     ...recordQuery,
     ...reactionsQuery,
-    enDiscusion: true,
     content: {
         select: {
             text: true,
             format: true,
             textBlob: true,
+            selfLabels: true,
             article: {
                 select: {
                     title: true

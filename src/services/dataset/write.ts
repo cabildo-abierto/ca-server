@@ -1,4 +1,4 @@
-import {processCreate} from "../sync/process-event";
+import {processCreate, processDataset} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
 import {CAHandler} from "#/utils/handler";
 import {uploadStringBlob} from "#/services/blob";
@@ -66,10 +66,8 @@ export const createDataset: CAHandler<CreateDatasetProps> = async (ctx, agent, p
     const {error, record, ref} = await createDatasetATProto(agent, params)
     if (error || !record || !ref) return {error}
 
-    const updates = [
-        ...await processCreate(ctx, ref, record)
-    ]
+    const su = await processDataset(ctx, ref, record)
+    await su.apply()
 
-    await ctx.db.$transaction(updates)
     return {}
 }

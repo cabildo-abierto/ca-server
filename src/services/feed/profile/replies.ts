@@ -32,7 +32,7 @@ export const getRepliesProfileFeedSkeleton = (did: string) : GetSkeletonProps =>
         }
         return {
             skeleton: concat([bskySkeleton.skeleton, CASkeleton]),
-            cursor: bskySkeleton.cursor
+            cursor: bskySkeleton.skeleton.length > 0 ? bskySkeleton.cursor : undefined
         }
     }
 }

@@ -1,11 +1,9 @@
-import {getUserEngagement} from "../feed/get-user-engagement";
 import {AppContext} from "#/index";
 import {enDiscusionQuery, reactionsQuery, recordQuery, visualizationQuery} from "#/utils/utils";
 import {SessionAgent} from "#/utils/session-agent";
-import {VisualizationProps} from "#/lib/types";
 
 
-export async function getVisualizations(ctx: AppContext, agent: SessionAgent){
+/*export async function getVisualizations(ctx: AppContext, agent: SessionAgent){
     let v = await ctx.db.record.findMany({
         select: {
             ...enDiscusionQuery,
@@ -23,7 +21,7 @@ export async function getVisualizations(ctx: AppContext, agent: SessionAgent){
     })
 
     const did = agent.did
-    const engagement = await getUserEngagement(ctx, v.map(x => x.uri), did)
+    // const engagement = await getUserEngagement(ctx, v.map(x => x.uri), did)
 
     // TO DO: return addViewerToFeed(v, engagement)
 }
@@ -44,7 +42,7 @@ export async function getVisualization(ctx: AppContext, agent: SessionAgent, uri
         })
 
         const did = agent.did
-        const [visualization, engagement] = await Promise.all([getVisualization, getUserEngagement(ctx, [uri], did)])
+        const [visualization, engagement] = await Promise.all([getVisualization, engagement(ctx, [uri], did)])
 
         return {visualization: visualization as VisualizationProps} // TO DO: addViewer(visualization, engagement)}
     } catch (error) {
@@ -52,4 +50,4 @@ export async function getVisualization(ctx: AppContext, agent: SessionAgent, uri
         console.error(error)
         return {error: "Ocurrió un error al obtener la visualización."}
     }
-}
+}*/

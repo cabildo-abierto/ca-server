@@ -20,21 +20,20 @@ import {
     unfollow
 } from "#/services/user/users";
 import {createPost} from "#/services/write/post";
-import {addLike, removeLike} from "#/services/reactions/like";
-import {removeRepost, repost} from "#/services/reactions/repost";
+import {addLike, removeLike, removeRepost, repost} from "#/services/reactions/reactions";
 import {getThread} from "#/services/thread/thread";
 import {
     getTopicHandler,
-    getTopicHistory,
+    getTopicHistoryHandler,
     getTopicVersionHandler,
     getTopicVersionAuthors,
     getTopicVersionChanges,
     getTopTrendingTopics,
     getTopicsHandler,
-    getCategories
+    getCategories, getTopicsMentioned
 } from "#/services/topic/topics";
 import {getTopicFeed} from "#/services/feed/topic";
-import {deleteRecord, deleteRecordsHandler} from "#/services/delete";
+import {deleteRecordHandler, deleteRecordsHandler} from "#/services/delete";
 import {getCategoriesGraph, getCategoryGraph} from "#/services/topic/graph";
 import {createTopicVersion} from "#/services/write/topic";
 import path from "path";
@@ -44,6 +43,7 @@ import { fetchURLMetadata } from '#/services/write/metadata';
 import {getDataset, getDatasets } from '#/services/dataset/read';
 import { createDataset } from '#/services/dataset/write';
 import {searchContents} from "#/services/feed/search";
+import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion";
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -120,7 +120,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.post(
-        '/remove-like',
+        '/remove-like/:rkey',
         handler(makeHandler(ctx, removeLike))
     )
 
@@ -130,7 +130,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.post(
-        '/remove-repost',
+        '/remove-repost/:rkey',
         handler(makeHandler(ctx, removeRepost))
     )
 
@@ -200,7 +200,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get(
         '/topic-history/:id',
-        makeHandler(ctx, getTopicHistory)
+        makeHandler(ctx, getTopicHistoryHandler)
     )
 
     router.get(
@@ -219,8 +219,8 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.post(
-        '/delete-record',
-        makeHandler(ctx, deleteRecord)
+        '/delete-record/:collection/:rkey',
+        makeHandler(ctx, deleteRecordHandler)
     )
 
     router.get(
@@ -254,12 +254,12 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.post(
-        '/vote-edit/:vote/:id/:did/:rkey/:cid',
+        '/vote-edit/:vote/:did/:rkey/:cid',
         makeHandler(ctx, voteEdit)
     )
 
     router.post(
-        '/cancel-edit-vote/:id/:rkey',
+        '/cancel-edit-vote/:collection/:rkey',
         makeHandler(ctx, cancelEditVote)
     )
 
@@ -277,6 +277,19 @@ export const createRouter = (ctx: AppContext) => {
 
     router.post('/dataset',
         makeHandler(ctx, createDataset)
+    )
+
+    router.post('/set-en-discusion/:collection/:rkey',
+        makeHandler(ctx, addToEnDiscusion)
+    )
+
+    router.post('/unset-en-discusion/:collection/:rkey',
+        makeHandler(ctx, removeFromEnDiscusion)
+    )
+
+    router.post(
+        '/get-topics-mentioned',
+        handler(makeHandler(ctx, getTopicsMentioned))
     )
 
     router.get('/metadata', makeHandler(ctx, fetchURLMetadata));

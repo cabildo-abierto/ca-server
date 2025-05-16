@@ -22,7 +22,7 @@ export class MirrorMachine {
     async run(){
         await this.fetchUsers()
         console.log("Known users:", this.knownUsers)
-        const url = 'wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.*&wantedCollections=ar.com.cabildoabierto.*'
+        const url = 'wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.*&wantedCollections=ar.cabildoabierto.*'
         const ws = new WebSocket(url)
 
         ws.on('open', () => {

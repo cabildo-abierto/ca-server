@@ -4,7 +4,7 @@ import {AppContext} from "#/index";
 import {isValidHandle} from "@atproto/syntax";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {Record as CAProfileRecord} from "#/lex-server/types/ar/cabildoabierto/actor/caProfile"
-import {processCreate} from "#/services/sync/process-event";
+import {processBskyProfile, processCAProfile} from "#/services/sync/process-event";
 import {Record as BskyProfileRecord} from "#/lex-api/types/app/bsky/actor/profile"
 
 
@@ -36,6 +36,7 @@ export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (c
         })
         return {data: {url}}
     } catch (err) {
+        console.error(`Error authorizing ${handle}`, err)
         return {error: "Ocurrió un error al iniciar sesión."}
     }
 }
@@ -94,17 +95,18 @@ export async function createCAUser(ctx: AppContext, agent: SessionAgent, code: s
         })
     ])
 
-    const updates = [
-        ...await processCreate(ctx, {uri: data.uri, cid: data.cid}, caProfileRecord),
-        ...await processCreate(ctx, {uri: bskyProfile.uri, cid: bskyProfile.cid!}, bskyProfile.value as BskyProfileRecord)
-    ]
+    const caProfileCreation = await processCAProfile(ctx, {uri: data.uri, cid: data.cid}, caProfileRecord)
+    const bskyProfileCreation = await processBskyProfile(ctx, {uri: bskyProfile.uri, cid: bskyProfile.cid!}, bskyProfile.value as BskyProfileRecord)
 
-    await ctx.db.$transaction(updates)
+    caProfileCreation.joinWith(bskyProfileCreation)
+
+    await caProfileCreation.apply()
 
     return {}
 }
 
 
+// TO DO
 export async function createCodes(ctx: AppContext, amount: number){
     await ctx.db.inviteCode.createMany({
         data: new Array(amount).fill({})

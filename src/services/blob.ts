@@ -6,6 +6,7 @@ import {BlobRef} from "#/services/hydration/hydrate";
 import {getBlobKey} from "#/services/hydration/dataplane";
 import {redisCacheTTL} from "#/services/topic/topics";
 import {imageSize} from "image-size";
+import {range} from "#/utils/arrays";
 
 
 export async function getServiceEndpointForDid(did: string){
@@ -50,7 +51,7 @@ export async function fetchBlob(blob: {cid: string, authorId: string}) {
 
 export async function fetchTextBlob(ref: {cid: string, authorId: string}, retries: number = 0) {
     const res = await fetchBlob(ref)
-    if(!res) {
+    if(!res || res.status != 200) {
         if(retries > 0) {
             console.log(`Retrying... (${retries-1} retries left)`)
             return fetchTextBlob(ref, retries - 1)
@@ -68,7 +69,7 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
     const keys: string[] = blobs.map(b => getBlobKey(b))
 
     const t1 = Date.now()
-    const blobContents = await ctx.ioredis.mget(keys)
+    const blobContents: (string | null)[] = await ctx.ioredis.mget(keys)
     const t2 = Date.now()
 
     const pending: {i: number, blob: BlobRef}[] = []
@@ -86,7 +87,7 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
         if(r){
             blobContents[pending[i].i] = r
         } else {
-            console.log(`Warning: Couldn't find blob ${pending[i].blob.cid} ${pending[i].blob.authorId}`)
+            console.log("Warning: Couldn't find blob:", pending[i].blob)
         }
     }
 

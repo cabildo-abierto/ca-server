@@ -1,19 +1,19 @@
 import {AppContext} from "#/index";
-import {ProfileView, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+import {ProfileView} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {Account, MentionProps, Profile, Session, UserStats} from "#/lib/types";
 import {cookieOptions, SessionAgent} from "#/utils/session-agent";
-import {getDidFromUri, getRkeyFromUri} from "#/utils/uri";
 import {deleteRecords} from "#/services/delete";
 import {cleanText} from "#/utils/strings";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
-import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {listOrderDesc, sortByKey, unique} from "#/utils/arrays";
+import {unique} from "#/utils/arrays";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {getIronSession} from "iron-session";
 import {createCAUser} from "#/services/user/access";
 import {dbUserToProfileViewBasic} from "#/services/topic/topics";
+import {Record as FollowRecord} from "#/lex-api/types/app/bsky/graph/follow"
+import {processCreate, processFollow} from "#/services/sync/process-event";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -190,62 +190,15 @@ export const getConversations = async (ctx: AppContext, userId: string) => {
 }
 
 
-// TO DO: Eliminar esta función, está repetida
-export function createRecord({ctx, uri, cid, createdAt, collection}: {
-    ctx: AppContext
-    uri: string
-    cid: string
-    createdAt: Date
-    collection: string
-}) {
-    // @ts-ignore
-    const data = {
-        uri,
-        cid,
-        rkey: getRkeyFromUri(uri),
-        createdAt: new Date(createdAt),
-        authorId: getDidFromUri(uri),
-        collection: collection
-    }
-
-    let updates: any[] = [ctx.db.record.upsert({
-        create: data,
-        update: data,
-        where: {
-            uri: uri
-        }
-    })]
-    return updates
-}
-
-
-export async function createFollowDB({ctx, did, uri, cid, followedDid}: {
-    ctx: AppContext,
-    did: string,
-    uri: string,
-    cid: string,
-    followedDid: string
-}) {
-    const updates = [
-        ...createRecord({ctx, uri, cid, createdAt: new Date(), collection: "app.bsky.graph.follow"}),
-        ctx.db.follow.create({
-            data: {
-                uri: uri,
-                userFollowedId: followedDid
-            }
-        })
-    ]
-
-    await ctx.db.$transaction(updates)
-
-    //await revalidateTags(["user:"+followedDid, "user:"+did])
-}
-
-
 export const follow: CAHandler<{ followedDid: string }, { followUri: string }> = async (ctx, agent, {followedDid}) => {
     try {
         const res = await agent.bsky.follow(followedDid)
-        await createFollowDB({ctx, did: agent.did, ...res, followedDid})
+        const record: FollowRecord = {
+            $type: "app.bsky.graph.follow",
+            subject: followedDid,
+            createdAt: new Date().toISOString()
+        }
+        await processFollow(ctx, res, record)
         return {data: {followUri: res.uri}}
     } catch {
         return {error: "Error al seguir al usuario."}

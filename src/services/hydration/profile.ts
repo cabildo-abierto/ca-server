@@ -8,7 +8,10 @@ export function hydrateProfileViewBasic(did: string, data: Dataplane): CAProfile
     if(!bsky) return null
 
     if(ca) {
-        return ca
+        return {
+            ...ca,
+            viewer: bsky.viewer
+        }
     } else if(bsky) {
         return {
             ...bsky,

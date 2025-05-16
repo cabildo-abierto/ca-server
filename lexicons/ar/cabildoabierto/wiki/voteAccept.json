@@ -1,6 +1,6 @@
 {
     "lexicon": 1,
-    "id": "ar.cabildoabierto.wiki.vote",
+    "id": "ar.cabildoabierto.wiki.voteAccept",
     "defs": {
       "main": {
         "type": "record",
@@ -16,21 +16,6 @@
             "createdAt": {
               "type": "string",
               "format": "datetime"
-            },
-            "value": {
-              "type": "string",
-              "description": "Valid values are 'accept' and 'reject'."
-            },
-            "message": {
-              "type": "string",
-              "maxGraphemes": 600,
-              "maxLength": 6000
-            },
-            "labels": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
             }
           }
         }
