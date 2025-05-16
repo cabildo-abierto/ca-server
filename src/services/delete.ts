@@ -1,9 +1,10 @@
-import {getCollectionFromUri, getRkeyFromUri, isTopicVersion} from "#/utils/uri";
+import {getCollectionFromUri, getRkeyFromUri, getUri, isTopicVersion, splitUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
 import {CAHandler} from "#/utils/handler";
-import {deleteTopicVersion} from "#/services/topic/current-version";
 import {handleToDid} from "#/services/user/users";
+import {processDelete} from "#/services/sync/process-event";
+import {SyncUpdate} from "#/services/sync/sync-update";
 
 
 export async function deleteRecordsForAuthor({ctx, agent, author, collections, atproto}: {ctx: AppContext, agent?: SessionAgent, author: string, collections?: string[], atproto: boolean}){
@@ -39,119 +40,138 @@ export const deleteRecordsHandler: CAHandler<{uris: string[], atproto: boolean}>
 }
 
 
+export const deleteCollectionHandler: CAHandler<{params: {collection: string}}, {}> = async (ctx, agent, {params}) => {
+    const {collection} = params
+    await ctx.queue.add("delete-collection", {collection})
+    return {data: {}}
+}
+
+
+export async function deleteCollection(ctx: AppContext, collection: string){
+    const uris = (await ctx.db.record.findMany({
+        select: {
+            uri: true
+        },
+        where: {
+            collection: collection
+        }
+    })).map((r) => (r.uri))
+    console.log(`Found ${uris.length} records. Deleting all...`)
+    const su = deleteRecordsDB(ctx, uris)
+    await su.apply()
+    console.log("Done.")
+}
+
+
+export function deleteRecordsDB(ctx: AppContext, uris: string[]){
+    const su = new SyncUpdate(ctx.db)
+    su.addUpdatesAsTransaction([
+        ctx.db.hasReacted.deleteMany({
+            where: {
+                recordId: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.reference.deleteMany({
+            where: {
+                referencingContentId: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.follow.deleteMany({
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.post.deleteMany({
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.article.deleteMany({
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.voteReject.deleteMany({
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.reaction.deleteMany({
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.topicVersion.deleteMany({
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.visualization.deleteMany({
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.dataBlock.deleteMany({
+            where: {
+                datasetId: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.dataset.deleteMany({
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.content.deleteMany({
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        }),
+        ctx.db.record.deleteMany({
+            where: {
+                uri: {
+                    in: uris
+                }
+            }
+        })
+    ])
+    return su
+}
+
+
 export async function deleteRecords({ctx, agent, uris, atproto}: { ctx: AppContext, agent?: SessionAgent, uris: string[], atproto: boolean }): Promise<{error?: string}> {
     if (atproto && agent) {
         for (let i = 0; i < uris.length; i++) {
-            await agent.bsky.com.atproto.repo.deleteRecord({
-                repo: agent.did,
-                rkey: getRkeyFromUri(uris[i]),
-                collection: getCollectionFromUri(uris[i])
-            })
+            await deleteRecordAT(agent, uris[i])
         }
     }
 
     try {
-        // TO DO: hacer esto por collections
-        await ctx.db.$transaction([
-            ctx.db.reference.deleteMany({
-                where: {
-                    referencingContentId: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.topicAccept.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.topicReject.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.follow.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.post.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.article.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.like.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.repost.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.topicVersion.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.visualization.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.dataBlock.deleteMany({
-                where: {
-                    datasetId: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.dataset.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.content.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            }),
-            ctx.db.record.deleteMany({
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            })
-        ])
+        const su = deleteRecordsDB(ctx, uris)
+        await su.apply()
     } catch (err) {
         console.error(err)
         return {error: "Error al borrar los registros."}
@@ -198,12 +218,20 @@ export async function deleteUser(ctx: AppContext, did: string) {
 }
 
 
-export const deleteRecord: CAHandler<{uri: string}> = async (ctx, agent, {uri}) => {
-    const c = getCollectionFromUri(uri)
-    if(isTopicVersion(c)){
-        await deleteTopicVersion(ctx, agent, uri)
-    } else {
-        await deleteRecords({ctx, agent, uris: [uri], atproto: true})
-    }
+export async function deleteRecordAT(agent: SessionAgent, uri: string){
+    return agent.bsky.com.atproto.repo.deleteRecord({
+        repo: agent.did,
+        rkey: getRkeyFromUri(uri),
+        collection: getCollectionFromUri(uri)
+    })
+}
+
+
+export const deleteRecordHandler: CAHandler<{params: {rkey: string, collection: string}}> = async (ctx, agent, {params}) => {
+    const {rkey, collection} = params
+    const uri = getUri(agent.did, collection, rkey)
+    await deleteRecordAT(agent, uri)
+    const su = await processDelete(ctx, uri)
+    await su.apply()
     return {data: {}}
 }

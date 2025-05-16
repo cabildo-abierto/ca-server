@@ -1,4 +1,4 @@
-import {processCreate} from "../sync/process-event";
+import {processCreate, processPost} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
 import {$Typed, RichText} from "@atproto/api";
@@ -9,7 +9,6 @@ import {CAHandler} from "#/utils/handler";
 import {View as ExternalEmbedView} from "#/lex-server/types/app/bsky/embed/external"
 import {Main as EmbedRecord} from "#/lex-server/types/app/bsky/embed/record"
 import {Main as EmbedRecordWithMedia} from "#/lex-server/types/app/bsky/embed/recordWithMedia"
-
 
 function createQuotePostEmbed(post: ATProtoStrongRef): $Typed<EmbedRecord> {
     return {
@@ -118,7 +117,7 @@ export async function createPostAT({
                                    }: {
     agent: SessionAgent
     post: CreatePostProps
-}): Promise<ATProtoStrongRef> {
+}): Promise<{ ref: ATProtoStrongRef, record: PostRecord }> {
     const rt = new RichText({
         text: post.text
     })
@@ -136,7 +135,8 @@ export async function createPostAT({
         labels: post.enDiscusion ? {$type: "com.atproto.label.defs#selfLabels", values: [{val: "ca:en discusión"}]} : undefined
     }
 
-    return await agent.bsky.post({...record})
+    const ref = await agent.bsky.post({...record})
+    return {ref, record}
 }
 
 
@@ -159,14 +159,10 @@ export type CreatePostProps = {
 
 
 export const createPost: CAHandler<CreatePostProps, ATProtoStrongRef> = async (ctx, agent, post) => {
-    const ref = await createPostAT({
-        agent, post
-    })
+    const {ref, record} = await createPostAT({agent, post})
 
-    if (ref) {
-        const updates = await processCreate(ctx, ref, post)
-        await ctx.db.$transaction(updates)
-    }
+    const updates = await processPost(ctx, ref, record)
+    await updates.apply()
 
     return {data: ref}
 }

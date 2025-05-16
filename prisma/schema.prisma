@@ -53,6 +53,8 @@ model User {
   usedInviteCode      InviteCode?      @relation("invite-code-used")
   recommendCodes      InviteCode[]     @relation("invite-codes-available") // los códigos de invitación que tiene disponibles para usar
   seenTutorial        Boolean          @default(false)
+
+  hasReacted          HasReacted[]
 }
 
 model InviteCode {
@@ -164,10 +166,6 @@ model Record {
   authorId            String
   createdAt           DateTime        @default(now()) @map("created_at")
   content             Content?
-  like                Like?
-  repost              Repost?
-  topicAccept         TopicAccept?
-  topicReject         TopicReject?
   follow              Follow?
   dataset             Dataset?
   visualization       Visualization?
@@ -175,20 +173,25 @@ model Record {
   embeddedIn          Record?         @relation("embeddings", fields: [uri], references: [uri])
   embeddedRecords     Record[]        @relation("embeddings")
   record              String?
-  likes               Like[]          @relation("likes")
-  reposts             Repost[]        @relation("reposts")
+
+  reaction            Reaction?
+  reactions           Reaction[]      @relation("reactions")
+  uniqueReactions     HasReacted[]
+
+  uniqueLikesCount    Int             @default(0)
+  uniqueRepostsCount  Int             @default(0)
+  uniqueAcceptsCount  Int             @default(0)
+  uniqueRejectsCount  Int             @default(0)
+
+  views               View[]
+  uniqueViewsCount    Int             @default(0)
+
+
   replies             Post[]          @relation("reply")
   rootOf              Post[]          @relation("root")
-  accepts             TopicAccept[]   @relation("accepts")
-  rejects             TopicReject[]   @relation("rejects")
-  views               View[]
-  uniqueViewsCount    Int?            @default(0)
-  CAProfileOf         User?           @relation("CAProfile")
 
-  lastInThread           Post?   @relation("lastInThread", fields: [lastInThreadId], references: [uri])
-  lastInThreadId         String? @unique
-  secondToLastInThreadId String? @unique
-  secondToLastInThread   Post?   @relation("secondToLastInThread", fields: [secondToLastInThreadId], references: [uri])
+
+  CAProfileOf         User?           @relation("CAProfile")
 }
 
 model Content {
@@ -217,9 +220,6 @@ model Post {
   quote     String?
   rootId    String?
   root      Record? @relation("root", fields: [rootId], references: [uri])
-
-  lastInThread         Record? @relation("lastInThread")
-  secondToLastInThread Record? @relation("secondToLastInThread")
 }
 
 model Follow {
@@ -229,32 +229,33 @@ model Follow {
   userFollowed   User?   @relation(fields: [userFollowedId], references: [did])
 }
 
-model Like {
+model Reaction {
   uri           String  @id
   record        Record  @relation(fields: [uri], references: [uri])
-  likedRecordId String?
-  likedRecord   Record? @relation("likes", fields: [likedRecordId], references: [uri])
+  subjectId     String?
+  subject       Record? @relation("reactions", fields: [subjectId], references: [uri])
+
+  voteReject    VoteReject?
 }
 
-model Repost {
-  uri              String  @id
-  record           Record  @relation(fields: [uri], references: [uri])
-  repostedRecordId String?
-  repostedRecord   Record? @relation("reposts", fields: [repostedRecordId], references: [uri])
+model HasReacted {
+  id           String   @id @default(uuid())
+  userId      String
+  user        User    @relation(fields: [userId], references: [did])
+
+  recordId    String
+  record      Record  @relation(fields: [recordId], references: [uri])
+
+  reactionType String
+
+  @@unique([userId, recordId, reactionType])
 }
 
-model TopicAccept {
+model VoteReject {
   uri              String  @id
-  record           Record  @relation(fields: [uri], references: [uri])
-  acceptedRecordId String?
-  acceptedRecord   Record? @relation("accepts", fields: [acceptedRecordId], references: [uri])
-}
-
-model TopicReject {
-  uri              String  @id
-  record           Record  @relation(fields: [uri], references: [uri])
-  rejectedRecordId String?
-  rejectedRecord   Record? @relation("rejects", fields: [rejectedRecordId], references: [uri])
+  reaction         Reaction  @relation(fields: [uri], references: [uri])
+  message          String?
+  labels           String[]
 }
 
 model Article {

@@ -88,8 +88,8 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
             labels: dbLabelsToLabelsView(e.content?.selfLabels ?? [], uri),
             record: e.record ? JSON.parse(e.record) : {},
             indexedAt: new Date(e.createdAt).toISOString(),
-            likeCount: e._count.likes,
-            repostCount: e._count.reposts,
+            likeCount: e.uniqueLikesCount,
+            repostCount: e.uniqueRepostsCount,
             replyCount: e._count.replies,
             uniqueViewsCount: e.uniqueViewsCount ?? undefined,
             viewer,
@@ -152,8 +152,8 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
             author,
             record: e.record ? JSON.parse(e.record) : {},
             indexedAt: new Date(e.createdAt).toISOString(),
-            likeCount: e._count.likes,
-            repostCount: e._count.reposts,
+            likeCount: e.uniqueLikesCount,
+            repostCount: e.uniqueRepostsCount,
             replyCount: e._count.replies,
             uniqueViewsCount: e.uniqueViewsCount ?? undefined,
             viewer
@@ -240,8 +240,8 @@ function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView
             embed: embedView,
             ...(caData ? {
                 uniqueViewsCount: caData.uniqueViewsCount ?? undefined,
-                likeCount: caData._count.likes,
-                repostCount: caData._count.reposts,
+                likeCount: caData.uniqueLikesCount,
+                repostCount: caData.uniqueRepostsCount,
             } : {
                 uniqueViewsCount: 0,
                 likeCount: 0,

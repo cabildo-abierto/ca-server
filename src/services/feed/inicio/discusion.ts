@@ -1,10 +1,12 @@
 import {FeedPipelineProps, GetSkeletonProps} from "#/services/feed/feed";
 import {rootCreationDateSortKey} from "#/services/feed/utils";
 import {CAHandler} from "#/utils/handler";
-import {Record as PostRecord, validateRecord as validatePostRecord} from "#/lex-api/types/app/bsky/feed/post";
-import {Record as ArticleRecord, validateRecord as validateArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
-import {processCreate} from "#/services/sync/process-event";
+import {Record as PostRecord, validateRecord as validatePostRecord, isRecord as isPostRecord} from "#/lex-api/types/app/bsky/feed/post";
+import {Record as ArticleRecord, validateRecord as validateArticleRecord, isRecord as isArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
+import {processArticle, processCreate, processPost} from "#/services/sync/process-event";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
+import {isArticle} from "#/utils/uri";
+
 
 
 export const getEnDiscusionSkeleton: GetSkeletonProps = async (ctx, agent, data, cursor) => {
@@ -32,6 +34,7 @@ export const enDiscusionFeedPipeline: FeedPipelineProps = {
 
 
 export const addToEnDiscusion: CAHandler<{params: {collection: string, rkey: string}}, {}> = async (ctx, agent, {params} ) => {
+    // TO DO: Pasar a processUpdate
     const {collection, rkey} = params
     const did = agent.did
 
@@ -74,8 +77,13 @@ export const addToEnDiscusion: CAHandler<{params: {collection: string, rkey: str
             record: validRecord
         })
 
-        const updates = await processCreate(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
-        await ctx.db.$transaction(updates)
+        if(isArticleRecord(record)){
+            const su = await processArticle(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
+            await su.apply()
+        } else if(isPostRecord(record)){
+            const su = await processPost(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
+            await su.apply()
+        }
     } else {
         return {error: "No se pudo agregar a en discusión."}
     }
@@ -86,6 +94,7 @@ export const addToEnDiscusion: CAHandler<{params: {collection: string, rkey: str
 
 
 export const removeFromEnDiscusion: CAHandler<{params: {collection: string, rkey: string}}, {}> = async (ctx, agent, {params} ) => {
+    // TO DO: Pasar a processUpdate
     const {collection, rkey} = params
     const did = agent.did
 
@@ -123,8 +132,13 @@ export const removeFromEnDiscusion: CAHandler<{params: {collection: string, rkey
             record: validRecord
         })
 
-        const updates = await processCreate(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
-        await ctx.db.$transaction(updates)
+        if(isArticleRecord(record)){
+            const su = await processArticle(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord as ArticleRecord)
+            await su.apply()
+        } else if(isPostRecord(record)){
+            const su = await processPost(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord as PostRecord)
+            await su.apply()
+        }
     } else {
         return {error: "No se pudo remover de en discusión."}
     }

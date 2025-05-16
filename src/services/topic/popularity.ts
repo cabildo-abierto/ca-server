@@ -8,10 +8,7 @@ type ContentInteractions = {
     replies: {
         uri: string
     }[]
-    likes: {
-        uri: string
-    }[]
-    reposts: {
+    reactions: {
         uri: string
     }[]
 }
@@ -110,12 +107,7 @@ export async function getContentInteractions(ctx: AppContext) : Promise<{uri: st
                     uri: true
                 }
             },
-            likes: {
-                select: {
-                    uri: true
-                }
-            },
-            reposts: {
+            reactions: {
                 select: {
                     uri: true
                 }
@@ -143,12 +135,7 @@ export async function getContentInteractions(ctx: AppContext) : Promise<{uri: st
         const author = getDidFromUri(c.uri)
         s.add(author)
 
-        c.likes.forEach(({uri}) => {
-            const did = getDidFromUri(uri)
-            s.add(did)
-        })
-
-        c.reposts.forEach(({uri}) => {
+        c.reactions.forEach(({uri}) => {
             const did = getDidFromUri(uri)
             s.add(did)
         })

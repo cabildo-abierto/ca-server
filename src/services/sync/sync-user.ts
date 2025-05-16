@@ -1,6 +1,5 @@
 import {processCreate} from "./process-event";
 import {deleteRecords} from "../delete";
-import {validRecord} from "./utils";
 import {getDirtyUsers, setMirrorStatus} from "./mirror-status";
 import {AppContext} from "#/index";
 import {getUsers} from "#/services/user/users";
@@ -9,6 +8,7 @@ import {iterateAtpRepo} from "@atcute/car"
 import {getServiceEndpointForDid} from "#/services/blob";
 import {getCollectionFromUri, shortCollectionToCollection} from "#/utils/uri";
 import {CAHandler} from "#/utils/handler";
+import {SyncUpdate} from "#/services/sync/sync-update";
 
 
 export async function restartSync(ctx: AppContext): Promise<void> {
@@ -96,7 +96,6 @@ export async function syncUser(ctx: AppContext, did: string, collectionsMustUpda
     }
 
     const presentRecords = new Set()
-    repo = repo.filter((r) => (validRecord(r)))
     repo.forEach((r) => {presentRecords.add(r.uri)})
     await processRepo(ctx, repo, did, collectionsMustUpdate, retries)
 
@@ -135,36 +134,15 @@ export async function processRepo(ctx: AppContext, repo: UserRepo, did: string, 
         return
     }
 
-    let updates: any[] = []
+    let su: SyncUpdate = new SyncUpdate(ctx.db)
     for(let i = 0; i < repo.length; i++){
         if(recordsReqUpdate == null || recordsReqUpdate.has(repo[i].uri)){
             const r = await processCreate(ctx, {uri: repo[i].uri, cid: repo[i].cid}, repo[i].record)
-            updates = [...updates, ...r]
+            su.joinWith(r)
         }
     }
-    const t1 = Date.now()
-    const batchSize = 500
-    let updateOk = false
-    console.log("Total updates", updates.length)
-    for(let i = 0; i < updates.length; i += batchSize){
-        console.log("starting batch in index", i, "of", updates.length)
-        for (let attempt = 1; attempt <= retries; attempt++) {
-            try {
-                await ctx.db.$transaction(updates.slice(i, i+batchSize))
-                updateOk = true
-                break
-            } catch (error) {
-                console.warn("Error actualizando " + did + ", batch " + i + ". Retrying attempt "+attempt+"...")
-                console.log(error)
-                await new Promise(res => setTimeout(res, 100 * attempt));
-            }
-        }
-    }
-    if(updateOk){
-        console.log("Updating", did, "finished after", Date.now() - t1)
-    } else {
-        console.log("Couldn't update", did)
-    }
+
+    await su.apply()
 }
 
 

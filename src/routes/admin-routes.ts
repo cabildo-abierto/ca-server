@@ -4,8 +4,9 @@ import {CAHandler, makeHandler} from "#/utils/handler";
 import {updateCategoriesGraphHandler} from "#/services/topic/graph";
 import {syncUserHandler} from "#/services/sync/sync-user";
 import {updateReferences, updateReferencesHandler} from "#/services/topic/references";
-import {deleteUserHandler} from "#/services/delete";
+import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete";
 import {getAvailableInviteCodes} from "#/services/user/access";
+import {updateEngagementCountsHandler} from "#/services/feed/getUserEngagement";
 
 
 function isAdmin(did: string) {
@@ -50,6 +51,16 @@ export const adminRoutes = (ctx: AppContext) => {
     router.get(
         "/codes",
         makeAdminHandler(ctx, getAvailableInviteCodes)
+    )
+
+    router.post(
+        "/update-engagement-counts",
+        makeAdminHandler(ctx, updateEngagementCountsHandler)
+    )
+
+    router.post(
+        "/delete-collection/:collection",
+        makeAdminHandler(ctx, deleteCollectionHandler)
     )
 
     return router

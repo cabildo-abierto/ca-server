@@ -45,6 +45,10 @@ const getSearchContentsSkeleton: (q: string) => GetSkeletonProps = (q) => async 
       LIMIT 10
     `;
 
+    articleUris.forEach(a => {
+        console.log(a.uri)
+    })
+
     const res: string[] = []
     let i = 0
     while(i < postUris.length || i < articleUris.length){
@@ -52,6 +56,7 @@ const getSearchContentsSkeleton: (q: string) => GetSkeletonProps = (q) => async 
         if(i < articleUris.length) res.push(articleUris[i].uri)
         i++
     }
+
     return {skeleton: res.map(u => ({post: u})), cursor: undefined}
 }
 

@@ -2,22 +2,14 @@ import {SessionAgent} from "#/utils/session-agent";
 import {getFollowing} from "#/services/user/users";
 import {AppContext} from "#/index";
 import {FeedPipelineProps, FeedSkeleton, GetSkeletonProps} from "#/services/feed/feed";
-import {
-    rootCreationDateSortKey
-} from "#/services/feed/utils";
-import {
-    FeedViewPost,
-    isFeedViewPost,
-    isReasonRepost,
-    SkeletonFeedPost
-} from "#/lex-api/types/app/bsky/feed/defs";
+import {rootCreationDateSortKey} from "#/services/feed/utils";
+import {FeedViewPost, isFeedViewPost, isReasonRepost, SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
 import {articleCollections, getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri";
 import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {isKnownContent} from "#/utils/type-utils";
 import {isPostView as isCAPostView} from "#/lex-server/types/ar/cabildoabierto/feed/defs";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
 import {Dataplane} from "#/services/hydration/dataplane";
-import {logTimes} from "#/utils/utils";
 import {$Typed} from "@atproto/api";
 
 type RepostQueryResult = {
@@ -27,24 +19,25 @@ type RepostQueryResult = {
         displayName: string | null
     },
     createdAt: Date
-    repost: {
-        repostedRecord: {
+    reaction: {
+        subject: {
             uri: string
-            lastInThreadId: string | null
-            secondToLastInThreadId: string | null
-        }
-    }
+        } | null
+    } | null
 }
 
 
-function skeletonFromArticleReposts(p: RepostQueryResult): SkeletonFeedPost {
-    return {
-        $type: "app.bsky.feed.defs#skeletonFeedPost",
-        post: p.repost.repostedRecord.uri,
-        reason: {
-            $type: "app.bsky.feed.defs#skeletonReasonRepost"
+function skeletonFromArticleReposts(p: RepostQueryResult): SkeletonFeedPost | null {
+    if(p.reaction && p.reaction.subject){
+        return {
+            $type: "app.bsky.feed.defs#skeletonFeedPost",
+            post: p.reaction.subject.uri,
+            reason: {
+                $type: "app.bsky.feed.defs#skeletonReasonRepost"
+            }
         }
     }
+    return null
 }
 
 
@@ -126,9 +119,8 @@ export async function getArticlesForFollowingFeed(ctx: AppContext, following: st
 }
 
 
-export async function getArticleRepostsForFollowingFeed(ctx: AppContext, following: string[]) {
-    const t1 = Date.now()
-    const res = await (ctx.db.record.findMany({
+export async function getArticleRepostsForFollowingFeed(ctx: AppContext, following: string[]): Promise<RepostQueryResult[]> {
+    return ctx.db.record.findMany({
         select: {
             createdAt: true,
             author: {
@@ -138,13 +130,11 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, followi
                     handle: true
                 }
             },
-            repost: {
+            reaction: {
                 select: {
-                    repostedRecord: {
+                    subject: {
                         select: {
                             uri: true,
-                            lastInThreadId: true,
-                            secondToLastInThreadId: true
                         }
                     },
                 }
@@ -155,17 +145,14 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, followi
                 in: following
             },
             collection: "app.bsky.feed.repost",
-            repost: {
-                repostedRecord: {
-                    collection: "ar.com.cabildoabierto.article"
+            reaction: {
+                subject: {
+                    collection: "ar.cabildoabierto.feed.article"
                 }
             }
         },
         take: 10
-    }) as Promise<RepostQueryResult[]>)
-    const t2 = Date.now()
-    // logTimes("getArticleRepostsForFollowingFeed", [t1, t2])
-    return res
+    })
 }
 
 
@@ -214,15 +201,17 @@ export const getFollowingFeedSkeleton: GetSkeletonProps = async (ctx, agent, dat
 
     const timelineSkeleton = getSkeletonFromTimeline(timeline.feed, following)
 
-    const articleRepostsSkeleton = articleReposts.map(skeletonFromArticleReposts)
+    const articleRepostsSkeleton = articleReposts.map(skeletonFromArticleReposts).filter(x => x != null)
+
+    const skeleton = [
+        ...timelineSkeleton,
+        ...articles.map(a => ({post: a.uri})),
+        ...articleRepostsSkeleton
+    ]
 
     return {
-        skeleton: [
-            ...timelineSkeleton,
-            ...articles.map(a => ({post: a.uri})),
-            ...articleRepostsSkeleton
-        ],
-        cursor: timeline.cursor
+        skeleton,
+        cursor: timelineSkeleton.length > 0 ? timeline.cursor : undefined
     }
 }
 

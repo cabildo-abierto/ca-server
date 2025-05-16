@@ -56,7 +56,6 @@ export type GetFeedOutput = {
 
 export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAHandlerOutput<GetFeedOutput> => {
     const t1 = Date.now()
-
     const data = new Dataplane(ctx, agent)
     const {skeleton, cursor: newCursor} = await pipeline.getSkeleton(ctx, agent, data, cursor)
     const t2 = Date.now()

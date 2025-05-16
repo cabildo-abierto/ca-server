@@ -71,10 +71,10 @@ export const datasetQuery = {
 
 export const reactionsQuery = {
     uniqueViewsCount: true,
+    uniqueLikesCount: true,
+    uniqueRepostsCount: true,
     _count: {
         select: {
-            reposts: true,
-            likes: true,
             replies: true
         }
     }

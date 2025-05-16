@@ -62,8 +62,8 @@ export async function createVisualization(ctx: AppContext, agent: SessionAgent, 
         return {error}
     }
     if(!ref) return {error: "Ocurrió un error al crear la visualización"}
-    const updates = await processCreate(ctx, ref, record)
-    await ctx.db.$transaction(updates)
+    const su = await processCreate(ctx, ref, record)
+    await su.apply()
 
     return {}
 }

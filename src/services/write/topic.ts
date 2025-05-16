@@ -1,4 +1,4 @@
-import {processCreate} from "../sync/process-event";
+import {processCreate, processTopicVersion} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
 import {CAHandler} from "#/utils/handler";
 import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
@@ -16,7 +16,6 @@ export async function createTopicVersionATProto(agent: SessionAgent, {id, text, 
 
     if(text && !blob) return {error: "Ocurrió un error al publicar el tema."}
 
-    console.log("Creating topic version with blob", blob)
     const record: TopicVersionRecord = {
         $type: "ar.cabildoabierto.wiki.topicVersion",
         text: text && blob ? blob : undefined,
@@ -49,8 +48,8 @@ type CreateTopicVersionProps = {
 export const createTopicVersion: CAHandler<CreateTopicVersionProps> = async (ctx, agent, params) => {
     const {error, ref, record} = await createTopicVersionATProto(agent, params)
     if(!error && ref && record){
-        const updates = await processCreate(ctx, ref, record)
-        await ctx.db.$transaction(updates)
+        const updates = await processTopicVersion(ctx, ref, record)
+        await updates.apply()
     }
     return {error}
 }

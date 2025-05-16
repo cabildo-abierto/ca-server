@@ -1,9 +1,10 @@
-import {processCreate} from "#/services/sync/process-event";
+import {processArticle, processCreate} from "#/services/sync/process-event";
 import {uploadStringBlob} from "#/services/blob";
 import {CAHandler} from "#/utils/handler";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {SessionAgent} from "#/utils/session-agent";
 import {getTopicsMentioned} from "#/services/topic/topics";
+import {PrismaUpdate} from "#/services/sync/sync-update";
 
 export type CreateArticleProps = {
     title: string
@@ -42,10 +43,10 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
             getTopicsMentioned(ctx, agent, article)
         ])
 
-        const updates = await processCreate(ctx, ref, record)
+        let addToTransaction: PrismaUpdate[] = []
 
         if(mentions && mentions.length > 0){
-            updates.push(ctx.db.reference.createMany({
+            addToTransaction.push(ctx.db.reference.createMany({
                 data: mentions.map(m => ({
                     referencedTopicId: m.id,
                     referencingContentId: ref.uri,
@@ -55,7 +56,9 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
             }))
         }
 
-        await ctx.db.$transaction(updates)
+        const updates = await processArticle(ctx, ref, record, addToTransaction)
+        await updates.apply()
+
         return {data: {}}
     } catch (err) {
         console.error("Error", err)

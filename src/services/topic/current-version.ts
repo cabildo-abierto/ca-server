@@ -1,9 +1,8 @@
 import {getTopicHistory} from "./topics";
-import {max, unique} from "#/utils/arrays";
+import {max} from "#/utils/arrays";
 import {AppContext} from "#/index";
-import {getDidFromUri} from "#/utils/uri";
-import {SessionAgent} from "#/utils/session-agent";
 import {TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {PrismaTransactionClient, SyncUpdate} from "#/services/sync/sync-update";
 
 
 export function getTopicLastEditFromVersions(topic: {versions: {content: {record: {createdAt: Date}}}[]}){
@@ -12,8 +11,8 @@ export function getTopicLastEditFromVersions(topic: {versions: {content: {record
 }
 
 
-export async function getTopicIdFromTopicVersionUri(ctx: AppContext, uri: string){
-    const res = await ctx.db.topicVersion.findUnique({
+export async function getTopicIdFromTopicVersionUri(db: PrismaTransactionClient, uri: string){
+    const res = await db.topicVersion.findUnique({
         select: {
             topicId: true
         },
@@ -25,10 +24,10 @@ export async function getTopicIdFromTopicVersionUri(ctx: AppContext, uri: string
 }
 
 
-export async function deleteTopicVersion(ctx: AppContext, agent: SessionAgent, uri: string){
-    const id = await getTopicIdFromTopicVersionUri(ctx, uri)
+export async function deleteTopicVersionDB(ctx: AppContext, uri: string){
+    const id = await getTopicIdFromTopicVersionUri(ctx.db, uri)
     if(!id) return {error: "Ocurrió un error al borrar la versión."}
-    const {data: topicHistory} = await getTopicHistory(ctx, agent, {params: {id}})
+    const topicHistory = await getTopicHistory(ctx.db, id)
     if(!topicHistory) return {error: "Ocurrió un error al borrar la versión."}
 
     const currentVersion = getTopicCurrentVersion(topicHistory.versions)
@@ -40,13 +39,15 @@ export async function deleteTopicVersion(ctx: AppContext, agent: SessionAgent, u
     const newCurrentVersionIndex = getTopicCurrentVersion(spliced)
 
     const currentVersionId = newCurrentVersionIndex != null ? spliced[newCurrentVersionIndex].uri : undefined
-    console.log("setting new current version", currentVersionId)
 
     const updates = [
+        ctx.db.hasReacted.deleteMany({where: {recordId: uri}}),
+        ctx.db.voteReject.deleteMany({where: {reaction: {subjectId: uri}}}),
+        ctx.db.reaction.deleteMany({where: {subjectId: uri}}),
         ctx.db.reference.deleteMany({where: {referencingContentId: uri}}),
-        ctx.db.topicVersion.delete({where: {uri}}),
-        ctx.db.content.delete({where: {uri}}),
-        ctx.db.record.delete({where: {uri}}),
+        ctx.db.topicVersion.deleteMany({where: {uri}}),
+        ctx.db.content.deleteMany({where: {uri}}),
+        ctx.db.record.deleteMany({where: {uri}}),
         ctx.db.topic.update({
             where: {
                 id,
@@ -58,10 +59,9 @@ export async function deleteTopicVersion(ctx: AppContext, agent: SessionAgent, u
         })
     ]
 
-    await ctx.db.$transaction(updates)
-
-    // await revalidateRedis(ctx, ["currentVersion:"+topicVersion.id])
-    // await revalidateTags(["topic:"+topic.id, "topics", ...(changedCategories ? ["categories"] : [])])
+    const su = new SyncUpdate(ctx.db)
+    su.addUpdatesAsTransaction(updates)
+    return {su}
 }
 
 
@@ -110,7 +110,17 @@ export async function updateTopicsLastEdit(ctx: AppContext) {
 
 
 export function isVersionAccepted(status?: TopicVersionStatus){
-    return true // TO DO
+    if(!status) return true
+
+    function catToNumber(cat: string){
+        return 0 // TO DO
+    }
+
+    const relevantVotes = max(status.voteCounts, x => catToNumber(x.category))
+
+    if(relevantVotes == undefined) return true
+
+    return relevantVotes.rejects == 0 // TO DO: && relevantVotes.accepts > 0
 }
 
 
@@ -124,16 +134,16 @@ export function getTopicCurrentVersion(versions: {status?: TopicVersionStatus}[]
 }
 
 
-export async function updateTopicCurrentVersion(ctx: AppContext, agent: SessionAgent, id: string){
-    const {data: topic, error} = await getTopicHistory(ctx, agent, {params: {id}})
+export async function updateTopicCurrentVersion(db: PrismaTransactionClient, id: string){
+    console.log("Updating topic current version", id)
+    const topicHistory = await getTopicHistory(db, id)
 
-    if(!topic) return {error}
+    const currentVersion = getTopicCurrentVersion(topicHistory.versions)
+    console.log("Current version", currentVersion)
 
-    const currentVersion = getTopicCurrentVersion(topic.versions)
+    const uri = currentVersion != null ? topicHistory.versions[currentVersion].uri : null
 
-    const uri = currentVersion != null ? topic.versions[currentVersion].uri : null
-
-    await ctx.db.topic.update({
+    await db.topic.update({
         data: {
             currentVersionId: uri
         },
@@ -143,83 +153,6 @@ export async function updateTopicCurrentVersion(ctx: AppContext, agent: SessionA
     })
 
     return {}
-}
-
-
-export async function updateTopicsCurrentVersion(ctx: AppContext) {
-    let topics = (await ctx.db.topic.findMany({
-        select: {
-            id: true,
-            versions: {
-                select: {
-                    uri: true,
-                    content: {
-                        select: {
-                            text: true,
-                            textBlob: true,
-                            numWords: true,
-                            record: {
-                                select: {
-                                    accepts: {
-                                        select: {
-                                            uri: true
-                                        }
-                                    },
-                                    rejects: {
-                                        select: {
-                                            uri: true
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                },
-                orderBy: {
-                    content: {
-                        record: {
-                            createdAt: "asc"
-                        }
-                    }
-                }
-            }
-        }
-    })).map(t => {
-        return {
-            ...t,
-            versions: t.versions.map(v => {
-                return {
-                    ...v,
-                    uniqueAccepts: unique(v.content.record.accepts.map(a => getDidFromUri(a.uri))).length,
-                    uniqueRejects: unique(v.content.record.rejects.map(a => getDidFromUri(a.uri))).length,
-                    content: {
-                        ...v.content,
-                        hasText: v.content.text != null || v.content.numWords != null || v.content.textBlob != null
-                    }
-                }
-            })
-        }
-    })
-
-    throw Error("Sin implementar.")
-
-    /*const updates = topics
-        .map(t => ({
-            id: t.id,
-            currentVersionId: t.versions[getTopicCurrentVersion(t)]?.uri || null
-        }))
-        .filter(t => t.currentVersionId !== null);
-
-    if (updates.length === 0) return;
-
-    await ctx.db.$executeRawUnsafe(`
-        UPDATE "Topic" AS t
-        SET "currentVersionId" = c."uri"
-        FROM (VALUES ${updates.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(", ")}) AS c(id, uri)
-        WHERE t.id = c.id;
-    `, ...updates.flatMap(({ id, currentVersionId }) => [id, currentVersionId]))
-
-     */
 }
 
 

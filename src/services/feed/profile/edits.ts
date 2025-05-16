@@ -3,8 +3,8 @@ import {GetSkeletonProps} from "#/services/feed/feed";
 
 
 export const getEditsProfileFeedSkeleton = (did: string) : GetSkeletonProps => {
-    return async (ctx, agent) => {
-        return (await ctx.db.record.findMany({
+    return async (ctx, agent, data, cursor) => {
+        const skeleton = (await ctx.db.record.findMany({
             select: {
                 uri: true
             },
@@ -15,5 +15,9 @@ export const getEditsProfileFeedSkeleton = (did: string) : GetSkeletonProps => {
                 authorId: did
             }
         })).map(({uri}) => ({post: uri}))
+        return {
+            skeleton,
+            cursor: undefined
+        }
     }
 }
