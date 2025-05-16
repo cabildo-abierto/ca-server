@@ -4,14 +4,26 @@
   "defs": {
     "main": {
       "type": "object",
-      "required": ["spec"],
+      "required": ["dataSource", "spec"],
       "properties": {
-        "spec": {
+        "dataSource": {
           "type": "union",
           "refs": [
             "#datasetVisualization",
-            "#hemicycleVisualization",
             "#topicListVisualization"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "spec": {
+          "type": "union",
+          "refs": [
+            "#hemicycleVisualization",
+            "#barplot",
+            "#scatterplot",
+            "#histogram",
+            "#lines"
           ]
         }
       }
@@ -19,28 +31,16 @@
     "datasetVisualization": {
       "type": "object",
       "properties": {
-        "dataset": { "type": "string", "format": "at-uri" },
-        "spec": {
-          "type": "union",
-          "refs": [
-            "#barplot",
-            "#scatterplot",
-            "#histogram",
-            "#lines"
-          ]
-        },
-        "title": {
-            "type": "string"
-        }
+        "dataset": { "type": "string", "format": "at-uri" }
       }
     },
-    "hemicycleVisualization" : {
+    "topicListVisualization": {
       "type": "object",
       "properties": {
 
       }
     },
-    "topicListVisualization": {
+    "hemicycleVisualization" : {
       "type": "object",
       "properties": {
 
@@ -71,8 +71,7 @@
       "type": "object",
       "properties": {
         "xlabel": {"type": "string"},
-        "ylabel": {"type": "string"},
-        "normalized": {"type": "boolean"}
+        "ylabel": {"type": "string"}
       }
     }
   }
