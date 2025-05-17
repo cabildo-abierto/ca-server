@@ -1,6 +1,5 @@
-import {processCreate, processPost} from "../sync/process-event";
+import {processPost} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
-import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
 import {$Typed, RichText} from "@atproto/api";
 import {ATProtoStrongRef} from "#/lib/types";
 import {Image} from "#/lex-api/types/app/bsky/embed/images";
@@ -9,6 +8,8 @@ import {CAHandler} from "#/utils/handler";
 import {View as ExternalEmbedView} from "#/lex-server/types/app/bsky/embed/external"
 import {Main as EmbedRecord} from "#/lex-server/types/app/bsky/embed/record"
 import {Main as EmbedRecordWithMedia} from "#/lex-server/types/app/bsky/embed/recordWithMedia"
+import {Main as Visualization} from "#/lex-server/types/ar/cabildoabierto/embed/visualization"
+import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
 
 function createQuotePostEmbed(post: ATProtoStrongRef): $Typed<EmbedRecord> {
     return {
@@ -107,6 +108,11 @@ async function getPostEmbed(agent: SessionAgent, post: CreatePostProps): Promise
         }
     } else if(post.quotedPost){
         return createQuotePostEmbed(post.quotedPost)
+    } else if(post.visualization){
+        return {
+            ...post.visualization,
+            $type: "ar.cabildoabierto.embed.visualization"
+        }
     }
     return undefined
 }
@@ -155,6 +161,7 @@ export type CreatePostProps = {
     enDiscusion?: boolean
     externalEmbedView?: $Typed<ExternalEmbedView>
     quotedPost?: ATProtoStrongRef
+    visualization?: Visualization
 }
 
 

@@ -31,6 +31,8 @@ import {markdownToPlainText} from "#/utils/lexical/transforms";
 import {hydrateTopicViewBasicFromUri} from "#/services/topic/topics";
 import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {getTopicTitle} from "#/services/topic/utils";
+import {isMain as isVisualizationEmbed, View as VisualizationEmbedView, Main as VisualizationEmbed, isDatasetDataSource} from "#/lex-server/types/ar/cabildoabierto/embed/visualization"
+import {hydrateDatasetView} from "#/services/dataset/read";
 
 
 const queryResultToProfileViewBasic = (e: FeedElementQueryResult["author"]): CAProfileViewBasic | null => {
@@ -205,6 +207,22 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
 }
 
 
+function hydrateVisualizationEmbedView(embed: VisualizationEmbed, data: Dataplane): $Typed<VisualizationEmbedView> | null {
+    if(isDatasetDataSource(embed.dataSource)){
+        const datasetUri = embed.dataSource.dataset
+        const dataset = hydrateDatasetView(datasetUri, data)
+        if(dataset){
+            return {
+                ...embed,
+                $type: "ar.cabildoabierto.embed.visualization#view",
+                dataset
+            }
+        }
+    }
+    return null
+}
+
+
 function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView>, error?: string } {
     const post = data.bskyPosts?.get(uri)
     const caData = data.caContents?.get(uri)
@@ -224,6 +242,15 @@ function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView
             embedView = view;
         } else {
             console.log("Warning: No se encontraron los datos para el selection quote en el post: ", uri)
+        }
+    }
+
+    if(isVisualizationEmbed(embed)) {
+        const view = hydrateVisualizationEmbedView(embed, data)
+        if (view) {
+            embedView = view;
+        } else {
+            console.log("Warning: No se encontraron los datos para la visualización: ", uri)
         }
     }
 

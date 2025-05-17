@@ -305,54 +305,69 @@ export const schemaDict = {
     defs: {
       main: {
         type: 'object',
-        required: ['spec'],
+        required: ['dataSource', 'spec'],
         properties: {
-          spec: {
+          dataSource: {
             type: 'union',
             refs: [
-              'lex:ar.cabildoabierto.embed.visualization#datasetVisualization',
-              'lex:ar.cabildoabierto.embed.visualization#hemicycleVisualization',
-              'lex:ar.cabildoabierto.embed.visualization#topicListVisualization',
+              'lex:ar.cabildoabierto.embed.visualization#datasetDataSource',
+              'lex:ar.cabildoabierto.embed.visualization#topicsDataSource',
             ],
           },
-        },
-      },
-      datasetVisualization: {
-        type: 'object',
-        properties: {
-          dataset: {
-            type: 'string',
-            format: 'at-uri',
-          },
           spec: {
             type: 'union',
             refs: [
+              'lex:ar.cabildoabierto.embed.visualization#hemicycle',
               'lex:ar.cabildoabierto.embed.visualization#barplot',
               'lex:ar.cabildoabierto.embed.visualization#scatterplot',
               'lex:ar.cabildoabierto.embed.visualization#histogram',
               'lex:ar.cabildoabierto.embed.visualization#lines',
+              'lex:ar.cabildoabierto.embed.visualization#table',
             ],
           },
           title: {
             type: 'string',
           },
+          caption: {
+            type: 'string',
+          },
         },
       },
-      hemicycleVisualization: {
+      datasetDataSource: {
+        type: 'object',
+        required: ['dataset'],
+        properties: {
+          dataset: {
+            type: 'string',
+            format: 'at-uri',
+          },
+        },
+      },
+      topicsDataSource: {
         type: 'object',
         properties: {},
       },
-      topicListVisualization: {
+      hemicycle: {
+        type: 'object',
+        properties: {},
+      },
+      table: {
         type: 'object',
         properties: {},
       },
       barplot: {
         type: 'object',
         properties: {
-          xlabel: {
+          xAxis: {
             type: 'string',
           },
-          ylabel: {
+          yAxis: {
+            type: 'string',
+          },
+          xLabel: {
+            type: 'string',
+          },
+          yLabel: {
             type: 'string',
           },
         },
@@ -360,10 +375,16 @@ export const schemaDict = {
       scatterplot: {
         type: 'object',
         properties: {
-          xlabel: {
+          xAxis: {
             type: 'string',
           },
-          ylabel: {
+          yAxis: {
+            type: 'string',
+          },
+          xLabel: {
+            type: 'string',
+          },
+          yLabel: {
             type: 'string',
           },
         },
@@ -371,7 +392,13 @@ export const schemaDict = {
       histogram: {
         type: 'object',
         properties: {
-          xlabel: {
+          xAxis: {
+            type: 'string',
+          },
+          yAxis: {
+            type: 'string',
+          },
+          xLabel: {
             type: 'string',
           },
           normalized: {
@@ -382,14 +409,51 @@ export const schemaDict = {
       lines: {
         type: 'object',
         properties: {
-          xlabel: {
+          xAxis: {
             type: 'string',
           },
-          ylabel: {
+          yAxis: {
             type: 'string',
           },
-          normalized: {
-            type: 'boolean',
+          xLabel: {
+            type: 'string',
+          },
+          yLabel: {
+            type: 'string',
+          },
+        },
+      },
+      view: {
+        type: 'object',
+        required: ['dataSource', 'spec', 'dataset'],
+        properties: {
+          dataSource: {
+            type: 'union',
+            refs: [
+              'lex:ar.cabildoabierto.embed.visualization#datasetDataSource',
+              'lex:ar.cabildoabierto.embed.visualization#topicsDataSource',
+            ],
+          },
+          spec: {
+            type: 'union',
+            refs: [
+              'lex:ar.cabildoabierto.embed.visualization#hemicycle',
+              'lex:ar.cabildoabierto.embed.visualization#barplot',
+              'lex:ar.cabildoabierto.embed.visualization#scatterplot',
+              'lex:ar.cabildoabierto.embed.visualization#histogram',
+              'lex:ar.cabildoabierto.embed.visualization#lines',
+              'lex:ar.cabildoabierto.embed.visualization#table',
+            ],
+          },
+          title: {
+            type: 'string',
+          },
+          caption: {
+            type: 'string',
+          },
+          dataset: {
+            type: 'ref',
+            ref: 'lex:ar.cabildoabierto.data.dataset#datasetView',
           },
         },
       },
@@ -534,6 +598,7 @@ export const schemaDict = {
               'lex:app.bsky.embed.record#view',
               'lex:app.bsky.embed.recordWithMedia#view',
               'lex:ar.cabildoabierto.embed.selectionQuote#view',
+              'lex:ar.cabildoabierto.embed.visualization#view',
             ],
           },
           uniqueViewsCount: {

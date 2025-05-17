@@ -9,38 +9,49 @@
         "dataSource": {
           "type": "union",
           "refs": [
-            "#datasetVisualization",
-            "#topicListVisualization"
+            "#datasetDataSource",
+            "#topicsDataSource"
+          ]
+        },
+        "spec": {
+          "type": "union",
+          "refs": [
+            "#hemicycle",
+            "#barplot",
+            "#scatterplot",
+            "#histogram",
+            "#lines",
+            "#table"
           ]
         },
         "title": {
           "type": "string"
         },
-        "spec": {
-          "type": "union",
-          "refs": [
-            "#hemicycleVisualization",
-            "#barplot",
-            "#scatterplot",
-            "#histogram",
-            "#lines"
-          ]
+        "caption": {
+          "type": "string"
         }
       }
     },
-    "datasetVisualization": {
+    "datasetDataSource": {
       "type": "object",
+      "required": ["dataset"],
       "properties": {
         "dataset": { "type": "string", "format": "at-uri" }
       }
     },
-    "topicListVisualization": {
+    "topicsDataSource": {
       "type": "object",
       "properties": {
 
       }
     },
-    "hemicycleVisualization" : {
+    "hemicycle" : {
+      "type": "object",
+      "properties": {
+
+      }
+    },
+    "table" : {
       "type": "object",
       "properties": {
 
@@ -49,29 +60,71 @@
     "barplot": {
       "type": "object",
       "properties": {
-        "xlabel": {"type": "string"},
-        "ylabel": {"type": "string"}
+        "xAxis": {"type": "string"},
+        "yAxis": {"type": "string"},
+        "xLabel": {"type": "string"},
+        "yLabel": {"type": "string"}
       }
     },
     "scatterplot": {
       "type": "object",
       "properties": {
-        "xlabel": {"type": "string"},
-        "ylabel": {"type": "string"}
+        "xAxis": {"type": "string"},
+        "yAxis": {"type": "string"},
+        "xLabel": {"type": "string"},
+        "yLabel": {"type": "string"}
       }
     },
     "histogram": {
       "type": "object",
       "properties": {
-        "xlabel": {"type": "string"},
+        "xAxis": {"type": "string"},
+        "yAxis": {"type": "string"},
+        "xLabel": {"type": "string"},
         "normalized": {"type": "boolean"}
       }
     },
     "lines": {
       "type": "object",
       "properties": {
-        "xlabel": {"type": "string"},
-        "ylabel": {"type": "string"}
+        "xAxis": {"type": "string"},
+        "yAxis": {"type": "string"},
+        "xLabel": {"type": "string"},
+        "yLabel": {"type": "string"}
+      }
+    },
+    "view": {
+      "type": "object",
+      "required": ["dataSource", "spec", "dataset"],
+      "properties": {
+        "dataSource": {
+          "type": "union",
+          "refs": [
+            "#datasetDataSource",
+            "#topicsDataSource"
+          ]
+        },
+        "spec": {
+          "type": "union",
+          "refs": [
+            "#hemicycle",
+            "#barplot",
+            "#scatterplot",
+            "#histogram",
+            "#lines",
+            "#table"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "caption": {
+          "type": "string"
+        },
+        "dataset": {
+          "type": "ref",
+          "ref": "ar.cabildoabierto.data.dataset#datasetView"
+        }
       }
     }
   }

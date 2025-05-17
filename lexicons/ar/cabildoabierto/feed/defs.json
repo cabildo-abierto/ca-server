@@ -106,7 +106,8 @@
             "app.bsky.embed.external#view",
             "app.bsky.embed.record#view",
             "app.bsky.embed.recordWithMedia#view",
-            "ar.cabildoabierto.embed.selectionQuote#view"
+            "ar.cabildoabierto.embed.selectionQuote#view",
+            "ar.cabildoabierto.embed.visualization#view"
           ]
         },
         "uniqueViewsCount": {

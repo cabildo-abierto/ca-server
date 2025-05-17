@@ -55,13 +55,10 @@ export type GetFeedOutput = {
 }
 
 export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAHandlerOutput<GetFeedOutput> => {
-    const t1 = Date.now()
     const data = new Dataplane(ctx, agent)
     const {skeleton, cursor: newCursor} = await pipeline.getSkeleton(ctx, agent, data, cursor)
-    const t2 = Date.now()
 
     let feed: FeedViewContent[] = await hydrateFeed(skeleton, data)
-    const t3 = Date.now()
 
     if(pipeline.sortKey){
         feed = sortByKey(feed, pipeline.sortKey, listOrderDesc)
@@ -70,6 +67,5 @@ export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAH
     if(pipeline.filter){
         feed = pipeline.filter(feed)
     }
-    // logTimes("get feed", [t1, t2, t3])
     return {data: {feed, cursor: newCursor}}
 }

@@ -16,7 +16,7 @@ export const getDataset: CAHandler<{
 
     const dataplane = new Dataplane(ctx, agent)
     await dataplane.fetchDatasetsHydrationData([uri])
-    await dataplane.fetchDatasetContents(uri)
+    await dataplane.fetchDatasetContents([uri])
 
     const view = hydrateDatasetView(uri, dataplane)
     if(!view) return {error: "Ocurrió un error al obtener el dataset."}

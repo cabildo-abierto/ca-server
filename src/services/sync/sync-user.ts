@@ -137,6 +137,7 @@ export async function processRepo(ctx: AppContext, repo: UserRepo, did: string, 
     let su: SyncUpdate = new SyncUpdate(ctx.db)
     for(let i = 0; i < repo.length; i++){
         if(recordsReqUpdate == null || recordsReqUpdate.has(repo[i].uri)){
+            console.log("Processing", repo[i].uri)
             const r = await processCreate(ctx, {uri: repo[i].uri, cid: repo[i].cid}, repo[i].record)
             su.joinWith(r)
         }

@@ -3,9 +3,9 @@ import {rootCreationDateSortKey} from "#/services/feed/utils";
 import {CAHandler} from "#/utils/handler";
 import {Record as PostRecord, validateRecord as validatePostRecord, isRecord as isPostRecord} from "#/lex-api/types/app/bsky/feed/post";
 import {Record as ArticleRecord, validateRecord as validateArticleRecord, isRecord as isArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
-import {processArticle, processCreate, processPost} from "#/services/sync/process-event";
+import {processArticle, processPost} from "#/services/sync/process-event";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
-import {isArticle} from "#/utils/uri";
+import {$Typed} from "@atproto/api";
 
 
 
@@ -53,11 +53,11 @@ export const addToEnDiscusion: CAHandler<{params: {collection: string, rkey: str
     const validatePost = validatePostRecord(record)
     const validateArticle = validateArticleRecord(record)
 
-    let validRecord: PostRecord | ArticleRecord | undefined
+    let validRecord: $Typed<PostRecord> | $Typed<ArticleRecord> | undefined
     if(validatePost.success) {
-        validRecord = validatePost.value
+        validRecord = {...validatePost.value, $type: "app.bsky.feed.post"}
     } else if(validateArticle.success){
-        validRecord = validateArticle.value
+        validRecord = {...validateArticle.value, $type: "ar.cabildoabierto.feed.article"}
     }
 
     if(validRecord) {
@@ -77,10 +77,10 @@ export const addToEnDiscusion: CAHandler<{params: {collection: string, rkey: str
             record: validRecord
         })
 
-        if(isArticleRecord(record)){
+        if(isArticleRecord(validRecord)){
             const su = await processArticle(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
             await su.apply()
-        } else if(isPostRecord(record)){
+        } else {
             const su = await processPost(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
             await su.apply()
         }

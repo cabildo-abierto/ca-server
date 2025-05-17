@@ -7,7 +7,7 @@ import {
     BlobRef, ThreadSkeleton
 } from "#/services/hydration/hydrate";
 import {FeedSkeleton} from "#/services/feed/feed";
-import {removeNullValues, unique} from "#/utils/arrays";
+import {gett, removeNullValues, unique} from "#/utils/arrays";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
 import {articleUris, getCollectionFromUri, getDidFromUri, isArticle, postUris, topicVersionUris} from "#/utils/uri";
 import {AppBskyEmbedRecord} from "@atproto/api";
@@ -49,6 +49,7 @@ export type FeedElementQueryResult = {
             props: Prisma.JsonValue | null
             topicId: string
         } | null
+        datasetsUsed: {uri: string}[]
     } | null
 }
 
@@ -145,15 +146,20 @@ export class Dataplane {
     }
 
     async fetchCAContentsAndBlobs(uris: string[]) {
-        const t1 = Date.now()
         await this.fetchCAContents(uris)
 
-        const t2 = Date.now()
         const contents = Array.from(this.caContents?.values() ?? [])
         const blobRefs = blobRefsFromContents(contents)
+
+        const datasets = contents.reduce((acc, cur) => {
+            return [...acc, ...cur.content?.datasetsUsed.map(d => d.uri) ?? []]
+        }, [] as string[])
+
+        await this.fetchDatasetsHydrationData(datasets)
+
+        await this.fetchDatasetContents(datasets)
+
         await this.fetchTextBlobs(blobRefs)
-        const t3 = Date.now()
-        // logTimes("fetchCAContentsAndBlobs", [t1, t2, t3])
     }
 
     async fetchCAContents(uris: string[]) {
@@ -176,7 +182,10 @@ export class Dataplane {
                     content: {
                         select: {
                             text: true,
-                            selfLabels: true
+                            selfLabels: true,
+                            datasetsUsed: {
+                                select: {uri: true}
+                            }
                         }
                     }
                 },
@@ -204,6 +213,9 @@ export class Dataplane {
                                 select: {
                                     title: true
                                 }
+                            },
+                            datasetsUsed: {
+                                select: {uri: true}
                             }
                         }
                     }
@@ -233,6 +245,9 @@ export class Dataplane {
                                     props: true,
                                     topicId: true
                                 }
+                            },
+                            datasetsUsed: {
+                                select: {uri: true}
                             }
                         }
                     }
@@ -404,12 +419,8 @@ export class Dataplane {
 
     async fetchFeedHydrationData(skeleton: FeedSkeleton) {
         const uris = skeleton.map(p => p.post)
-        const t1 = Date.now()
         const urisWithReplies = await this.expandUrisWithReplies(uris)
-        const t2 = Date.now()
         await this.fetchPostAndArticleViewsHydrationData(urisWithReplies)
-        const t3 = Date.now()
-        // logTimes("fetchFeedHydrationData", [t1, t2, t3])
     }
 
 
@@ -576,26 +587,39 @@ export class Dataplane {
         )
     }
 
-    async fetchDatasetContents(uri: string) {
-        if (this.datasetContents?.has(uri)) return
+    async fetchDatasetContents(uris: string[]) {
+        uris = uris.filter(u => !this.datasetContents?.has(u))
 
-        await this.fetchDatasetsHydrationData([uri])
+        await this.fetchDatasetsHydrationData(uris)
 
-        const d = this.datasets?.get(uri)
-        if (!d || !d.dataset) return
+        const blobs: {blobRef: BlobRef, datasetUri: string}[] = []
 
-        const authorId = getDidFromUri(uri)
-        const blocks = d.dataset.dataBlocks
-        const blobs: BlobRef[] = blocks
-            .map(b => b.blob)
-            .filter(b => b != null)
-            .filter(b => b.cid != null)
-            .map(b => ({...b, authorId}))
+        for(let i = 0; i < uris.length; i ++) {
+            const uri = uris[i]
+            const d = this.datasets?.get(uri)
+            if (!d || !d.dataset) return
 
-        const contents = (await fetchTextBlobs(this.ctx, blobs)).filter(c => c != null)
+            const authorId = getDidFromUri(uri)
+            const blocks = d.dataset.dataBlocks
+            blobs.push(...blocks
+                .map(b => b.blob)
+                .filter(b => b != null)
+                .filter(b => b.cid != null)
+                .map(b => ({...b, authorId}))
+                .map(b => ({blobRef: b, datasetUri: uri})))
+        }
 
-        if (!this.datasetContents) this.datasetContents = new Map()
-        this.datasetContents.set(uri, contents)
+        const contents = (await fetchTextBlobs(this.ctx, blobs.map(b => b.blobRef))).filter(c => c != null)
+
+        const datasetContents = new Map<string, string[]>()
+        for(let i = 0; i < blobs.length; i ++) {
+            const uri = blobs[i].datasetUri
+            const content = contents[i]
+            if(!datasetContents.has(uri)) datasetContents.set(uri, [content])
+            else datasetContents.set(uri, [...gett(datasetContents, uri), content])
+        }
+
+        this.datasetContents = joinMaps(this.datasetContents, datasetContents)
     }
 
 

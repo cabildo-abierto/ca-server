@@ -17,6 +17,7 @@ import type * as AppBskyEmbedExternal from '../../../app/bsky/embed/external.js'
 import type * as AppBskyEmbedRecord from '../../../app/bsky/embed/record.js'
 import type * as AppBskyEmbedRecordWithMedia from '../../../app/bsky/embed/recordWithMedia.js'
 import type * as ArCabildoabiertoEmbedSelectionQuote from '../embed/selectionQuote.js'
+import type * as ArCabildoabiertoEmbedVisualization from '../embed/visualization.js'
 import type * as ComAtprotoLabelDefs from '../../../com/atproto/label/defs.js'
 
 const is$typed = _is$typed,
@@ -90,6 +91,7 @@ export interface PostView {
     | $Typed<AppBskyEmbedRecord.View>
     | $Typed<AppBskyEmbedRecordWithMedia.View>
     | $Typed<ArCabildoabiertoEmbedSelectionQuote.View>
+    | $Typed<ArCabildoabiertoEmbedVisualization.View>
     | { $type: string }
   uniqueViewsCount?: number
   bskyRepostCount?: number

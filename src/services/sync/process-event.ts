@@ -18,6 +18,7 @@ import {Prisma} from '@prisma/client';
 import {didToHandle} from "#/services/user/users";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 import {BlobRef} from "@atproto/lexicon";
+import {isMain as isVisualizationEmbed, isDatasetDataSource} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {
     PrismaFunctionTransaction,
     PrismaTransactionClient,
@@ -263,6 +264,7 @@ type ContentProps = {
         authorId: string
     }
     selfLabels?: string[]
+    datasetsUsed?: string[]
 }
 
 
@@ -272,7 +274,10 @@ export const processContent = (ctx: AppContext, ref: ATProtoStrongRef, r: Conten
         textBlobId: r.textBlob?.cid,
         uri: ref.uri,
         format: r.format,
-        selfLabels: r.selfLabels
+        selfLabels: r.selfLabels,
+        datasetsUsed: {
+            connect: r.datasetsUsed?.map(d => ({uri: d})) ?? []
+        }
     }
 
     const updates: PrismaUpdate[] = []
@@ -310,10 +315,16 @@ export const processPost: RecordProcessor<Post.Record> = async (ctx, ref, r) => 
         updates = [...updates, ...updatesForDirtyRecord(ctx.db, r.reply.root)]
     }
 
+    let datasetsUsed: string[] = []
+    if(isVisualizationEmbed(r.embed) && isDatasetDataSource(r.embed.dataSource)){
+        datasetsUsed.push(r.embed.dataSource.dataset)
+    }
+
     const content: ContentProps = {
         format: "plain-text",
         text: r.text,
-        selfLabels: isSelfLabels(r.labels) ? r.labels.values.map(l => l.val) : undefined
+        selfLabels: isSelfLabels(r.labels) ? r.labels.values.map(l => l.val) : undefined,
+        datasetsUsed
     }
 
     updates = [
@@ -700,6 +711,9 @@ export const processCreate: RecordProcessor<any> = async (ctx, ref, record) => {
             const res = Dataset.validateRecord<Dataset.Record>(parsedRecord)
             if (res.success) return await processDataset(ctx, ref, res.value)
             else console.log(res.error)
+        } else {
+            console.log("Unknown collection", collection)
+            return new SyncUpdate(ctx.db)
         }
 
         console.log("Validation failed.")

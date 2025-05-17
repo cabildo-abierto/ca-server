@@ -208,6 +208,8 @@ model Content {
   references           Reference[]
   lastReferencesUpdate DateTime?
   selfLabels           String[]
+
+  datasetsUsed         Dataset[]
 }
 
 model Post {
@@ -271,6 +273,8 @@ model Dataset {
   title       String
   dataBlocks  DataBlock[]
   description String?
+
+  usedBy      Content[]
 }
 
 model DataBlock {
