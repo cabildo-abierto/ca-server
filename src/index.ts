@@ -15,6 +15,9 @@ import {MirrorMachine} from "#/services/sync/mirror-machine";
 import {Queue} from "bullmq";
 import Redis from "ioredis"
 import {setupWorker} from "#/jobs/worker";
+import { Kysely, PostgresDialect } from 'kysely'
+import { Pool } from 'pg'
+import { DB } from '#/../prisma/generated/types'
 
 
 const redisUrl = process.env.REDIS_URL as string
@@ -28,6 +31,7 @@ export type AppContext = {
     xrpc: XrpcServer
     ioredis: Redis
     queue: Queue
+    kysely: Kysely<DB>
 }
 
 export class Server {
@@ -45,7 +49,15 @@ export class Server {
 
         const db = new PrismaClient()
 
-        const ioredis = new Redis(redisUrl, {maxRetriesPerRequest: null, family: 6});
+        const ioredis = new Redis(redisUrl, {maxRetriesPerRequest: null, family: 6})
+
+        const kysely = new Kysely<DB>({
+            dialect: new PostgresDialect({
+                pool: new Pool({
+                    connectionString: process.env.DATABASE_URL,
+                }),
+            }),
+        })
 
         const queue = new Queue('bgJobs', {connection: ioredis})
 
@@ -61,10 +73,11 @@ export class Server {
             resolver,
             xrpc,
             ioredis: ioredis,
-            queue
+            queue,
+            kysely
         }
 
-        setupWorker(ctx)
+        await setupWorker(ctx)
 
         const ingester = new MirrorMachine(ctx)
         ingester.run()

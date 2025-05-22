@@ -325,7 +325,7 @@ export function hydrateFeedViewContent(e: SkeletonFeedPost, data: Dataplane): $T
     const root = reply && !isReasonRepost(reason) ? hydrateContent(reply.root.uri, data) : null
 
     if (!leaf.data || leaf.error) {
-        console.log("Warning: No se encontró el contenido en Bluesky. Uri: ", e.post)
+        console.log("Warning: No se encontró el contenido. Uri: ", e.post)
         return notFoundPost(e.post)
     } else if (!reply) {
         return {
@@ -357,7 +357,7 @@ export async function hydrateFeed(skeleton: FeedSkeleton, data: Dataplane): Prom
         .map((e) => (hydrateFeedViewContent(e, data)))
 
     feed.filter(isNotFoundPost).forEach(x => {
-        console.log("Post not found:", x.uri)
+        console.log("Content not found:", x.uri)
     })
 
     return feed.filter(x => isFeedViewContent(x))

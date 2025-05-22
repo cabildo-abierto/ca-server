@@ -61,8 +61,7 @@ export const addReaction = async (ctx: AppContext, agent: SessionAgent, ref: ATP
             createdAt: new Date().toISOString()
         }
 
-        const su = await processReaction(ctx, res, record)
-        await su.apply()
+        await processReaction(ctx, res, record)
 
         return {data: {uri: res.uri}}
     } catch (err) {
@@ -136,7 +135,7 @@ export async function decrementReactionCounter(db: PrismaTransactionClient, type
 }
 
 
-export const removeReaction = async (ctx: AppContext, agent: SessionAgent, uri: string) => {
+export const removeReactionAT = async (ctx: AppContext, agent: SessionAgent, uri: string) => {
     const collection = getCollectionFromUri(uri)
     if (collection == "app.bsky.feed.like") {
         await agent.bsky.deleteLike(uri)
@@ -147,8 +146,7 @@ export const removeReaction = async (ctx: AppContext, agent: SessionAgent, uri: 
     } else if (collection == "ar.cabildoabierto.wiki.voteReject") {
         await deleteRecordAT(agent, uri)
     }
-    const su: SyncUpdate = await processDelete(ctx, uri)
-    await su.apply()
+    await processDelete(ctx, uri)
     return {data: {}}
 }
 
@@ -165,14 +163,14 @@ type RemoveReactionProps = {
 export const removeLike: CAHandler<RemoveReactionProps> = async (ctx, agent, {params}) => {
     const {rkey} = params
     const uri = getUri(agent.did, "app.bsky.feed.like", rkey)
-    return await removeReaction(ctx, agent, uri)
+    return await removeReactionAT(ctx, agent, uri)
 }
 
 
 export const removeRepost: CAHandler<RemoveReactionProps> = async (ctx, agent, {params}) => {
     const {rkey} = params
     const uri = getUri(agent.did, "app.bsky.feed.repost", rkey)
-    return await removeReaction(ctx, agent, uri)
+    return await removeReactionAT(ctx, agent, uri)
 }
 
 

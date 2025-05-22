@@ -231,7 +231,6 @@ export const deleteRecordHandler: CAHandler<{params: {rkey: string, collection: 
     const {rkey, collection} = params
     const uri = getUri(agent.did, collection, rkey)
     await deleteRecordAT(agent, uri)
-    const su = await processDelete(ctx, uri)
-    await su.apply()
+    await processDelete(ctx, uri)
     return {data: {}}
 }

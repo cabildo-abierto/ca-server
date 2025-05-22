@@ -1,6 +1,6 @@
 import WebSocket, {RawData} from 'ws';
 import {restartSync} from "#/services/sync/sync-user";
-import {getCAUsersDids, getUsers} from "#/services/user/users";
+import {getCAUsersDids} from "#/services/user/users";
 import {AppContext} from "#/index";
 import {processEvent} from "#/services/sync/process-event";
 

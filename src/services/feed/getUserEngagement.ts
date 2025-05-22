@@ -1,9 +1,10 @@
 import {AppContext} from "#/index";
 import {CAHandler} from "#/utils/handler";
 import {unique} from "#/utils/arrays";
-import {getDidFromUri} from "#/utils/uri";
+import {getCollectionFromUri, getDidFromUri, getRkeyFromUri} from "#/utils/uri";
 import {isLike} from "@atproto/api/dist/client/types/app/bsky/feed/getLikes";
 import {isRecord as isRepost} from "@atproto/api/dist/client/types/app/bsky/feed/repost";
+import {ReactionType} from "#/services/reactions/reactions";
 
 
 export const updateEngagementCountsHandler: CAHandler = async (ctx, agent, params) => {
@@ -16,56 +17,63 @@ export const updateEngagementCountsHandler: CAHandler = async (ctx, agent, param
 
 export async function updateEngagementCounts(ctx: AppContext) {
     console.log("Updating engagement counts...")
+    const t1 = Date.now()
 
-    // 1) Fetch everything and compute per‐record counts in JavaScript
-    const records = await ctx.db.record.findMany({
-        select: {
-            uri: true,
-            reactions: {select: {uri: true}}
-        },
-        where: {
-            collection: {
-                in: ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
-            }
+    await ctx.kysely.transaction().execute(async (trx) => {
+        const reactionCounts: { uri: string, reactionType: string, count: string | number | bigint }[] =
+            await trx
+                .selectFrom('HasReacted')
+                .innerJoin('Record', 'Record.uri', 'HasReacted.recordId')
+                .select([
+                    'Record.uri',
+                    'HasReacted.reactionType',
+                    (eb) => eb.fn.count('HasReacted.reactionType').as('count')
+                ])
+                .groupBy(['Record.uri', 'HasReacted.reactionType'])
+                .execute()
+
+        const updatesMap = new Map<string, Partial<{
+            uniqueLikesCount: number
+            uniqueRepostsCount: number
+            uniqueAcceptsCount: number
+            uniqueRejectsCount: number
+        }>>()
+
+        for (const { uri, reactionType, count } of reactionCounts) {
+            const current = updatesMap.get(uri) ?? {}
+            if(reactionType == "app.bsky.feed.like") current.uniqueLikesCount = Number(count)
+            if(reactionType == "app.bsky.feed.repost") current.uniqueRepostsCount = Number(count)
+            if(reactionType == "ar.cabildoabierto.wiki.voteAccept") current.uniqueAcceptsCount = Number(count)
+            if(reactionType == "ar.cabildoabierto.wiki.voteReject") current.uniqueRejectsCount = Number(count)
+            updatesMap.set(uri, current)
         }
+
+        const records = Array.from(updatesMap.entries()).map(([uri, updates]) => ({
+            ...updates,
+            uri,
+            authorId: getDidFromUri(uri),
+            rkey: getRkeyFromUri(uri),
+            collection: getCollectionFromUri(uri)
+        }))
+
+        const batchSize = 1000
+        for(let i = 0; i < records.length; i += batchSize){
+            const batch = records.slice(i, i + batchSize)
+            console.log(`Updating batch starting at ${i} of ${records.length} records.`)
+            await trx
+                .insertInto("Record")
+                .values(batch)
+                .onConflict((oc) => oc.column("uri").doUpdateSet({
+                    uniqueLikesCount: eb => eb.ref("excluded.uniqueLikesCount"),
+                    uniqueRepostsCount: eb => eb.ref("excluded.uniqueRepostsCount"),
+                    uniqueAcceptsCount: eb => eb.ref("excluded.uniqueAcceptsCount"),
+                    uniqueRejectsCount: eb => eb.ref("excluded.uniqueRejectsCount"),
+                }))
+                .execute()
+        }
+
     })
-    console.log("Got", records.length, "records")
 
-    const counts = records.map(r => {
-        const likesCount = unique(r.reactions.filter(isLike), l => getDidFromUri(l.uri)).length
-        const repostsCount = unique(r.reactions.filter(isRepost), l => getDidFromUri(l.uri)).length
-        return [r.uri, likesCount, repostsCount] as [string, number, number]
-    })
-    if (counts.length === 0) {
-        console.log("Nothing to update")
-        return
-    }
-
-    // 2) Build a Postgres VALUES list like:
-    //    ('uri1',  5, 2),
-    //    ('uri2', 10, 0),
-    //    …
-    const valuesList = counts
-        .map(([uri, lc, rc]) => `('${uri.replace(/'/g, "''")}', ${lc}, ${rc})`)
-        .join(",\n")
-
-    // 3) Run one big raw‐SQL update
-    //    - we assume your DB table is named `record`
-    //    - and that your new columns are snake_cased `unique_likes_count` etc.
-
-    try {
-        await ctx.db.$executeRawUnsafe(`
-        UPDATE "Record" AS r
-        SET "uniqueLikesCount"   = v.ulc,
-            "uniqueRepostsCount" = v.urc FROM (
-      VALUES ${valuesList}
-            ) AS v(uri, ulc, urc)
-        WHERE r.uri = v.uri
-    `)
-    } catch (err) {
-        console.log("Error updating engagement counts")
-        console.log(err)
-    }
-
-    console.log("Updated engagement counts")
+    console.log(`Engagement counts updated after ${Date.now() - t1} ms.`)
 }
+

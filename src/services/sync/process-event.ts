@@ -1,28 +1,21 @@
 import {ATProtoStrongRef, CommitEvent, JetstreamEvent} from "#/lib/types";
-import {getCollectionFromUri, getDidFromUri, getRkeyFromUri, getUri, isTopicVersion, splitUri} from "#/utils/uri";
+import {getCollectionFromUri, getDidFromUri, getUri, isTopicVersion, splitUri} from "#/utils/uri";
 import * as CAProfile from "#/lex-api/types/ar/cabildoabierto/actor/caProfile"
-import * as Dataset from "#/lex-api/types/ar/cabildoabierto/data/dataset"
-import * as Article from "#/lex-api/types/ar/cabildoabierto/feed/article"
-import * as TopicVersion from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import * as Post from "#/lex-api/types/app/bsky/feed/post"
 import * as BskyProfile from "#/lex-api/types/app/bsky/actor/profile"
 import * as Follow from "#/lex-api/types/app/bsky/graph/follow"
 import * as Like from "#/lex-api/types/app/bsky/feed/like"
 import * as Repost from "#/lex-api/types/app/bsky/feed/repost"
+import * as Dataset from "#/lex-api/types/ar/cabildoabierto/data/dataset"
+import * as Article from "#/lex-api/types/ar/cabildoabierto/feed/article"
+import * as TopicVersion from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import * as VoteAccept from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept"
 import * as VoteReject from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject"
-import {isRecord as isVoteReject} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject"
 import {AppContext} from "#/index";
-import {JsonArray} from "@prisma/client/runtime/library";
-import {Prisma} from '@prisma/client';
 import {didToHandle} from "#/services/user/users";
-import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 import {BlobRef} from "@atproto/lexicon";
-import {isMain as isVisualizationEmbed, isDatasetDataSource} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {
-    PrismaFunctionTransaction,
     PrismaTransactionClient,
-    PrismaUpdate,
     SyncUpdate
 } from "#/services/sync/sync-update";
 import {
@@ -30,13 +23,20 @@ import {
     getTopicIdFromTopicVersionUri,
     updateTopicCurrentVersion
 } from "#/services/topic/current-version";
-import {decrementReactionCounter, incrementReactionCounter, ReactionRecord} from "#/services/reactions/reactions";
+import {decrementReactionCounter, ReactionRecord} from "#/services/reactions/reactions";
 import {isReactionCollection} from "#/utils/type-utils";
 import {CID} from "multiformats/cid";
 import {deleteRecordsDB} from "#/services/delete";
-import {isTopicVote} from "#/services/topic/votes";
+import {
+    processArticlesBatch, processDatasetsBatch,
+    processFollowsBatch,
+    processPostsBatch,
+    processReactionsBatch, processTopicVersionsBatch
+} from "#/services/sync/process-batch";
+import {Transaction} from "kysely";
+import {DB} from "../../../prisma/generated/types";
 
-export type RecordProcessor<T> = (ctx: AppContext, ref: ATProtoStrongRef, record: T, addToTransaction?: PrismaUpdate[]) => SyncUpdate | Promise<SyncUpdate>
+export type RecordProcessor<T> = (ctx: AppContext, ref: ATProtoStrongRef, record: T, afterTransaction?: (trx: Transaction<DB>) => Promise<void>) => void | Promise<void>
 
 
 function isProfile(collection: string) {
@@ -44,6 +44,7 @@ function isProfile(collection: string) {
 }
 
 export async function processEvent(ctx: AppContext, e: JetstreamEvent) {
+    console.log("Event!", e.did, e.kind == "commit" ? (e as CommitEvent).commit.uri : e.kind)
     if (e.kind == "commit") {
         const c = e as CommitEvent
 
@@ -74,28 +75,27 @@ export async function processEvent(ctx: AppContext, e: JetstreamEvent) {
 
             console.log("Commit event:", uri)
             const ref = {uri, cid: c.commit.cid}
-            const su = await processCreate(ctx, ref, record.record)
-            await su.apply()
+            await processCreate(ctx, ref, record.record)
         } else if (c.commit.operation == "delete") {
             console.log(`Delete event: ${uri}`)
-            const su = await processDelete(ctx, uri)
-            await su.apply()
+            await processDelete(ctx, uri)
         }
     }
 }
 
 
-export async function processDelete(ctx: AppContext, uri: string): Promise<SyncUpdate> {
+export async function processDelete(ctx: AppContext, uri: string) {
     const c = getCollectionFromUri(uri)
 
     if (isTopicVersion(c)) {
         const {su, error} = await deleteTopicVersionDB(ctx, uri)
         if (error || !su) throw Error(error)
-        return su
+        await su.apply()
     } else if (isReactionCollection(c)) {
-        return await processDeleteReaction(ctx, uri)
+        await processDeleteReaction(ctx, uri)
     } else {
-        return deleteRecordsDB(ctx, [uri])
+        const su = deleteRecordsDB(ctx, [uri])
+        await su.apply()
     }
 }
 
@@ -158,29 +158,8 @@ export function newUser(db: PrismaTransactionClient, did: string, inCA: boolean)
     }
 }
 
-export function updatesForDirtyRecord(db: PrismaTransactionClient, link: { uri: string, cid?: string }) {
-    const {uri, cid} = link
-    const did = getDidFromUri(uri)
-    const updates: PrismaUpdate[] = [newUser(db, did, false)]
-    const data = {
-        uri: uri,
-        cid: cid,
-        authorId: did,
-        rkey: getRkeyFromUri(uri),
-        collection: getCollectionFromUri(uri)
-    }
-    updates.push(db.record.upsert({
-        create: data,
-        update: data,
-        where: {
-            uri: uri
-        }
-    }))
-    return updates
-}
 
-
-export const processCAProfile: RecordProcessor<CAProfile.Record> = (ctx, ref, r) => {
+export const processCAProfile: RecordProcessor<CAProfile.Record> = async (ctx, ref, r) => {
     const u = new SyncUpdate(ctx.db)
     u.addUpdatesAsTransaction([
         ...processRecord(ctx, ref, r),
@@ -194,7 +173,7 @@ export const processCAProfile: RecordProcessor<CAProfile.Record> = (ctx, ref, r)
             }
         })
     ])
-    return u
+    await u.apply()
 }
 
 export const processBskyProfile: RecordProcessor<BskyProfile.Record> = async (ctx, ref, r) => {
@@ -226,37 +205,16 @@ export const processBskyProfile: RecordProcessor<BskyProfile.Record> = async (ct
             }
         })
     ])
-    return su
+    await su.apply()
 }
 
 
-export const processFollow: RecordProcessor<Follow.Record> = (ctx, ref, r) => {
-    const su = new SyncUpdate(ctx.db)
-
-    const updates: any[] = [
-        ...processRecord(ctx, ref, r),
-        newUser(ctx.db, r.subject, false)
-    ]
-
-    const follow = {
-        uri: ref.uri,
-        userFollowedId: r.subject
-    }
-    updates.push(
-        ctx.db.follow.upsert({
-            create: follow,
-            update: follow,
-            where: {
-                uri: ref.uri
-            }
-        })
-    )
-    su.addUpdatesAsTransaction(updates)
-    return su
+export const processFollow: RecordProcessor<Follow.Record> = async (ctx, ref, r) => {
+    await processFollowsBatch(ctx, [{ref, record: r}])
 }
 
 
-type ContentProps = {
+export type SyncContentProps = {
     format?: string
     text?: string
     textBlob?: {
@@ -267,296 +225,32 @@ type ContentProps = {
     datasetsUsed?: string[]
 }
 
-
-export const processContent = (ctx: AppContext, ref: ATProtoStrongRef, r: ContentProps): PrismaUpdate[] => {
-    const content = {
-        text: r.text,
-        textBlobId: r.textBlob?.cid,
-        uri: ref.uri,
-        format: r.format,
-        selfLabels: r.selfLabels,
-        datasetsUsed: {
-            connect: r.datasetsUsed?.map(d => ({uri: d})) ?? []
-        }
-    }
-
-    const updates: PrismaUpdate[] = []
-
-    if (r.textBlob) {
-        const blobUpd = ctx.db.blob.upsert({
-            create: r.textBlob,
-            update: r.textBlob,
-            where: {
-                cid: r.textBlob.cid
-            }
-        })
-        updates.push(blobUpd)
-    }
-
-    updates.push(ctx.db.content.upsert({
-        create: content,
-        update: content,
-        where: {
-            uri: ref.uri
-        }
-    }))
-
-    return updates
-}
-
-
 export const processPost: RecordProcessor<Post.Record> = async (ctx, ref, r) => {
-    let updates: PrismaUpdate[] = []
-
-    updates.push(...processRecord(ctx, ref, r))
-
-    if (r.reply) {
-        updates = [...updates, ...updatesForDirtyRecord(ctx.db, r.reply.parent)]
-        updates = [...updates, ...updatesForDirtyRecord(ctx.db, r.reply.root)]
-    }
-
-    let datasetsUsed: string[] = []
-    if(isVisualizationEmbed(r.embed) && isDatasetDataSource(r.embed.dataSource)){
-        datasetsUsed.push(r.embed.dataSource.dataset)
-    }
-
-    const content: ContentProps = {
-        format: "plain-text",
-        text: r.text,
-        selfLabels: isSelfLabels(r.labels) ? r.labels.values.map(l => l.val) : undefined,
-        datasetsUsed
-    }
-
-    updates = [
-        ...updates,
-        ...processContent(ctx, ref, content)
-    ]
-
-    const post = {
-        facets: r.facets ? JSON.stringify(r.facets) : null,
-        embed: r.embed ? JSON.stringify(r.embed) : null,
-        uri: ref.uri,
-        replyToId: r.reply ? r.reply.parent.uri as string : null,
-        rootId: r.reply && r.reply.root ? r.reply.root.uri : null
-    }
-
-    updates.push(ctx.db.post.upsert({
-        create: post,
-        update: post,
-        where: {
-            uri: ref.uri
-        }
-    }))
-
-    const su = new SyncUpdate(ctx.db)
-    su.addUpdatesAsTransaction(updates)
-    return su
+    await processPostsBatch(ctx, [{ref, record: r}])
 }
 
 
-export const processArticle: RecordProcessor<Article.Record> = async (ctx, ref, r, addToTransaction = []) => {
-    const content: ContentProps = {
-        format: r.format,
-        textBlob: {
-            cid: getCidFromBlobRef(r.text),
-            authorId: getDidFromUri(ref.uri)
-        },
-        selfLabels: isSelfLabels(r.labels) ? r.labels.values.map(l => l.val) : undefined
-    }
-
-    const updates: PrismaUpdate[] = [
-        ...processRecord(ctx, ref, r),
-        ...processContent(ctx, ref, content)
-    ]
-
-    const article = {
-        uri: ref.uri,
-        title: r.title
-    }
-
-    updates.push(ctx.db.article.upsert({
-        create: article,
-        update: article,
-        where: {
-            uri: ref.uri
-        }
-    }))
-
-    updates.push(...addToTransaction)
-
-    const su = new SyncUpdate(ctx.db)
-    su.addUpdatesAsTransaction(updates)
-    return su
+export const processArticle: RecordProcessor<Article.Record> = async (ctx, ref, r, afterTransaction) => {
+    await processArticlesBatch(ctx, [{ref, record: r}], afterTransaction)
 }
 
 
 export const processTopicVersion: RecordProcessor<TopicVersion.Record> = async (ctx, ref, r) => {
-    const content: ContentProps = {
-        format: r.format,
-        textBlob: r.text ? {
-            cid: getCidFromBlobRef(r.text),
-            authorId: getDidFromUri(ref.uri)
-        } : undefined
-    }
-
-    let updates: PrismaUpdate[] = [
-        ...processRecord(ctx, ref, r),
-        ...processContent(ctx, ref, content)
-    ]
-
-    const isNewCurrentVersion = true // TO DO: esto debería depender de los permisos del usuario, o no hacerse si preferimos esperar a un voto
-
-    const topic = {
-        id: r.id,
-        lastEdit: new Date()
-    }
-
-    updates.push(ctx.db.topic.upsert({
-        create: topic,
-        update: topic,
-        where: {id: r.id}
-    }))
-
-    const topicVersion = {
-        uri: ref.uri,
-        topicId: r.id,
-        message: r.message ? r.message : undefined,
-        props: r.props ? r.props as unknown as JsonArray : Prisma.JsonNull,
-    }
-
-    updates.push(ctx.db.topicVersion.upsert({
-        create: topicVersion,
-        update: topicVersion,
-        where: {
-            uri: ref.uri
-        }
-    }))
-
-    if (isNewCurrentVersion) {
-        updates.push(
-            ctx.db.topic.update({
-                data: {
-                    currentVersionId: ref.uri
-                },
-                where: {
-                    id: r.id
-                }
-            })
-        )
-    }
-
-    const su = new SyncUpdate(ctx.db)
-    su.addUpdatesAsTransaction(updates)
-    return su
+    await processTopicVersionsBatch(ctx, [{ref, record: r}])
 }
 
 
 export const processDataset: RecordProcessor<Dataset.Record> = async (ctx, ref, r) => {
-    const dataset = {
-        uri: ref.uri,
-        columns: r.columns.map(({name}: { name: string }) => (name)),
-        title: r.name,
-        description: r.description ? r.description : undefined
-    }
-
-    const authorId = getDidFromUri(ref.uri)
-
-    const blobs = r.data?.map(b =>
-        ctx.db.blob.upsert({
-            update: {cid: b.blob.ref.toString(), authorId},
-            create: {cid: b.blob.ref.toString(), authorId},
-            where: {cid: b.blob.ref.toString()}
-        })
-    )
-
-    const blocks = r.data?.map(b =>
-        ctx.db.dataBlock.upsert({
-            update: {cid: b.blob.ref.toString(), datasetId: ref.uri, format: b.format},
-            create: {cid: b.blob.ref.toString(), datasetId: ref.uri, format: b.format},
-            where: {cid: b.blob.ref.toString()}
-        })
-    );
-
-    const updates: PrismaUpdate[] = [
-        ...processRecord(ctx, ref, r),
-        ctx.db.dataset.upsert({
-            create: dataset,
-            update: dataset,
-            where: {uri: ref.uri}
-        }),
-        ...blobs ?? [],
-        ...blocks ?? []
-    ]
-
-    const su = new SyncUpdate(ctx.db)
-    su.addUpdatesAsTransaction(updates)
-    return su
+    await processDatasetsBatch(ctx, [{ref, record: r}])
 }
 
 
 export const processReaction: RecordProcessor<ReactionRecord> = async (ctx, ref, r) => {
-    // TO DO: Bastante seguro que no hace falta que esto sea una transaction
-
-
-    const t: PrismaFunctionTransaction = async (db) => {
-        // 1. Creamos el record de la reacción (si no estaba creado)
-        const recordUpdates: PrismaUpdate[] = processRecord(ctx, ref, r)
-        for (let i = 0; i < recordUpdates.length; i++) {
-            await recordUpdates[i]
-        }
-
-        // 2. Creamos el record que recibió la reacción (si no estaba creado)
-        const subjectRecordUpdates: PrismaUpdate[] = updatesForDirtyRecord(db, r.subject)
-        for (let i = 0; i < subjectRecordUpdates.length; i++) {
-            await subjectRecordUpdates[i]
-        }
-
-        // 3. Creamos la reacción
-        const reaction = {uri: ref.uri, subjectId: r.subject.uri}
-        await db.reaction.upsert({
-            create: reaction,
-            update: reaction,
-            where: {uri: ref.uri}
-        })
-
-        // 5. Intentamos crear HasReacted
-        try {
-            await db.hasReacted.create({
-                data: {
-                    userId: getDidFromUri(ref.uri),
-                    recordId: r.subject.uri,
-                    reactionType: getCollectionFromUri(ref.uri)
-                }
-            })
-        } catch {
-            return
-        }
-
-        // 6. Si se logró crear, incrementamos el contador
-        await incrementReactionCounter(db, r.$type, r.subject.uri)
-
-        // 4. Caso topic vote
-        if (isTopicVote(r.$type)) {
-            if (isVoteReject(r)) {
-                const vote = {uri: ref.uri, message: r.message, labels: r.labels}
-                await db.voteReject.upsert({update: vote, create: vote, where: {uri: ref.uri}})
-            }
-
-            const id = await getTopicIdFromTopicVersionUri(db, r.subject.uri)
-            if (id) {
-                await updateTopicCurrentVersion(db, id)
-            } else {
-                throw Error("No se encontró el tema votado.")
-            }
-        }
-    }
-    const su = new SyncUpdate(ctx.db)
-    su.addFunctionTransaction(t)
-    return su
+    await processReactionsBatch(ctx, [{ref, record: r}])
 }
 
 
-export async function processDeleteReaction(ctx: AppContext, uri: string): Promise<SyncUpdate> {
+export async function processDeleteReaction(ctx: AppContext, uri: string) {
     /* Idea:
         Eliminamos todos los likes
         Borramos HasReacted
@@ -615,7 +309,6 @@ export async function processDeleteReaction(ctx: AppContext, uri: string): Promi
         await db.reaction.deleteMany({where: {uri: {in: uris}}})
         await db.record.deleteMany({where: {uri: {in: uris}}})
 
-        console.log("removing reaction type", type)
         if (type == "ar.cabildoabierto.wiki.voteReject" || type == "ar.cabildoabierto.wiki.voteAccept") {
             const id = await getTopicIdFromTopicVersionUri(db, subjectId.subjectId)
             console.log("topic id", id)
@@ -630,11 +323,11 @@ export async function processDeleteReaction(ctx: AppContext, uri: string): Promi
 
     const su = new SyncUpdate(ctx.db)
     su.addFunctionTransaction(t)
-    return su
+    await su.apply()
 }
 
 
-function parseRecord(obj: any): any {
+export function parseRecord(obj: any): any {
 
     if (Array.isArray(obj)) {
         return obj.map(parseRecord);
@@ -669,58 +362,93 @@ export const processCreate: RecordProcessor<any> = async (ctx, ref, record) => {
         const parsedRecord = parseRecord(record)
         if (collection == "app.bsky.actor.profile") {
             const res = BskyProfile.validateRecord<BskyProfile.Record>(parsedRecord)
-            if (res.success) return await processBskyProfile(ctx, ref, res.value)
+            if (res.success) {
+                await processBskyProfile(ctx, ref, res.value)
+                return
+            }
             else console.log(res.error)
         } else if (collection == "app.bsky.feed.post") {
             const res = Post.validateRecord<Post.Record>(parsedRecord)
-            if (res.success) return await processPost(ctx, ref, res.value)
+            if (res.success) {
+                await processPost(ctx, ref, res.value)
+                return
+            }
             else console.log(res.error)
         } else if (collection == "app.bsky.feed.like") {
             const res = Like.validateRecord<Like.Record>(parsedRecord)
-            if (res.success) return await processReaction(ctx, ref, res.value)
+            if (res.success) {
+                await processReaction(ctx, ref, res.value)
+                return
+            }
             else console.log(res.error)
         } else if (collection == "app.bsky.feed.repost") {
             const res = Repost.validateRecord<Repost.Record>(parsedRecord)
-            if (res.success) return await processReaction(ctx, ref, res.value)
+            if (res.success) {
+                await processReaction(ctx, ref, res.value)
+                return
+            }
             else console.log(res.error)
         } else if (collection == "app.bsky.graph.follow") {
             const res = Follow.validateRecord<Follow.Record>(parsedRecord)
-            if (res.success) return await processFollow(ctx, ref, res.value)
+            if (res.success) {
+                await processFollow(ctx, ref, res.value)
+                return
+            }
             else console.log(res.error)
         } else if (collection == "ar.cabildoabierto.actor.caProfile") {
             const res = CAProfile.validateRecord<CAProfile.Record>(parsedRecord)
-            if (res.success) return await processCAProfile(ctx, ref, res.value)
+            if (res.success) {
+                await processCAProfile(ctx, ref, res.value)
+                return
+            }
             else console.log(res.error)
+        } else if (collection == "ar.com.cabildoabierto.profile") {
+            await processCAProfile(ctx, ref, parsedRecord)
+            return
         } else if (collection == "ar.cabildoabierto.feed.article") {
             const res = Article.validateRecord<Article.Record>(parsedRecord)
-            if (res.success) return await processArticle(ctx, ref, res.value)
+            if (res.success) {
+                await processArticle(ctx, ref, res.value)
+                return
+            }
             else console.log(res.error)
         } else if (collection == "ar.cabildoabierto.wiki.topicVersion") {
             const res = TopicVersion.validateRecord<TopicVersion.Record>(parsedRecord)
-            if (res.success) return await processTopicVersion(ctx, ref, res.value)
+            if (res.success) {
+                await processTopicVersion(ctx, ref, res.value)
+                return
+            }
             else console.log(res.error)
         } else if (collection == "ar.cabildoabierto.wiki.voteAccept") {
             const res = VoteAccept.validateRecord<VoteAccept.Record>(parsedRecord)
-            if (res.success) return await processReaction(ctx, ref, res.value)
+            if (res.success) {
+                await processReaction(ctx, ref, res.value)
+                return
+            }
             else console.log(res.error)
         } else if (collection == "ar.cabildoabierto.wiki.voteReject") {
             const res = VoteReject.validateRecord<VoteReject.Record>(parsedRecord)
-            if (res.success) return await processReaction(ctx, ref, res.value)
+            if (res.success) {
+                await processReaction(ctx, ref, res.value)
+                return
+            }
             else console.log(res.error)
         } else if (collection == "ar.cabildoabierto.data.dataset") {
             const res = Dataset.validateRecord<Dataset.Record>(parsedRecord)
-            if (res.success) return await processDataset(ctx, ref, res.value)
+            if (res.success) {
+                await processDataset(ctx, ref, res.value)
+                return
+            }
             else console.log(res.error)
         } else {
             console.log("Unknown collection", collection)
-            return new SyncUpdate(ctx.db)
+            return
         }
 
-        console.log("Validation failed.")
-        return new SyncUpdate(ctx.db)
+        console.log(`Validation failed for ${ref.uri}.`)
+        console.log("Parsed record", parsedRecord)
     } catch (err) {
         console.log("Error processing record", ref.uri)
         console.log(err)
-        return new SyncUpdate(ctx.db)
     }
 }

@@ -1,6 +1,7 @@
 import {gett} from "#/utils/arrays";
 import {AppContext} from "#/index";
 import {getDidFromUri} from "#/utils/uri";
+import {CAHandler} from "#/utils/handler";
 
 
 type ContentInteractions = {
@@ -81,6 +82,8 @@ export async function computeTopicsPopularityScore(ctx: AppContext): Promise<{
 
     const [contentInteractions, topics] = await Promise.all([contentInteractionsPromise, topicsPromise])
 
+    console.log("got", contentInteractions.length, "content interactions and topics", topics.length)
+
     const contentInteractionsMap = new Map<string, Set<string>>()
     contentInteractions.map(({uri, interactions}) => {
         contentInteractionsMap.set(uri, new Set<string>(interactions))
@@ -95,6 +98,12 @@ export async function computeTopicsPopularityScore(ctx: AppContext): Promise<{
     return Array.from(topicScores.entries()).map(([id, score]) => {
         return {id, score}
     })
+}
+
+
+export const updateTopicsPopularityHandler: CAHandler<{}, {}> = async (ctx, agent, {}) => {
+    await ctx.queue.add("update-topics-popularity", {})
+    return {data: {}}
 }
 
 
@@ -165,6 +174,7 @@ export async function getContentInteractions(ctx: AppContext) : Promise<{uri: st
 
 
 export async function updateTopicPopularityScores(ctx: AppContext) {
+    console.log("getting scores")
     const scores: { id: string, score: number }[] = (await computeTopicsPopularityScore(ctx)).map(
         ({ id, score }) => ({
             id: id,
@@ -172,8 +182,9 @@ export async function updateTopicPopularityScores(ctx: AppContext) {
         })
     )
 
+    console.log("got", scores.length, "scores")
+
     const t1 = Date.now();
-    console.log("applying query with", scores.length, "items");
 
     // Construct the CASE statement dynamically
     const caseStatements = scores.map(({ id, score }, index) =>

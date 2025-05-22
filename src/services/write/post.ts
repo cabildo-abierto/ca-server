@@ -168,8 +168,7 @@ export type CreatePostProps = {
 export const createPost: CAHandler<CreatePostProps, ATProtoStrongRef> = async (ctx, agent, post) => {
     const {ref, record} = await createPostAT({agent, post})
 
-    const updates = await processPost(ctx, ref, record)
-    await updates.apply()
+    await processPost(ctx, ref, record)
 
     return {data: ref}
 }

@@ -1,12 +1,17 @@
 import express from 'express'
 import type {AppContext} from '#/index'
-import {CAHandler, makeHandler} from "#/utils/handler";
+import {CAHandler, CAHandlerNoAuth, makeHandler} from "#/utils/handler";
 import {updateCategoriesGraphHandler} from "#/services/topic/graph";
-import {syncUserHandler} from "#/services/sync/sync-user";
+import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user";
 import {updateReferences, updateReferencesHandler} from "#/services/topic/references";
 import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete";
 import {getAvailableInviteCodes} from "#/services/user/access";
 import {updateEngagementCountsHandler} from "#/services/feed/getUserEngagement";
+import {updateTopicsPopularityHandler} from "#/services/topic/popularity";
+import {getUsers} from "#/services/user/users";
+import {getAllTopics} from "#/services/topic/topics";
+import {sessionAgent} from "#/utils/session-agent";
+import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration";
 
 
 function isAdmin(did: string) {
@@ -29,6 +34,27 @@ function makeAdminHandler<P, Q>(ctx: AppContext, handler: CAHandler<P, Q>): expr
     }
 
     return makeHandler(ctx, adminOnlyHandler)
+}
+
+
+function makeAdminHandlerNoAuth<P, Q>(ctx: AppContext, handler: CAHandlerNoAuth<P, Q>): express.Handler {
+
+    return async (req, res) => {
+        const params = {...req.body, params: req.params, query: req.query} as P
+        const agent = await sessionAgent(req, res, ctx)
+
+        const admin = agent.hasSession() && isAdmin(agent.did)
+        const authHeader = req.headers.authorization || ''
+        const token = authHeader.replace(/^Bearer\s+/i, '')
+        const validToken = token == process.env.ADMIN_TOKEN
+
+        if(admin || validToken) {
+            const json = await handler(ctx, agent, params)
+            return res.json(json)
+        } else {
+            return res.json({error: "No session"})
+        }
+    }
 }
 
 
@@ -61,6 +87,41 @@ export const adminRoutes = (ctx: AppContext) => {
     router.post(
         "/delete-collection/:collection",
         makeAdminHandler(ctx, deleteCollectionHandler)
+    )
+
+    router.post(
+        "/update-topics-popularity",
+        makeAdminHandler(ctx, updateTopicsPopularityHandler)
+    )
+
+    router.get(
+        "/users",
+        makeAdminHandler(ctx, getUsers)
+    )
+
+    router.post(
+        "/sync-all-users",
+        makeAdminHandler(ctx, syncAllUsersHandler)
+    )
+
+    router.get(
+        "/topics",
+        makeAdminHandlerNoAuth(ctx, getAllTopics)
+    )
+
+    router.post(
+        "/migrate-to-ca-pds",
+        makeAdminHandler(ctx, migrateToCA)
+    )
+
+    router.post(
+        "/finish-migration-to-ca-pds",
+        makeAdminHandler(ctx, finishMigrationToCA)
+    )
+
+    router.post(
+        "/signup-cabildo",
+        makeAdminHandler(ctx, createAccountInCabildoPDS)
     )
 
     return router

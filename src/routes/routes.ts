@@ -17,7 +17,8 @@ import {
     getFollows,
     getProfile,
     getSession, setSeenTutorial,
-    unfollow
+    unfollow,
+    updateProfile
 } from "#/services/user/users";
 import {createPost} from "#/services/write/post";
 import {addLike, removeLike, removeRepost, repost} from "#/services/reactions/reactions";
@@ -290,6 +291,11 @@ export const createRouter = (ctx: AppContext) => {
     router.post(
         '/get-topics-mentioned',
         handler(makeHandler(ctx, getTopicsMentioned))
+    )
+
+    router.post(
+        '/profile',
+        handler(makeHandler(ctx, updateProfile))
     )
 
     router.get('/metadata', makeHandler(ctx, fetchURLMetadata));

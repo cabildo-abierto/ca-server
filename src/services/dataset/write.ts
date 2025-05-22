@@ -66,8 +66,7 @@ export const createDataset: CAHandler<CreateDatasetProps> = async (ctx, agent, p
     const {error, record, ref} = await createDatasetATProto(agent, params)
     if (error || !record || !ref) return {error}
 
-    const su = await processDataset(ctx, ref, record)
-    await su.apply()
+    await processDataset(ctx, ref, record)
 
     return {}
 }

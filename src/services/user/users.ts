@@ -14,6 +14,9 @@ import {createCAUser} from "#/services/user/access";
 import {dbUserToProfileViewBasic} from "#/services/topic/topics";
 import {Record as FollowRecord} from "#/lex-api/types/app/bsky/graph/follow"
 import {processCreate, processFollow} from "#/services/sync/process-event";
+import {Record as BskyProfileRecord, validateRecord as validateBskyProfile} from "#/lex-api/types/app/bsky/actor/profile"
+import {BlobRef} from "@atproto/lexicon";
+import {uploadBase64Blob} from "#/services/blob";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -95,37 +98,17 @@ export const getCAUsersDids = async (ctx: AppContext) => {
 }
 
 
-export const getUsers = async (ctx: AppContext): Promise<{ users?: CAProfileViewBasic[], error?: string }> => {
+export const getUsers: CAHandler<{}, CAProfileViewBasic[]> = async (ctx, agent, {}) => {
     try {
-        const res = await ctx.db.user.findMany({
-            select: {
-                did: true,
-                handle: true,
-                displayName: true,
-                avatar: true,
-                description: true,
-                CAProfileUri: true
-            },
-            where: {
-                inCA: true
-            }
-        })
+        const dids = await getCAUsersDids(ctx)
 
-        let users: CAProfileViewBasic[] = []
+        const dataplane = new Dataplane(ctx, agent)
 
-        res.forEach(u => {
-            if (u.handle) {
-                users.push({
-                    ...u,
-                    handle: u.handle,
-                    displayName: u.displayName ?? undefined,
-                    avatar: u.avatar ?? undefined,
-                    caProfile: u.CAProfileUri ?? undefined
-                })
-            }
-        })
+        await dataplane.fetchUsersHydrationData(dids)
 
-        return {users}
+        const users = dids.map(d => hydrateProfileViewBasic(d, dataplane)).filter(x => x != null)
+
+        return {data: users}
     } catch (error) {
         return {error: "Error al obtener a los usuarios."}
     }
@@ -735,7 +718,7 @@ export async function getUserStats(): Promise<{ stats?: UserStats, error?: strin
 }
 
 
-export const queryMentions = async (ctx: AppContext, trigger: string, query: string | undefined | null): Promise<MentionProps[]> => {
+/*export const queryMentions = async (ctx: AppContext, trigger: string, query: string | undefined | null): Promise<MentionProps[]> => {
     if (!query) return []
     const {users, error} = await getUsers(ctx)
     if (!users || error) return []
@@ -745,7 +728,7 @@ export const queryMentions = async (ctx: AppContext, trigger: string, query: str
     return users.filter((user) =>
         (user.displayName && cleanText(user.displayName).includes(cleanQuery)) || cleanText(user.handle).includes(cleanQuery),
     ).map(u => ({...u, value: u.did}))
-}
+}*/
 
 
 export const setSeenTutorial: CAHandler = async (ctx, agent) => {
@@ -856,4 +839,47 @@ export const getFollowers: CAHandler<{
     params: { handleOrDid: string }
 }, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
     return await getFollowx(ctx, agent, {handleOrDid: params.handleOrDid, kind: "followers"})
+}
+
+
+type UpdateProfileProps = {
+    displayName?: string
+    description?: string
+    banner?: string
+    profilePic?: string
+}
+
+
+export const updateProfile: CAHandler<UpdateProfileProps, {}> = async (ctx, agent, params) => {
+    const {data} = await agent.bsky.com.atproto.repo.getRecord({
+        repo: agent.did,
+        collection: 'app.bsky.actor.profile',
+        rkey: "self"
+    })
+
+    const val = validateBskyProfile(data.value)
+
+
+    if(val.success){
+        const record = val.value
+
+        const avatarBlob: BlobRef | undefined = params.profilePic ? (await uploadBase64Blob(agent, params.profilePic)).ref : record.avatar
+        const bannerBlob: BlobRef | undefined = params.banner ? (await uploadBase64Blob(agent, params.banner)).ref : record.banner
+
+        const newRecord: BskyProfileRecord = {
+            ...record,
+            displayName: params.displayName ?? record.displayName,
+            description: params.description ?? record.description,
+            avatar: avatarBlob,
+            banner: bannerBlob
+        }
+        await agent.bsky.com.atproto.repo.putRecord({
+            repo: agent.did,
+            collection: "app.bsky.actor.profile",
+            record: newRecord,
+            rkey: "self"
+        })
+    }
+
+    return {data: {}}
 }

@@ -6,35 +6,6 @@ export type PrismaUpdateListTransaction = PrismaUpdate[]
 export type PrismaUpdate = any
 
 
-export async function batchPromises(promises: Promise<any>[], batchSize: number, retries: number = 1) {
-    if(promises.length > batchSize) console.log("Batching", promises.length, "promises")
-
-    for(let i = 0; i < promises.length; i += batchSize){
-        if(promises.length > batchSize) console.log("starting batch in index", i, "of", promises.length)
-        const updates = promises.slice(i, i+batchSize)
-        let updateOk = false
-
-        for (let attempt = 1; attempt <= retries; attempt++) {
-            try {
-                await Promise.all(updates)
-                updateOk = true
-                break
-            } catch (error) {
-                console.log(error)
-                await new Promise(res => setTimeout(res, 100 * attempt));
-            }
-        }
-
-        if(!updateOk) {
-            console.log("Failed to apply some promises.")
-            return
-        }
-    }
-
-    if(promises.length > batchSize) console.log("Finished batch promises")
-}
-
-
 export class SyncUpdate {
     db: PrismaClient
     functionTransactions: PrismaFunctionTransaction[] = []
@@ -68,15 +39,28 @@ export class SyncUpdate {
     }
 
     async apply() {
-        const promises = this.getPromises()
-        await batchPromises(promises, 1)
-    }
+        const maxUpdateSize = 100
 
-    getPromises(): Promise<any>[] {
-        return [
-            ...this.updates,
-            ...this.functionTransactions.map(t => this.db.$transaction(t)),
-            ...this.updateListTransactions.map(t => this.db.$transaction(t))
-        ]
+        let curUpdate: PrismaUpdate[] = []
+        for (let i = 0; i < this.updates.length; i++) {
+            if (curUpdate.length <= maxUpdateSize) {
+                curUpdate.push(this.updates[i])
+            } else {
+                await this.db.$transaction(curUpdate)
+                curUpdate = []
+            }
+        }
+        for (let i = 0; i < this.updateListTransactions.length; i++) {
+            if (curUpdate.length <= maxUpdateSize) {
+                curUpdate.push(...this.updateListTransactions[i])
+            } else {
+                await this.db.$transaction(curUpdate)
+                curUpdate = []
+            }
+        }
+        if(curUpdate.length > 0) await this.db.$transaction(curUpdate)
+        for (let i = 0; i < this.functionTransactions.length; i++) {
+            await this.db.$transaction(this.functionTransactions[i])
+        }
     }
 }

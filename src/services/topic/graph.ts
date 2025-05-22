@@ -9,6 +9,7 @@ import {getTopicCategories} from "#/services/topic/utils";
 
 
 export const updateCategoriesGraph = async (ctx: AppContext) => {
+    // TO DO: Actualizar también las categorías o usar el json
     console.log("Getting topics.")
 
     let topics = await ctx.db.topic.findMany({
@@ -143,32 +144,72 @@ export const getCategoriesGraph: CAHandler<{}, TopicsGraph> = async (ctx, agent,
 
 
 export const getCategoryGraph: CAHandler<{params: {c: string}}, TopicsGraph> = async (ctx, agent, {params}) => {
+    // TO DO: Usar props en vez de categories (que ya no se actualiza)
     const t1 = Date.now()
     const {c: cat} = params
-    let topics = await ctx.db.topic.findMany({
-        select: {
-            id: true,
-            referencedBy: {
-                select: {
-                    referencingContent: {
-                        select: {
-                            topicVersion: {
-                                select: {
-                                    topicId: true
+
+    let topics: {
+        id: string
+        referencedBy: {
+            referencingContent: {
+                topicVersion: {
+                    topicId: string
+                } | null
+            }
+        }[]
+    }[]
+
+    if(cat == "Sin categoría"){
+        topics = await ctx.db.topic.findMany({
+            select: {
+                id: true,
+                referencedBy: {
+                    select: {
+                        referencingContent: {
+                            select: {
+                                topicVersion: {
+                                    select: {
+                                        topicId: true
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        },
-        where: {
-            categories: {
-                some: {categoryId: cat}
-            }
-        },
-        take: 500
-    })
+            },
+            where: {
+                categories: {
+                    none: {}
+                }
+            },
+            take: 500
+        })
+    } else {
+        topics = await ctx.db.topic.findMany({
+            select: {
+                id: true,
+                referencedBy: {
+                    select: {
+                        referencingContent: {
+                            select: {
+                                topicVersion: {
+                                    select: {
+                                        topicId: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            where: {
+                categories: {
+                    some: {categoryId: cat}
+                }
+            },
+            take: 500
+        })
+    }
     const t2 = Date.now()
 
     const topicIdsSet = new Set(topics.map(t => t.id))

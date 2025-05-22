@@ -78,11 +78,9 @@ export const addToEnDiscusion: CAHandler<{params: {collection: string, rkey: str
         })
 
         if(isArticleRecord(validRecord)){
-            const su = await processArticle(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
-            await su.apply()
+            await processArticle(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
         } else {
-            const su = await processPost(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
-            await su.apply()
+            await processPost(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
         }
     } else {
         return {error: "No se pudo agregar a en discusión."}
@@ -133,11 +131,9 @@ export const removeFromEnDiscusion: CAHandler<{params: {collection: string, rkey
         })
 
         if(isArticleRecord(record)){
-            const su = await processArticle(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord as ArticleRecord)
-            await su.apply()
+            await processArticle(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord as ArticleRecord)
         } else if(isPostRecord(record)){
-            const su = await processPost(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord as PostRecord)
-            await su.apply()
+            await processPost(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord as PostRecord)
         }
     } else {
         return {error: "No se pudo remover de en discusión."}

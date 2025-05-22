@@ -160,6 +160,16 @@ export interface TopicProp {
   value: $Typed<StringProp> | $Typed<StringListProp> | { $type: string }
 }
 
+export interface StringProp {
+  $type?: 'ar.cabildoabierto.wiki.topicVersion#stringProp'
+  value: string
+}
+
+export interface StringListProp {
+  $type?: 'ar.cabildoabierto.wiki.topicVersion#stringListProp'
+  value: string[]
+}
+
 const hashTopicProp = 'topicProp'
 
 export function isTopicProp<V>(v: V) {
@@ -170,11 +180,6 @@ export function validateTopicProp<V>(v: V) {
   return validate<TopicProp & V>(v, id, hashTopicProp)
 }
 
-export interface StringProp {
-  $type?: 'ar.cabildoabierto.wiki.topicVersion#stringProp'
-  value: string
-}
-
 const hashStringProp = 'stringProp'
 
 export function isStringProp<V>(v: V) {
@@ -183,11 +188,6 @@ export function isStringProp<V>(v: V) {
 
 export function validateStringProp<V>(v: V) {
   return validate<StringProp & V>(v, id, hashStringProp)
-}
-
-export interface StringListProp {
-  $type?: 'ar.cabildoabierto.wiki.topicVersion#stringListProp'
-  value: string[]
 }
 
 const hashStringListProp = 'stringListProp'

@@ -15,7 +15,7 @@ export function makeHandler<Params={}, Output={}>(ctx: AppContext, fn: CAHandler
             const json = await fn(ctx, agent, params)
             return res.json(json)
         } else {
-            return res.json({error: "No session"})
+            return res.json({error: "Unauthorized"})
         }
     }
 }

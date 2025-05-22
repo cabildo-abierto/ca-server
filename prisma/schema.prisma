@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-kysely"
 }
 
 datasource db {
@@ -109,7 +109,7 @@ model Topic {
   synonyms           String[]
   categories         TopicToCategory[]
   lastSynonymsChange DateTime?
-  popularityScore    Int?
+  popularityScore    Int?              @default(1)
   lastEdit           DateTime?         @updatedAt
 }
 

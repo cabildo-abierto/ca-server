@@ -3,7 +3,7 @@ import {SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
 import {getUri} from "#/utils/uri";
 import {CAHandler} from "#/utils/handler";
-import {addReaction, removeReaction} from "#/services/reactions/reactions";
+import {addReaction, removeReactionAT} from "#/services/reactions/reactions";
 import {Record as VoteAcceptRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept"
 import {Record as VoteRejectRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject"
 
@@ -95,5 +95,5 @@ export const cancelEditVote: CAHandler<{
 }> = async (ctx: AppContext, agent: SessionAgent, {params}) => {
     const {collection, rkey} = params
     const uri = getUri(agent.did, collection, rkey)
-    return await removeReaction(ctx, agent, uri)
+    return await removeReactionAT(ctx, agent, uri)
 }

@@ -1,7 +1,7 @@
-import {fetchBlob, fetchTextBlobs} from "../blob";
-import {getCollectionFromUri, getDidFromUri, getUri, splitUri} from "#/utils/uri";
+import {fetchTextBlobs} from "../blob";
+import {getCollectionFromUri, getUri, splitUri} from "#/utils/uri";
 import {AppContext} from "#/index";
-import {CAHandler, CAHandlerOutput} from "#/utils/handler";
+import {CAHandler, CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
 import {
     CategoryVotes,
     TopicHistory,
@@ -20,7 +20,6 @@ import {$Typed} from "@atproto/api";
 import {getTopicTitle} from "#/services/topic/utils";
 import {getSynonymsToTopicsMap, getTopicsReferencedInText} from "#/services/topic/references";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
-import {logTimes} from "#/utils/utils";
 import {gett} from "#/utils/arrays";
 import {PrismaTransactionClient} from "#/services/sync/sync-update";
 
@@ -41,7 +40,43 @@ export async function getTopicsSkeleton(ctx: AppContext, categories: string[], o
         orderByClause = `t."lastEdit" DESC`
     }
 
-    const topics = await ctx.db.$queryRawUnsafe(`
+    let topics: {id: string}[]
+    if(categories.includes("Sin categoría")){
+        // Idea: get all topics where Categorías isn't present or has length 0
+
+        topics = await ctx.db.$queryRawUnsafe(`
+            SELECT t.id
+            FROM "Topic" t
+                     JOIN "TopicVersion" v ON t."currentVersionId" = v."uri"
+            WHERE t."popularityScore" IS NOT NULL
+              AND t."lastEdit" IS NOT NULL
+              AND (
+                v."props" IS NULL
+                    OR (
+                    jsonb_typeof(v."props") = 'array'
+                        AND (
+                        NOT EXISTS (
+                            SELECT 1
+                            FROM jsonb_array_elements(v."props") AS prop
+                            WHERE prop ->> 'name' = 'Categorías'
+                        )
+                            OR EXISTS (
+                            SELECT 1
+                            FROM jsonb_array_elements(v."props") AS prop
+                            WHERE prop ->> 'name' = 'Categorías'
+                              AND (
+                                  prop -> 'value' -> 'value' IS NULL
+                                  OR jsonb_array_length(prop -> 'value' -> 'value') = 0
+                              )
+                        )
+                        )
+                    )
+                )
+            ORDER BY ${orderByClause}
+                LIMIT $2
+        `, jsonbArray, limit);
+    } else {
+        topics = await ctx.db.$queryRawUnsafe(`
         SELECT t.id
         FROM "Topic" t
                  JOIN "TopicVersion" v ON t."currentVersionId" = v."uri"
@@ -53,8 +88,8 @@ export async function getTopicsSkeleton(ctx: AppContext, categories: string[], o
                     AND jsonb_typeof(v."props") = 'array'
                     AND EXISTS (SELECT 1
                                 FROM jsonb_array_elements(v."props") AS prop
-                                WHERE prop ->>'name' = 'Categorías'
-                    AND (prop->'value'->'value')::jsonb @> $1::jsonb)
+                                WHERE (prop ->>'name' = 'Categorías'
+                    AND (prop->'value'->'value')::jsonb @> $1::jsonb))
                 )
                 OR
             (
@@ -63,6 +98,7 @@ export async function getTopicsSkeleton(ctx: AppContext, categories: string[], o
         )
         ORDER BY ${orderByClause} LIMIT $2
     `, jsonbArray, limit)
+    }
 
     return topics as {id: string}[]
 }
@@ -684,4 +720,16 @@ export const getTopicsMentioned: CAHandler<{title: string, text: string}, TopicM
     return {
         data
     }
+}
+
+
+export const getAllTopics: CAHandlerNoAuth<{}, {topicId: string, uri: string}[]> = async (ctx, agent, {}) => {
+    const topicVersions = await ctx.db.topicVersion.findMany({
+        select: {
+            topicId: true,
+            uri: true,
+            categories: true
+        }
+    })
+    return {data: topicVersions}
 }

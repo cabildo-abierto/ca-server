@@ -95,12 +95,8 @@ export async function createCAUser(ctx: AppContext, agent: SessionAgent, code: s
         })
     ])
 
-    const caProfileCreation = await processCAProfile(ctx, {uri: data.uri, cid: data.cid}, caProfileRecord)
-    const bskyProfileCreation = await processBskyProfile(ctx, {uri: bskyProfile.uri, cid: bskyProfile.cid!}, bskyProfile.value as BskyProfileRecord)
-
-    caProfileCreation.joinWith(bskyProfileCreation)
-
-    await caProfileCreation.apply()
+    await processCAProfile(ctx, {uri: data.uri, cid: data.cid}, caProfileRecord)
+    await processBskyProfile(ctx, {uri: bskyProfile.uri, cid: bskyProfile.cid!}, bskyProfile.value as BskyProfileRecord)
 
     return {}
 }

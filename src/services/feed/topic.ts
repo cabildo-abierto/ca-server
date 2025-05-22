@@ -104,7 +104,7 @@ export const getTopicVersionReplies = async (ctx: AppContext, agent: SessionAgen
         .map((e) => (hydrateFeedViewContent(e, data)))
 
     feed.filter(isNotFoundPost).forEach(x => {
-        console.log("Post not found:", x.uri)
+        console.log("Content not found:", x.uri)
     })
 
     let res = feed

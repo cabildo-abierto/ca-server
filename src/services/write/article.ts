@@ -4,7 +4,11 @@ import {CAHandler} from "#/utils/handler";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {SessionAgent} from "#/utils/session-agent";
 import {getTopicsMentioned} from "#/services/topic/topics";
-import {PrismaUpdate} from "#/services/sync/sync-update";
+import {Transaction} from "kysely";
+import {DB, ReferenceType} from "../../../prisma/generated/types";
+import {v4 as uuidv4} from 'uuid'
+import {ATProtoStrongRef} from "#/lib/types";
+import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
 
 export type CreateArticleProps = {
     title: string
@@ -37,32 +41,45 @@ export const createArticleAT = async (agent: SessionAgent, article: CreateArticl
 }
 
 export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, article) => {
+    let ref: ATProtoStrongRef
+    let record: ArticleRecord
+    let mentions: TopicMention[] | undefined
     try {
-        const [{ref, record}, {data: mentions}] = await Promise.all([
+        [{ref, record}, {data: mentions}] = await Promise.all([
             createArticleAT(agent, article),
             getTopicsMentioned(ctx, agent, article)
         ])
-
-        let addToTransaction: PrismaUpdate[] = []
-
-        if(mentions && mentions.length > 0){
-            addToTransaction.push(ctx.db.reference.createMany({
-                data: mentions.map(m => ({
-                    referencedTopicId: m.id,
-                    referencingContentId: ref.uri,
-                    type: "Weak",
-                    count: m.count
-                }))
-            }))
-        }
-
-        const updates = await processArticle(ctx, ref, record, addToTransaction)
-        await updates.apply()
-
-        return {data: {}}
     } catch (err) {
-        console.error("Error", err)
         return {error: "Ocurrió un error al publicar el artículo."}
     }
 
+    const afterTransaction = mentions && mentions.length > 0 ? async (trx: Transaction<DB>) => {
+
+        const values = mentions.map(m => {
+            return {
+                id: uuidv4(),
+                referencedTopicId: m.id,
+                referencingContentId: ref.uri,
+                type: "Weak" as ReferenceType,
+                count: m.count
+            }
+        })
+
+        await trx
+            .insertInto("Reference")
+            .values(values)
+            .execute()
+
+    } : undefined
+
+    try {
+        await processArticle(ctx, ref, record, afterTransaction)
+    } catch (err) {
+        console.error(err)
+        return {
+            error: "El artículo se publicó, pero hubo un error al procesarlo. Si no lo ves publicado dentro de unas horas, comunicate con el soporte."
+        }
+    }
+
+    return {data: {}}
 }
