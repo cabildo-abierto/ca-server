@@ -180,7 +180,8 @@ export const processContentsBatch = async (trx: Transaction<DB>, records: {
             textBlobId: r.textBlob?.cid,
             uri: c.ref.uri,
             format: r.format,
-            selfLabels: r.selfLabels ?? []
+            selfLabels: r.selfLabels ?? [],
+            embeds: c.record.embeds ?? [],
         }
     })
 
@@ -234,7 +235,8 @@ export const processPostsBatch: BatchRecordProcessor<Post.Record> = async (ctx, 
                     format: "plain-text",
                     text: r.record.text,
                     selfLabels: isSelfLabels(r.record.labels) ? r.record.labels.values.map(l => l.val) : undefined,
-                    datasetsUsed
+                    datasetsUsed,
+                    embeds: []
                 }
             }
         })
@@ -454,7 +456,8 @@ export const processArticlesBatch: BatchRecordProcessor<Article.Record> = async 
                 cid: getCidFromBlobRef(r.record.text),
                 authorId: getDidFromUri(r.ref.uri)
             },
-            selfLabels: isSelfLabels(r.record.labels) ? r.record.labels.values.map(l => l.val) : undefined
+            embeds: r.record.embeds ?? [],
+            selfLabels: isSelfLabels(r.record.labels) ? r.record.labels.values.map(l => l.val) : undefined,
         },
         ref: r.ref
     }))
@@ -492,7 +495,8 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
             textBlob: r.record.text ? {
                 cid: getCidFromBlobRef(r.record.text),
                 authorId: getDidFromUri(r.ref.uri)
-            } : undefined
+            } : undefined,
+            embeds: r.record.embeds ?? []
         },
         ref: r.ref
     }))

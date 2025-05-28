@@ -33,6 +33,7 @@ import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/
 import {getTopicTitle} from "#/services/topic/utils";
 import {isMain as isVisualizationEmbed, View as VisualizationEmbedView, Main as VisualizationEmbed, isDatasetDataSource} from "#/lex-server/types/ar/cabildoabierto/embed/visualization"
 import {hydrateDatasetView} from "#/services/dataset/read";
+import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 
 
 const queryResultToProfileViewBasic = (e: FeedElementQueryResult["author"]): CAProfileViewBasic | null => {
@@ -199,7 +200,8 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
             quotedTextFormat: caData.content.format ?? undefined,
             quotedContentTitle: title,
             quotedContent,
-            quotedContentAuthor: author
+            quotedContentAuthor: author,
+            quotedContentEmbeds: caData.content.embeds as unknown as ArticleEmbed[]
         }
     } else {
         return null

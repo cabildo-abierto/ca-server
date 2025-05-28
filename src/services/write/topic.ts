@@ -5,9 +5,10 @@ import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wi
 import {uploadStringBlob} from "#/services/blob";
 import {BlobRef} from "@atproto/lexicon";
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 
 
-export async function createTopicVersionATProto(agent: SessionAgent, {id, text, format, message, props}: CreateTopicVersionProps){
+export async function createTopicVersionATProto(agent: SessionAgent, {id, text, format, message, props, embeds}: CreateTopicVersionProps){
     let blob: BlobRef | null = null
 
     if(text){
@@ -23,7 +24,8 @@ export async function createTopicVersionATProto(agent: SessionAgent, {id, text, 
         message,
         id,
         props: props && !props.some(p => !validateTopicProp(p).success) ? props : undefined,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        embeds: embeds ?? []
     }
 
     const {data} = await agent.bsky.com.atproto.repo.createRecord({
@@ -42,14 +44,16 @@ type CreateTopicVersionProps = {
     props?: TopicProp[]
     message?: string,
     claimsAuthorship?: boolean
+    embeds?: ArticleEmbed[]
 }
 
 
 export const createTopicVersion: CAHandler<CreateTopicVersionProps> = async (ctx, agent, params) => {
+    console.log("params", params)
+    return {error: "testing"}
     const {error, ref, record} = await createTopicVersionATProto(agent, params)
     if(!error && ref && record){
-        const updates = await processTopicVersion(ctx, ref, record)
-        await updates.apply()
+        await processTopicVersion(ctx, ref, record)
     }
     return {error}
 }

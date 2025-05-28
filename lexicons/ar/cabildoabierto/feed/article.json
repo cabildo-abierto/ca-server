@@ -22,6 +22,13 @@
               "minLength": 1,
               "maxLength": 120
             },
+            "embeds": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#articleEmbed"
+              }
+            },
             "labels": {
               "type": "union",
               "description": "Self-label values for this post. Effectively content warnings.",
@@ -33,6 +40,21 @@
               "type": "string",
               "format": "datetime"
             }
+          }
+        }
+      },
+      "articleEmbed": {
+        "type": "object",
+        "required": ["value", "index"],
+        "properties": {
+          "value": {
+            "type": "union",
+            "refs": [
+              "ar.cabildoabierto.embed.visualization"
+            ]
+          },
+          "index": {
+            "type": "integer"
           }
         }
       }

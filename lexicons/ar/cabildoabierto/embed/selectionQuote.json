@@ -37,6 +37,13 @@
           "type": "string",
           "format": "at-uri"
         },
+        "quotedContentEmbeds": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "ar.cabildoabierto.feed.article#articleEmbed"
+          }
+        },
         "quotedContentAuthor": {
           "type": "ref",
           "ref": "ar.cabildoabierto.actor.defs#profileViewBasic"

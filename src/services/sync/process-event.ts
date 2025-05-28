@@ -35,6 +35,7 @@ import {
 } from "#/services/sync/process-batch";
 import {Transaction} from "kysely";
 import {DB} from "../../../prisma/generated/types";
+import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 
 export type RecordProcessor<T> = (ctx: AppContext, ref: ATProtoStrongRef, record: T, afterTransaction?: (trx: Transaction<DB>) => Promise<void>) => void | Promise<void>
 
@@ -223,6 +224,7 @@ export type SyncContentProps = {
     }
     selfLabels?: string[]
     datasetsUsed?: string[]
+    embeds: ArticleEmbed[]
 }
 
 export const processPost: RecordProcessor<Post.Record> = async (ctx, ref, r) => {

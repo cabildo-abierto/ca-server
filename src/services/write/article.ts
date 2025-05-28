@@ -9,12 +9,14 @@ import {DB, ReferenceType} from "../../../prisma/generated/types";
 import {v4 as uuidv4} from 'uuid'
 import {ATProtoStrongRef} from "#/lib/types";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
+import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 
 export type CreateArticleProps = {
     title: string
     format: string
     text: string
     enDiscusion: boolean
+    embeds?: ArticleEmbed[]
 }
 
 export const createArticleAT = async (agent: SessionAgent, article: CreateArticleProps) => {
@@ -28,6 +30,7 @@ export const createArticleAT = async (agent: SessionAgent, article: CreateArticl
         format: article.format,
         text: blobRef,
         createdAt: new Date().toISOString(),
+        embeds: article.embeds,
         labels: article.enDiscusion ? {$type: "com.atproto.label.defs#selfLabels", values: [{val: "ca:en discusión"}]} : undefined
     }
 

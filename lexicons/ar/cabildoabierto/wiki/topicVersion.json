@@ -29,6 +29,13 @@
                 "ref": "#topicProp"
               }
             },
+            "embeds": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "ar.cabildoabierto.feed.article#articleEmbed"
+              }
+            },
             "message": {
               "type": "string",
               "minLength": 0,

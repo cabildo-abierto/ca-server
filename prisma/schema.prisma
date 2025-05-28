@@ -1,4 +1,8 @@
 generator client {
+  provider = "prisma-client-js"
+}
+
+generator kysely {
   provider = "prisma-kysely"
 }
 
@@ -208,7 +212,7 @@ model Content {
   references           Reference[]
   lastReferencesUpdate DateTime?
   selfLabels           String[]
-
+  embeds               Json[]
   datasetsUsed         Dataset[]
 }
 

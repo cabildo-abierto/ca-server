@@ -50,6 +50,7 @@ export type FeedElementQueryResult = {
             topicId: string
         } | null
         datasetsUsed: {uri: string}[]
+        embeds: Prisma.JsonValue | null
     } | null
 }
 
@@ -183,6 +184,7 @@ export class Dataplane {
                         select: {
                             text: true,
                             selfLabels: true,
+                            embeds: true,
                             datasetsUsed: {
                                 select: {uri: true}
                             }
@@ -209,6 +211,7 @@ export class Dataplane {
                             format: true,
                             textBlobId: true,
                             selfLabels: true,
+                            embeds: true,
                             article: {
                                 select: {
                                     title: true
@@ -240,6 +243,7 @@ export class Dataplane {
                             format: true,
                             selfLabels: true,
                             textBlobId: true,
+                            embeds: true,
                             topicVersion: {
                                 select: {
                                     props: true,
@@ -272,6 +276,13 @@ export class Dataplane {
                     author: {
                         ...r.author,
                         handle: r.author.handle
+                    },
+                    content: {
+                        ...r.content,
+                        text: r.content?.text ?? null,
+                        selfLabels: r.content?.selfLabels ?? [],
+                        datasetsUsed: r.content?.datasetsUsed ?? [],
+                        embeds: r.content?.embeds ?? null
                     }
                 })
             }
@@ -304,8 +315,6 @@ export class Dataplane {
     async fetchTopicsBasicByUris(uris: string[]) {
         uris = uris.filter(u => !this.topicsByUri?.has(u))
 
-        const t1 = Date.now()
-
         const data = await this.ctx.db.topicVersion.findMany({
             select: {
                 uri: true,
@@ -337,8 +346,6 @@ export class Dataplane {
             }
         })
 
-        const t2 = Date.now()
-        // logTimes("fetchTopicsBasicByUris", [t1, t2])
         const queryResults: { uri: string, topic: TopicQueryResultBasic }[] = []
 
         data.forEach(item => {

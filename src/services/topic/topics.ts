@@ -14,7 +14,7 @@ import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVer
 import {getTopicCurrentVersion} from "#/services/topic/current-version";
 import {SessionAgent} from "#/utils/session-agent";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
-import { Prisma } from "@prisma/client";
+import {Prisma} from "@prisma/client";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
 import {getTopicTitle} from "#/services/topic/utils";
@@ -364,7 +364,7 @@ export async function getTopicHistory(db: PrismaTransactionClient, id: string, a
                 voteCounts
             }
 
-            const props: TopicProp[] = v.content.topicVersion.props as unknown as TopicProp[]
+            const props = Array.isArray(v.content.topicVersion.props) ? v.content.topicVersion.props as unknown as TopicProp[] : []
 
             const view: VersionInHistory = {
                 $type: "ar.cabildoabierto.wiki.topicVersion#versionInHistory",
@@ -446,9 +446,7 @@ export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string)
     data?: TopicView,
     error?: string
 }> => {
-    const t1 = Date.now()
     const {data: currentVersionId} = await cached(ctx, ["currentVersion", id], async () => getTopicCurrentVersionFromDB(ctx, agent, id))
-    const t2 = Date.now()
     let uri: string
     if (!currentVersionId) {
         console.log(`Warning: Current version not set for topic ${id}.`)
@@ -466,14 +464,8 @@ export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string)
     } else {
         uri = currentVersionId
     }
-    const t3 = Date.now()
 
-    const res = await getCachedTopicVersion(ctx, agent, uri)
-
-    const t4 = Date.now()
-
-    // logTimes("getTopic", [t1, t2, t3, t4])
-    return res
+    return await getCachedTopicVersion(ctx, agent, uri)
 }
 
 
@@ -566,6 +558,8 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
 
     const {text: transformedText, format: transformedFormat} = anyEditorStateToMarkdownOrLexical(text, topic.content.format)
 
+    const props = Array.isArray(topic.content.topicVersion.props) ? topic.content.topicVersion.props as unknown as TopicProp[] : []
+
     const view: TopicView = {
         $type: "ar.cabildoabierto.wiki.topicVersion#topicView",
         id,
@@ -574,7 +568,7 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
         author,
         text: transformedText,
         format: transformedFormat,
-        props: topic.content.topicVersion.props as unknown as TopicProp[],
+        props,
         createdAt: topic.createdAt.toISOString(),
         lastEdit: topic.content.topicVersion.topic.lastEdit?.toISOString() ?? topic.createdAt.toISOString(),
         currentVersion: topic.content.topicVersion.topic.currentVersionId ?? undefined,
