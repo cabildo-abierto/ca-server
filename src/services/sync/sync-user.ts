@@ -171,6 +171,7 @@ export async function processRepo(ctx: AppContext, repo: UserRepo, did: string, 
     const {reqUpdate, recordsReqUpdate} = await checkUpdateRequired(ctx, repo, did, collectionsMustUpdate)
 
     console.log(`Repo has ${repo.length} records.`)
+    console.log(`Repo: ${repo.map(r => r.uri)}`)
     console.log(`Requires update: ${reqUpdate}. Records to update: ${recordsReqUpdate ? recordsReqUpdate.size : 0}.`)
 
     if (!reqUpdate) {

@@ -49,8 +49,6 @@ type CreateTopicVersionProps = {
 
 
 export const createTopicVersion: CAHandler<CreateTopicVersionProps> = async (ctx, agent, params) => {
-    console.log("params", params)
-    return {error: "testing"}
     const {error, ref, record} = await createTopicVersionATProto(agent, params)
     if(!error && ref && record){
         await processTopicVersion(ctx, ref, record)

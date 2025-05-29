@@ -511,12 +511,16 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
         uri: r.ref.uri,
         topicId: r.record.id,
         message: r.record.message ? r.record.message : undefined,
-        props: r.record.props ? r.record.props as unknown as JsonArray : Prisma.JsonNull,
+        props: r.record.props ? JSON.stringify(r.record.props) : undefined,
     }))
+
+    console.log("processing topic version", records, contents.length, topics.length, topicVersions.length)
 
     await ctx.kysely.transaction().execute(async (trx) => {
         await processRecordsBatch(trx, records)
         await processContentsBatch(trx, contents)
+
+        console.log("processing contents")
 
         await trx
             .insertInto("Topic")
@@ -526,18 +530,27 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
             }))
             .execute()
 
-        const inserted = await trx
-            .insertInto("TopicVersion")
-            .values(topicVersions)
-            .onConflict(oc => oc.column("uri").doUpdateSet({
-                topicId: eb => eb.ref("excluded.topicId"),
-                message: (eb) => eb.ref("excluded.message"),
-                props: (eb: ExpressionBuilder<OnConflictDatabase<DB, "TopicVersion">, OnConflictTables<"TopicVersion">>) => eb.ref("excluded.props")
-            }))
-            .returning(["topicId"])
-            .execute()
+        try {
+            const inserted = await trx
+                .insertInto("TopicVersion")
+                .values(topicVersions)
+                .onConflict(oc => oc.column("uri").doUpdateSet({
+                    topicId: eb => eb.ref("excluded.topicId"),
+                    message: (eb) => eb.ref("excluded.message"),
+                    props: (eb: ExpressionBuilder<OnConflictDatabase<DB, "TopicVersion">, OnConflictTables<"TopicVersion">>) => eb.ref("excluded.props")
+                }))
+                .returning(["topicId"])
+                .execute()
 
-        await updateTopicsCurrentVersionBatch(trx, inserted.map(t => t.topicId))
+            console.log("updating current version")
+
+            await updateTopicsCurrentVersionBatch(trx, inserted.map(t => t.topicId))
+
+            console.log("transaction finished ok")
+        } catch (err) {
+            console.log("error inserting topic versions", err)
+        }
+
     })
 }
 

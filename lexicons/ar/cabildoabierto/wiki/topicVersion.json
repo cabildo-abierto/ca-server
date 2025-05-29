@@ -220,7 +220,8 @@
             "type": "union",
             "refs": [
               "#stringProp",
-              "#stringListProp"
+              "#stringListProp",
+              "#dateProp"
             ]
           }
         }
@@ -243,6 +244,16 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "dateProp": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": {
+            "type": "string",
+            "format": "datetime"
           }
         }
       },
