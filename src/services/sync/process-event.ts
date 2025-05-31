@@ -19,7 +19,7 @@ import {
     SyncUpdate
 } from "#/services/sync/sync-update";
 import {
-    deleteTopicVersionDB,
+    processDeleteTopicVersion,
     getTopicIdFromTopicVersionUri,
     updateTopicCurrentVersion
 } from "#/services/topic/current-version";
@@ -89,7 +89,7 @@ export async function processDelete(ctx: AppContext, uri: string) {
     const c = getCollectionFromUri(uri)
 
     if (isTopicVersion(c)) {
-        const {su, error} = await deleteTopicVersionDB(ctx, uri)
+        const {su, error} = await processDeleteTopicVersion(ctx, uri)
         if (error || !su) throw Error(error)
         await su.apply()
     } else if (isReactionCollection(c)) {

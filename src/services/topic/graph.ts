@@ -100,14 +100,6 @@ export const updateCategoriesGraph = async (ctx: AppContext) => {
     // revalidateTag("categoriesgraph")
 }
 
-
-export const updateCategoriesGraphHandler: CAHandler<{}, {}> = async (ctx, agent, {}) => {
-    console.log("Updating categories graph queued.")
-    await ctx.queue.add("update-categories-graph", null)
-    return {data: {}}
-}
-
-
 export const getCategoriesGraph: CAHandler<{}, TopicsGraph> = async (ctx, agent, {}) => {
     const links = await ctx.db.categoryLink.findMany({
         select: {

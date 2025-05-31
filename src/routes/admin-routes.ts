@@ -1,9 +1,8 @@
 import express from 'express'
 import type {AppContext} from '#/index'
 import {CAHandler, CAHandlerNoAuth, makeHandler} from "#/utils/handler";
-import {updateCategoriesGraphHandler} from "#/services/topic/graph";
 import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user";
-import {updateReferences, updateReferencesHandler} from "#/services/topic/references";
+import {updateReferencesHandler} from "#/services/topic/references";
 import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete";
 import {getAvailableInviteCodes} from "#/services/user/access";
 import {updateEngagementCountsHandler} from "#/services/feed/getUserEngagement";
@@ -12,13 +11,15 @@ import {getUsers} from "#/services/user/users";
 import {getAllTopics} from "#/services/topic/topics";
 import {sessionAgent} from "#/utils/session-agent";
 import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration";
+import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation";
 
 
 function isAdmin(did: string) {
     return [
         "did:plc:2356xofv4ntrbu42xeilxjnb",
         "did:plc:rup47j6oesjlf44wx4fizu4m",
-        "did:plc:2dbz7h5m3iowpqc23ozltpje"
+        "did:plc:2dbz7h5m3iowpqc23ozltpje",
+        "did:plc:2semihha42b7efhu4ywv7whi"
     ].includes(did)
 }
 
@@ -58,10 +59,19 @@ function makeAdminHandlerNoAuth<P, Q>(ctx: AppContext, handler: CAHandlerNoAuth<
 }
 
 
+function startJobHandler(ctx: AppContext, job: string): express.Handler {
+    return makeAdminHandler<{}, {}>(ctx, async () => {
+        await ctx.queue.add(job, {})
+        console.log("added job", job)
+        return {data: {}}
+    })
+}
+
+
 export const adminRoutes = (ctx: AppContext) => {
     const router = express.Router()
 
-    router.post("/update-categories-graph", makeAdminHandler(ctx, updateCategoriesGraphHandler))
+    router.post("/update-categories-graph", startJobHandler(ctx, "update-categories-graph"))
 
     router.post("/update-references", makeAdminHandler(ctx, updateReferencesHandler))
 
@@ -122,6 +132,16 @@ export const adminRoutes = (ctx: AppContext) => {
     router.post(
         "/signup-cabildo",
         makeAdminHandler(ctx, createAccountInCabildoPDS)
+    )
+
+    router.post(
+        "/update-topics-categories", startJobHandler(ctx, "update-topics-categories")
+    )
+
+    router.get("/pending-validation-requests", makeAdminHandler(ctx, getPendingValidationRequests))
+
+    router.post(
+        "/validation-request/result", makeAdminHandler(ctx, setValidationRequestResult)
     )
 
     return router

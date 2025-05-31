@@ -14,11 +14,14 @@ export type Profile = {
     ca: CAProfile | null
 }
 
+export type ValidationState = "org" | "persona" | null
+
 export type CAProfile = {
     inCA: boolean
     followersCount: number
     followsCount: number
     editorStatus?: EditorStatus
+    validation: ValidationState
 }
 
 
@@ -31,6 +34,7 @@ export type Session = {
     avatar: string | null
     did: string
     hasAccess: boolean
+    validation: "persona" | "org" | null
 }
 
 
@@ -51,12 +55,6 @@ export type MentionProps = {
     handle: string
     displayName?: string
     avatar?: string
-}
-
-
-export type FeedEngagementProps = {
-    likes: {likedRecordId: string | null; uri: string}[]
-    reposts: {repostedRecordId: string | null; uri: string}[]
 }
 
 

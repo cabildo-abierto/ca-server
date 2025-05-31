@@ -18,7 +18,7 @@ import {setupWorker} from "#/jobs/worker";
 import { Kysely, PostgresDialect } from 'kysely'
 import { Pool } from 'pg'
 import { DB } from '#/../prisma/generated/types'
-
+import { createClient as createSBClient, SupabaseClient } from '@supabase/supabase-js'
 
 const redisUrl = process.env.REDIS_URL as string
 
@@ -32,6 +32,7 @@ export type AppContext = {
     ioredis: Redis
     queue: Queue
     kysely: Kysely<DB>
+    sb: SupabaseClient
 }
 
 export class Server {
@@ -61,12 +62,20 @@ export class Server {
 
         const queue = new Queue('bgJobs', {connection: ioredis})
 
+        const sb = createSBClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+            global: {
+                headers: {
+                    Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`
+                }
+            }
+        })
+
         const oauthClient = await createClient(ioredis)
 
         const baseIdResolver = createIdResolver()
         const resolver = createBidirectionalResolver(baseIdResolver)
         const xrpc = createServer()
-        const ctx = {
+        const ctx: AppContext = {
             db,
             logger,
             oauthClient,
@@ -74,10 +83,12 @@ export class Server {
             xrpc,
             ioredis: ioredis,
             queue,
-            kysely
+            kysely,
+            sb
         }
 
         await setupWorker(ctx)
+        console.log("Worker setup.")
 
         const ingester = new MirrorMachine(ctx)
         ingester.run()
@@ -116,6 +127,9 @@ export class Server {
 
         app.use(express.json())
         app.use(express.urlencoded({extended: true}))
+
+        const morgan = require("morgan")
+        app.use(morgan('combined'))
 
         const router = createRouter(ctx)
         app.use(router)

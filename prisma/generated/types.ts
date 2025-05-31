@@ -11,6 +11,17 @@ export const MirrorStatus = {
     Failed: "Failed"
 } as const;
 export type MirrorStatus = (typeof MirrorStatus)[keyof typeof MirrorStatus];
+export const ValidationType = {
+    Persona: "Persona",
+    Organizacion: "Organizacion"
+} as const;
+export type ValidationType = (typeof ValidationType)[keyof typeof ValidationType];
+export const ValidationRequestResult = {
+    Aceptada: "Aceptada",
+    Rechazada: "Rechazada",
+    Pendiente: "Pendiente"
+} as const;
+export type ValidationRequestResult = (typeof ValidationRequestResult)[keyof typeof ValidationRequestResult];
 export const PromiseStatus = {
     Pending: "Pending",
     Confirmed: "Confirmed",
@@ -197,6 +208,23 @@ export type User = {
     editorStatus: Generated<EditorStatus>;
     platformAdmin: Generated<boolean>;
     seenTutorial: Generated<boolean>;
+    userValidationHash: string | null;
+    orgValidation: string | null;
+};
+export type ValidationRequest = {
+    id: string;
+    type: ValidationType;
+    userId: string;
+    dniFrente: string | null;
+    dniDorso: string | null;
+    tipoOrg: string | null;
+    sitioWeb: string | null;
+    comentarios: string | null;
+    email: string | null;
+    documentacion: string[];
+    created_at: Generated<Timestamp>;
+    result: Generated<ValidationRequestResult>;
+    rejectReason: string | null;
 };
 export type View = {
     id: string;
@@ -240,6 +268,7 @@ export type DB = {
     TopicToCategory: TopicToCategory;
     TopicVersion: TopicVersion;
     User: User;
+    ValidationRequest: ValidationRequest;
     View: View;
     Visualization: Visualization;
     VoteReject: VoteReject;

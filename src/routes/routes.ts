@@ -31,7 +31,8 @@ import {
     getTopicVersionChanges,
     getTopTrendingTopics,
     getTopicsHandler,
-    getCategories, getTopicsMentioned
+    getCategories,
+    getTopicsMentioned
 } from "#/services/topic/topics";
 import {getTopicFeed} from "#/services/feed/topic";
 import {deleteRecordHandler, deleteRecordsHandler} from "#/services/delete";
@@ -45,6 +46,7 @@ import {getDataset, getDatasets } from '#/services/dataset/read';
 import { createDataset } from '#/services/dataset/write';
 import {searchContents} from "#/services/feed/search";
 import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion";
+import {cancelValidationRequest, createValidationRequest, getValidationRequest } from '#/services/user/validation';
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -296,6 +298,21 @@ export const createRouter = (ctx: AppContext) => {
     router.post(
         '/profile',
         handler(makeHandler(ctx, updateProfile))
+    )
+
+    router.post(
+        '/validation-request',
+        handler(makeHandler(ctx, createValidationRequest))
+    )
+
+    router.get(
+        '/validation-request',
+        handler(makeHandler(ctx, getValidationRequest))
+    )
+
+    router.post(
+        '/validation-request/cancel',
+        handler(makeHandler(ctx, cancelValidationRequest))
     )
 
     router.get('/metadata', makeHandler(ctx, fetchURLMetadata));

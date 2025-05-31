@@ -221,7 +221,9 @@
             "refs": [
               "#stringProp",
               "#stringListProp",
-              "#dateProp"
+              "#dateProp",
+              "#numberProp",
+              "#booleanProp"
             ]
           }
         }
@@ -232,6 +234,15 @@
         "properties": {
           "value": {
             "type": "string"
+          }
+        }
+      },
+      "booleanProp": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": {
+            "type": "boolean"
           }
         }
       },
@@ -254,6 +265,15 @@
           "value": {
             "type": "string",
             "format": "datetime"
+          }
+        }
+      },
+      "numberProp": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": {
+            "type": "string"
           }
         }
       },

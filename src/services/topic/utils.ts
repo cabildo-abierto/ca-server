@@ -29,7 +29,8 @@ export function currentCategories(topic: {
 }
 
 
-export type PropValueType = "ar.cabildoabierto.wiki.topicVersion#stringListProp" | "ar.cabildoabierto.wiki.topicVersion#stringProp"
+export type PropValueType = "ar.cabildoabierto.wiki.topicVersion#stringListProp"
+    | "ar.cabildoabierto.wiki.topicVersion#stringProp"
 
 export type PropValue = $Typed<StringListProp> | $Typed<StringProp> | {$type: string}
 

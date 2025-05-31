@@ -17,6 +17,7 @@ import {authorQuery, reactionsQuery, recordQuery} from "#/utils/utils";
 import {FeedViewPost, isPostView, PostView} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {fetchTextBlobs} from "#/services/blob";
 import {Prisma} from "@prisma/client";
+import {SupabaseClient} from "@supabase/supabase-js";
 
 
 export type FeedElementQueryResult = {
@@ -128,6 +129,7 @@ export class Dataplane {
     datasets: Map<string, DatasetQueryResult>
     datasetContents: Map<string, string[]>
     topicsMentioned: Map<string, TopicMentionedProps[]>
+    sbFiles: Map<string, string>
 
     constructor(ctx: AppContext, agent: SessionAgent) {
         this.ctx = ctx
@@ -144,6 +146,7 @@ export class Dataplane {
         this.datasets = new Map()
         this.datasetContents = new Map()
         this.topicsMentioned = new Map()
+        this.sbFiles = new Map()
     }
 
     async fetchCAContentsAndBlobs(uris: string[]) {
@@ -712,5 +715,23 @@ export class Dataplane {
             this.fetchUsersHydrationDataFromCA(dids),
             this.fetchUsersHydrationDataFromBsky(dids)
         ])
+    }
+
+    async fetchFilesFromStorage(filePaths: string[], bucket: string) {
+        for(let i = 0; i < filePaths.length; i ++) {
+            const path = filePaths[i]
+            const { data, error } = await this.ctx.sb.storage
+                .from(bucket)
+                .download(path)
+
+            if(data){
+                const buffer = await data.arrayBuffer();
+                const base64 = Buffer.from(buffer).toString('base64');
+                const mimeType = data.type;
+
+                const fullBase64 = `data:${mimeType};base64,${base64}`;
+                this.sbFiles.set(bucket + ":" + path, fullBase64);
+            }
+        }
     }
 }

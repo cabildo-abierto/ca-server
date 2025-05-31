@@ -58,7 +58,42 @@ model User {
   recommendCodes      InviteCode[]     @relation("invite-codes-available") // los códigos de invitación que tiene disponibles para usar
   seenTutorial        Boolean          @default(false)
 
-  hasReacted          HasReacted[]
+  hasReacted HasReacted[]
+
+  userValidationHash String? @unique
+  orgValidation      String?
+
+  validationRequests ValidationRequest[]
+}
+
+enum ValidationType {
+  Persona
+  Organizacion
+}
+
+enum ValidationRequestResult {
+  Aceptada
+  Rechazada
+  Pendiente
+}
+
+model ValidationRequest {
+  id            String         @id @default(cuid())
+  type          ValidationType
+  userId        String
+  user          User           @relation(fields: [userId], references: [did])
+  dniFrente     String?
+  dniDorso      String?
+  tipoOrg       String?
+  sitioWeb      String?
+  comentarios   String?
+  email         String?
+  documentacion String[]
+  createdAt     DateTime    @default(now()) @map("created_at")
+  result        ValidationRequestResult @default(Pendiente)
+  rejectReason  String?
+
+  @@unique([userId])
 }
 
 model InviteCode {
@@ -178,24 +213,22 @@ model Record {
   embeddedRecords     Record[]        @relation("embeddings")
   record              String?
 
-  reaction            Reaction?
-  reactions           Reaction[]      @relation("reactions")
-  uniqueReactions     HasReacted[]
+  reaction        Reaction?
+  reactions       Reaction[]   @relation("reactions")
+  uniqueReactions HasReacted[]
 
-  uniqueLikesCount    Int             @default(0)
-  uniqueRepostsCount  Int             @default(0)
-  uniqueAcceptsCount  Int             @default(0)
-  uniqueRejectsCount  Int             @default(0)
+  uniqueLikesCount   Int @default(0)
+  uniqueRepostsCount Int @default(0)
+  uniqueAcceptsCount Int @default(0)
+  uniqueRejectsCount Int @default(0)
 
-  views               View[]
-  uniqueViewsCount    Int             @default(0)
+  views            View[]
+  uniqueViewsCount Int    @default(0)
 
+  replies Post[] @relation("reply")
+  rootOf  Post[] @relation("root")
 
-  replies             Post[]          @relation("reply")
-  rootOf              Post[]          @relation("root")
-
-
-  CAProfileOf         User?           @relation("CAProfile")
+  CAProfileOf User? @relation("CAProfile")
 }
 
 model Content {
@@ -236,21 +269,21 @@ model Follow {
 }
 
 model Reaction {
-  uri           String  @id
-  record        Record  @relation(fields: [uri], references: [uri])
-  subjectId     String?
-  subject       Record? @relation("reactions", fields: [subjectId], references: [uri])
+  uri       String  @id
+  record    Record  @relation(fields: [uri], references: [uri])
+  subjectId String?
+  subject   Record? @relation("reactions", fields: [subjectId], references: [uri])
 
-  voteReject    VoteReject?
+  voteReject VoteReject?
 }
 
 model HasReacted {
-  id           String   @id @default(uuid())
-  userId      String
-  user        User    @relation(fields: [userId], references: [did])
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [did])
 
-  recordId    String
-  record      Record  @relation(fields: [recordId], references: [uri])
+  recordId String
+  record   Record @relation(fields: [recordId], references: [uri])
 
   reactionType String
 
@@ -258,10 +291,10 @@ model HasReacted {
 }
 
 model VoteReject {
-  uri              String  @id
-  reaction         Reaction  @relation(fields: [uri], references: [uri])
-  message          String?
-  labels           String[]
+  uri      String   @id
+  reaction Reaction @relation(fields: [uri], references: [uri])
+  message  String?
+  labels   String[]
 }
 
 model Article {
@@ -278,19 +311,19 @@ model Dataset {
   dataBlocks  DataBlock[]
   description String?
 
-  usedBy      Content[]
+  usedBy Content[]
 }
 
 model DataBlock {
   cid       String  @id
-  blob      Blob   @relation(fields: [cid], references: [cid])
+  blob      Blob    @relation(fields: [cid], references: [cid])
   datasetId String
   dataset   Dataset @relation(fields: [datasetId], references: [uri])
   format    String?
 }
 
 model Blob {
-  cid      String @id
+  cid       String     @id
   dataBlock DataBlock?
 
   author   User   @relation(fields: [authorId], references: [did])

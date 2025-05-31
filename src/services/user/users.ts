@@ -1,6 +1,6 @@
 import {AppContext} from "#/index";
 import {ProfileView} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import {Account, MentionProps, Profile, Session, UserStats} from "#/lib/types";
+import {Account, MentionProps, Profile, Session, UserStats, ValidationState} from "#/lib/types";
 import {cookieOptions, SessionAgent} from "#/utils/session-agent";
 import {deleteRecords} from "#/services/delete";
 import {cleanText} from "#/utils/strings";
@@ -210,7 +210,9 @@ export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile>
             ctx.db.user.findUnique({
                 select: {
                     inCA: true,
-                    editorStatus: true
+                    editorStatus: true,
+                    userValidationHash: true,
+                    orgValidation: true
                 },
                 where: {did}
             }),
@@ -237,7 +239,8 @@ export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile>
                 ...caProfile,
                 inCA: caProfile?.inCA ?? false,
                 followsCount: caFollowsCount,
-                followersCount: caFollowersCount
+                followersCount: caFollowersCount,
+                validation: caProfile ? getValidationState(caProfile) : null
             }
         }
 
@@ -268,7 +271,9 @@ export const getSessionData = async (ctx: AppContext, agent: SessionAgent): Prom
             handle: true,
             displayName: true,
             avatar: true,
-            hasAccess: true
+            hasAccess: true,
+            userValidationHash: true,
+            orgValidation: true
         },
         where: {
             did: agent.did
@@ -276,10 +281,21 @@ export const getSessionData = async (ctx: AppContext, agent: SessionAgent): Prom
     })
     if (!data || !data.handle) return null
     return {
-        ...data,
         did: agent.did,
-        handle: data.handle
+        handle: data.handle,
+        displayName: data.displayName,
+        avatar: data.avatar,
+        hasAccess: data.hasAccess,
+        seenTutorial: data.seenTutorial,
+        editorStatus: data.editorStatus,
+        platformAdmin: data.platformAdmin,
+        validation: getValidationState(data)
     }
+}
+
+
+export function getValidationState(user: {userValidationHash: string | null, orgValidation: string | null}): ValidationState {
+    return user.userValidationHash ? "persona" : (user.orgValidation ? "org" : null)
 }
 
 

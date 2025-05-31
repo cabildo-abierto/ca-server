@@ -7,6 +7,7 @@ import {updateReferences} from "#/services/topic/references";
 import {updateEngagementCounts} from "#/services/feed/getUserEngagement";
 import {deleteCollection} from "#/services/delete";
 import {updateTopicPopularityScores} from "#/services/topic/popularity";
+import {updateTopicsCategories} from "#/services/topic/categories";
 
 
 export async function addRepeatingJob(ctx: AppContext, name: string, every: number, delay: number){
@@ -54,8 +55,10 @@ export function createWorker(ctx: AppContext){
                 await deleteCollection(ctx, (job.data as { collection: string }).collection)
             } else if(job.name == "update-topics-popularity") {
                 await updateTopicPopularityScores(ctx)
-            } else if(job.name == "sync-all-users"){
-                await syncAllUsers(ctx, (job.data as {mustUpdateCollections: string[]}).mustUpdateCollections)
+            } else if(job.name == "sync-all-users") {
+                await syncAllUsers(ctx, (job.data as { mustUpdateCollections: string[] }).mustUpdateCollections)
+            } else if(job.name == "update-topics-categories") {
+                await updateTopicsCategories(ctx)
             } else {
                 console.log("No handler for job:", job.name)
             }
@@ -71,7 +74,8 @@ export async function setupWorker(ctx: AppContext){
     createWorker(ctx)
 
     await addRepeatingJob(ctx, "update-topics-popularity", 60*24*mins, 60*mins)
-    await addRepeatingJob(ctx, "update-categories-graph", 60*24*mins, 60*mins+5)
+    await addRepeatingJob(ctx, "update-topics-categories", 60*24*mins, 60*mins+5)
+    await addRepeatingJob(ctx, "update-categories-graph", 60*24*mins, 60*mins+7)
     await addRepeatingJob(ctx, "update-references", 60*24*mins, 60*mins+10)
 
     const waitingJobs = await ctx.queue.getJobs(['waiting'])
