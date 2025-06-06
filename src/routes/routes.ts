@@ -47,6 +47,7 @@ import { createDataset } from '#/services/dataset/write';
 import {searchContents} from "#/services/feed/search";
 import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion";
 import {cancelValidationRequest, createValidationRequest, getValidationRequest } from '#/services/user/validation';
+import {createPreference, getDonationHistory, getMonthlyValue, processPayment} from '#/services/donations/donations';
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -315,7 +316,15 @@ export const createRouter = (ctx: AppContext) => {
         handler(makeHandler(ctx, cancelValidationRequest))
     )
 
-    router.get('/metadata', makeHandler(ctx, fetchURLMetadata));
+    router.get('/metadata', makeHandler(ctx, fetchURLMetadata))
+
+    router.get('/donation-history', makeHandler(ctx, getDonationHistory))
+
+    router.get('/monthly-value', makeHandler(ctx, getMonthlyValue))
+
+    router.post('/donate/create-preference', makeHandler(ctx, createPreference))
+
+    router.post('/notify-payment', makeHandler(ctx, processPayment))
 
     router.use(adminRoutes(ctx))
 

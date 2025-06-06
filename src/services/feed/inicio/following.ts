@@ -11,6 +11,7 @@ import {isPostView as isCAPostView} from "#/lex-server/types/ar/cabildoabierto/f
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
+import {isTopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 
 type RepostQueryResult = {
     author: {
@@ -55,6 +56,27 @@ function getRootUriFromPost(e: FeedViewPost | FeedViewContent): string | null {
         return e.reply.root.uri
     } else if (e.reply.parent && "uri" in e.reply.parent) {
         return e.reply.parent.uri
+    } else {
+        // console.log("Warning: No se encontró el root del post", e)
+        return null
+    }
+}
+
+
+function getRootTopicIdFromPost(e: FeedViewPost | FeedViewContent): string | null {
+    if (!e.reply) {
+        if (isFeedViewPost(e)) {
+            return e.post.uri
+        } else if (isFeedViewContent(e) && isKnownContent(e.content)) {
+            return e.content.uri
+        } else {
+            console.log("Warning: No se encontró el root del post", e)
+            return null
+        }
+    } else if (e.reply.root) {
+        return isTopicViewBasic(e.reply.root) ? e.reply.root.id : null
+    } else if (e.reply.parent) {
+        return isTopicViewBasic(e.reply.parent) ? e.reply.parent.id : null
     } else {
         // console.log("Warning: No se encontró el root del post", e)
         return null
@@ -240,6 +262,10 @@ export function filterFeed(feed: FeedViewContent[], allowTopicVersions: boolean 
             res.push(a)
             roots.add(rootUri)
         } else if (!rootUri) {
+            const rootTopic = getRootTopicIdFromPost(a)
+            if(rootTopic){
+               res.push(a)
+            }
             console.log("Warning: Filtrando porque no se encontró el root.")
         }
     })

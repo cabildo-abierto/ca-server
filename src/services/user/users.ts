@@ -340,47 +340,7 @@ export const getAccount: CAHandler<{}, Account> = async (ctx, agent) => {
 }
 
 
-/*export async function buySubscriptions(userId: string, donatedAmount: number, paymentId: string) {
-    const did = await getSessionDidNoRevalidate()
-    if (!did || did != userId) return {error: "Error de autenticación"}
 
-    const queries: {
-        boughtByUserId: string,
-        price: number,
-        paymentId: string,
-        isDonation: boolean,
-        userId: string | null,
-        usedAt: Date | null,
-        endsAt: Date | null
-    }[] = []
-
-    const price = await getSubscriptionPrice()
-
-    for (let i = 0; i < donatedAmount / price.price; i++) {
-        queries.push({
-            boughtByUserId: userId,
-            price: price.price,
-            paymentId: paymentId,
-            isDonation: true,
-            userId: null,
-            usedAt: null,
-            endsAt: null
-        })
-    }
-
-    try {
-        await ctx.db.subscription.createMany({
-            data: queries
-        })
-    } catch (e) {
-        return {error: "error on buy subscriptions"}
-    }
-
-    revalidateTag("user:" + userId)
-    revalidateTag("poolsize")
-    revalidateTag("fundingPercentage")
-    return {}
-}*/
 
 /*export const getChatBetween = async (userId: string, anotherUserId: string) => {
     return unstable_cache(async () => {

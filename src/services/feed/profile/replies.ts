@@ -26,6 +26,19 @@ export const getRepliesProfileFeedSkeleton = (did: string) : GetSkeletonProps =>
             getMainProfileFeedSkeletonCA(ctx, did, cursor)
         ])
 
+        console.log("Searching post in bsky skeleton")
+        for(let i = 0; i < bskySkeleton.skeleton.length; i++) {
+            if(bskySkeleton.skeleton[i].post == "at://did:plc:2356xofv4ntrbu42xeilxjnb/app.bsky.feed.post/3lqpwppr4dl24"){
+                console.log("Found it")
+            }
+        }
+        console.log("Searching post in ca skeleton")
+        for(let i = 0; i < CASkeleton.length; i++) {
+            if(CASkeleton[i].post == "at://did:plc:2356xofv4ntrbu42xeilxjnb/app.bsky.feed.post/3lqpwppr4dl24"){
+                console.log("Found it")
+            }
+        }
+
         if(bskySkeleton.cursor != undefined){
             const newCursorDate = new Date(bskySkeleton.cursor)
             CASkeleton = CASkeleton.filter(x => new Date(x.createdAt) <= newCursorDate)

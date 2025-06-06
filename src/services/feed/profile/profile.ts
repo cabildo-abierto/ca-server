@@ -25,7 +25,7 @@ export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: stri
         pipeline = {
             getSkeleton: getRepliesProfileFeedSkeleton(did),
             sortKey: rootCreationDateSortKey, // TO DO: Reemplazar por fecha de la última respuesta
-            filter: filterFeed
+            filter: (f) => filterFeed(f, true)
         }
     } else if(kind == "ediciones"){
         pipeline = {
@@ -36,5 +36,7 @@ export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: stri
         return {error: "Feed inválido."}
     }
 
-    return getFeed({ctx, agent, pipeline, cursor})
+    const res = await getFeed({ctx, agent, pipeline, cursor})
+
+    return res
 }

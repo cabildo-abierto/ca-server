@@ -313,7 +313,6 @@ export async function processDeleteReaction(ctx: AppContext, uri: string) {
 
         if (type == "ar.cabildoabierto.wiki.voteReject" || type == "ar.cabildoabierto.wiki.voteAccept") {
             const id = await getTopicIdFromTopicVersionUri(db, subjectId.subjectId)
-            console.log("topic id", id)
             if (id) {
                 await updateTopicCurrentVersion(db, id)
                 console.log("done updating current version")

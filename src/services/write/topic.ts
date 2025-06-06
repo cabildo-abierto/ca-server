@@ -6,6 +6,7 @@ import {uploadStringBlob} from "#/services/blob";
 import {BlobRef} from "@atproto/lexicon";
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
+import {isTopicProp, isNumberProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 
 
 export async function createTopicVersionATProto(agent: SessionAgent, {id, text, format, message, props, embeds}: CreateTopicVersionProps){
@@ -17,13 +18,30 @@ export async function createTopicVersionATProto(agent: SessionAgent, {id, text, 
 
     if(text && !blob) return {error: "Ocurrió un error al publicar el tema."}
 
+    let validatedProps: TopicProp[] | undefined = undefined
+    if(props){
+        validatedProps = []
+        for(let i = 0; i < props.length; i++){
+            const res = validateTopicProp(props[i])
+            if(!res.success){
+                console.log("Propiedad inválida:", props[i])
+                if(props[i].name){
+                    return {error: `Ocurrió un error al validar la propiedad: ${props[i].name}`}
+                }
+                return {error: "Ocurrió un error al validar una propiedad."}
+            } else {
+                validatedProps.push(res.value)
+            }
+        }
+    }
+
     const record: TopicVersionRecord = {
         $type: "ar.cabildoabierto.wiki.topicVersion",
         text: text && blob ? blob : undefined,
         format,
         message,
         id,
-        props: props && !props.some(p => !validateTopicProp(p).success) ? props : undefined,
+        props: validatedProps,
         createdAt: new Date().toISOString(),
         embeds: embeds ?? []
     }

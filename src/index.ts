@@ -19,6 +19,7 @@ import { Kysely, PostgresDialect } from 'kysely'
 import { Pool } from 'pg'
 import { DB } from '#/../prisma/generated/types'
 import { createClient as createSBClient, SupabaseClient } from '@supabase/supabase-js'
+import 'dotenv/config'
 
 const redisUrl = process.env.REDIS_URL as string
 

@@ -46,6 +46,7 @@ export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: 
         record: string
     }[] = []
 
+
     records.forEach(r => {
         const {ref, record} = r
         const {did, collection, rkey} = splitUri(ref.uri)
@@ -54,7 +55,7 @@ export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: 
             cid: ref.cid,
             rkey,
             collection,
-            created_at: record.createdAt ? new Date(record.createdAt) : undefined,
+            created_at: record.createdAt,
             authorId: did,
             record: JSON.stringify(record)
         })
@@ -489,6 +490,7 @@ export const processArticlesBatch: BatchRecordProcessor<Article.Record> = async 
 
 
 export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record> = async (ctx, records) => {
+    console.log("processing topic versions", records.map(r => r.record.props))
     const contents: { ref: ATProtoStrongRef, record: SyncContentProps }[] = records.map(r => ({
         record: {
             format: r.record.format,
