@@ -183,7 +183,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/topic/:id',
+        '/topic',
         makeHandler(ctx, getTopicHandler)
     )
 
@@ -198,7 +198,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/topic-feed/:id',
+        '/topic-feed',
         makeHandler(ctx, getTopicFeed)
     )
 

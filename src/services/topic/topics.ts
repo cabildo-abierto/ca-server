@@ -11,7 +11,7 @@ import {
     VersionInHistory
 } from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion";
-import {getTopicCurrentVersion} from "#/services/topic/current-version";
+import {getTopicCurrentVersion, getTopicIdFromTopicVersionUri} from "#/services/topic/current-version";
 import {SessionAgent} from "#/utils/session-agent";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import {Prisma} from "@prisma/client";
@@ -442,10 +442,21 @@ export const getTopicCurrentVersionFromDB = async (ctx: AppContext, agent: Sessi
 }
 
 
-export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{
+export const getTopic = async (ctx: AppContext, agent: SessionAgent, id?: string, did?: string, rkey?: string): Promise<{
     data?: TopicView,
     error?: string
 }> => {
+    if(!id){
+        if(!did || !rkey){
+            return {error: "Se requiere un id o un par did y rkey."}
+        } else {
+            id = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey) ?? undefined
+            if(!id){
+                return {error: "No se encontró esta versión del tema."}
+            }
+        }
+    }
+
     const {data: currentVersionId} = await cached(ctx, ["currentVersion", id], async () => getTopicCurrentVersionFromDB(ctx, agent, id))
     let uri: string
     if (!currentVersionId) {
@@ -469,8 +480,9 @@ export const getTopic = async (ctx: AppContext, agent: SessionAgent, id: string)
 }
 
 
-export const getTopicHandler: CAHandler<{ params: { id: string } }, TopicView> = async (ctx, agent, {params: {id}}) => {
-    return getTopic(ctx, agent, id)
+export const getTopicHandler: CAHandler<{ query: { i?: string, did?: string, rkey?: string } }, TopicView> = async (ctx, agent, params) => {
+    const {i, did, rkey} = params.query
+    return getTopic(ctx, agent, i, did, rkey)
 }
 
 

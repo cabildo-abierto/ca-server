@@ -3,6 +3,7 @@ import {max} from "#/utils/arrays";
 import {AppContext} from "#/index";
 import {TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {PrismaTransactionClient, SyncUpdate} from "#/services/sync/sync-update";
+import {getDidFromUri, getRkeyFromUri, getUri} from "#/utils/uri";
 
 
 export function getTopicLastEditFromVersions(topic: {versions: {content: {record: {createdAt: Date}}}[]}){
@@ -11,21 +12,23 @@ export function getTopicLastEditFromVersions(topic: {versions: {content: {record
 }
 
 
-export async function getTopicIdFromTopicVersionUri(db: PrismaTransactionClient, uri: string){
-    const res = await db.topicVersion.findUnique({
+export async function getTopicIdFromTopicVersionUri(db: PrismaTransactionClient, did: string, rkey: string){
+    const res = await db.topicVersion.findMany({
         select: {
             topicId: true
         },
         where: {
-            uri
+            uri: {
+                in: [getUri(did, "ar.com.cabildoabierto.topic", rkey), getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey)]
+            }
         }
     })
-    return res ? res.topicId : null
+    return res && res.length > 0 ? res[0].topicId : null
 }
 
 
 export async function processDeleteTopicVersion(ctx: AppContext, uri: string){
-    const id = await getTopicIdFromTopicVersionUri(ctx.db, uri)
+    const id = await getTopicIdFromTopicVersionUri(ctx.db, getDidFromUri(uri), getRkeyFromUri(uri))
     if(!id) return {error: "Ocurrió un error al borrar la versión."}
     const topicHistory = await getTopicHistory(ctx.db, id)
     if(!topicHistory) return {error: "Ocurrió un error al borrar la versión."}

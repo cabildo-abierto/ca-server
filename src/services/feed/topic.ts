@@ -8,6 +8,7 @@ import {hydrateFeedViewContent} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {isNotFoundPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {Dataplane} from "#/services/hydration/dataplane";
+import {getTopicIdFromTopicVersionUri} from "#/services/topic/current-version";
 
 
 const getTopicRepliesSkeleton = async (ctx: AppContext, agent: SessionAgent, id: string) => {
@@ -116,12 +117,22 @@ export const getTopicVersionReplies = async (ctx: AppContext, agent: SessionAgen
 }
 
 
-export const getTopicFeed: CAHandler<{ params: { id: string } }, {
+export const getTopicFeed: CAHandler<{ query: { i?: string, did?: string, rkey?: string } }, {
     mentions: FeedViewContent[],
     replies: FeedViewContent[],
     topics: string[]
-}> = async (ctx, agent, {params}) => {
-    let {id} = params
+}> = async (ctx, agent, {query}) => {
+    let {i: id, did, rkey} = query
+    if(!id){
+        if(!did || !rkey){
+            return {error: "Se requiere un id o un par did y rkey."}
+        } else {
+            id = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey) ?? undefined
+            if(!id){
+                return {error: "No se encontró esta versión del tema."}
+            }
+        }
+    }
 
     try {
         const [replies, mentions, topicMentions] = await Promise.all([

@@ -27,7 +27,7 @@ export const getDonationHistory: CAHandler<{}, DonationHistory> = async (ctx, ag
 
 
 export const getMonthlyValue: CAHandler<{}, number> = async (ctx, agent, {}) => {
-    return {data: 800}
+    return {data: 1200}
 }
 
 
