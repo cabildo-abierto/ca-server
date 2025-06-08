@@ -12,6 +12,8 @@ import {getAllTopics} from "#/services/topic/topics";
 import {sessionAgent} from "#/utils/session-agent";
 import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration";
 import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation";
+import {processPayment} from "#/services/donations/donations";
+import {updateTopicContributionsHandler} from "#/services/topic/contributions";
 
 
 function isAdmin(did: string) {
@@ -143,6 +145,8 @@ export const adminRoutes = (ctx: AppContext) => {
     router.post(
         "/validation-request/result", makeAdminHandler(ctx, setValidationRequestResult)
     )
+
+    router.post('/update-topic-contributions/:id', makeHandler(ctx, updateTopicContributionsHandler))
 
     return router
 }

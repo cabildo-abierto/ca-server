@@ -1,5 +1,5 @@
 import {AppContext} from "#/index";
-import {SessionAgent} from "#/utils/session-agent";
+import {Agent} from "#/utils/session-agent";
 import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs";
 import {ProfileViewBasic} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
@@ -17,7 +17,8 @@ import {authorQuery, reactionsQuery, recordQuery} from "#/utils/utils";
 import {FeedViewPost, isPostView, PostView} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {fetchTextBlobs} from "#/services/blob";
 import {Prisma} from "@prisma/client";
-import {SupabaseClient} from "@supabase/supabase-js";
+import {env} from "#/lib/env";
+import { AtpBaseClient } from "#/lex-api";
 
 
 export type FeedElementQueryResult = {
@@ -116,7 +117,7 @@ export function blobRefsFromContents(contents: {
 
 export class Dataplane {
     ctx: AppContext
-    agent: SessionAgent
+    agent: Agent
     caContents: Map<string, FeedElementQueryResult>
     bskyPosts: Map<string, BskyPostView>
     likes: Map<string, string | null>
@@ -131,9 +132,9 @@ export class Dataplane {
     topicsMentioned: Map<string, TopicMentionedProps[]>
     sbFiles: Map<string, string>
 
-    constructor(ctx: AppContext, agent: SessionAgent) {
+    constructor(ctx: AppContext, agent?: Agent) {
         this.ctx = ctx
-        this.agent = agent
+        this.agent = agent ?? new Agent(new AtpBaseClient(`${env.HOST}:${env.PORT}`))
         this.caContents = new Map()
         this.bskyPosts = new Map()
         this.likes = new Map()
@@ -462,6 +463,8 @@ export class Dataplane {
 
     async fetchBskyPosts(uris: string[]) {
         uris = uris.filter(u => !this.bskyPosts?.has(u))
+        const agent = this.agent
+        if(!agent.hasSession()) return
 
         const postsList = postUris(uris)
         if (postsList.length == 0) return
@@ -472,7 +475,7 @@ export class Dataplane {
         }
         let postViews: PostView[]
         try {
-            const results = await Promise.all(batches.map(b => this.agent.bsky.getPosts({uris: b})))
+            const results = await Promise.all(batches.map(b => agent.bsky.getPosts({uris: b})))
             postViews = results.map(r => r.data.posts).reduce((acc, cur) => [...acc, ...cur])
         } catch (err) {
             console.log("Error fetching posts", err)
@@ -495,7 +498,10 @@ export class Dataplane {
     }
 
     async fetchEngagement(uris: string[]) {
-        const did = this.agent.did
+        const agent = this.agent
+        if(!agent.hasSession()) return
+
+        const did = agent.did
         const reactions = await this.ctx.db.reaction.findMany({
             select: {
                 subjectId: true,
@@ -694,10 +700,13 @@ export class Dataplane {
     }
 
     async fetchUsersHydrationDataFromBsky(dids: string[]) {
+        const agent = this.agent
+        if(!agent.hasSession()) return
+
         dids = dids.filter(d => !this.bskyUsers.has(d))
         if (dids.length == 0) return
 
-        const {data} = await this.agent.bsky.getProfiles({actors: dids})
+        const {data} = await agent.bsky.getProfiles({actors: dids})
 
         const views: ProfileViewBasic[] = data.profiles.map(p => ({
             ...p,

@@ -33,6 +33,7 @@ import {isRecord as isVoteReject} from "#/lex-api/types/ar/cabildoabierto/wiki/v
 import {JsonArray} from "@prisma/client/runtime/library";
 import {Prisma} from "@prisma/client";
 import {deleteRecordsDB} from "#/services/delete";
+import {unique} from "#/utils/arrays";
 
 
 export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: ATProtoStrongRef, record: any }[]) {
@@ -353,7 +354,7 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB>, topi
 
 
 export const processReactionsBatch: BatchRecordProcessor<ReactionRecord> = async (ctx, records) => {
-    await ctx.kysely.transaction().execute(async (trx) => {
+    const topicIdsList = await ctx.kysely.transaction().execute(async (trx) => {
         const reactionType = getCollectionFromUri(records[0].ref.uri)
         if (!isReactionType(reactionType)) return
 
@@ -418,15 +419,24 @@ export const processReactionsBatch: BatchRecordProcessor<ReactionRecord> = async
                     .execute()
             }
 
-            const topicIdsList = await trx
+            let topicIdsList = (await trx
                 .selectFrom("TopicVersion")
-                .select(["topicId"])
-                .where("uri", "in", records.map(r => r.ref.uri))
-                .execute()
+                .innerJoin("Reaction", "TopicVersion.uri", "Reaction.subjectId")
+                .select(["TopicVersion.topicId"])
+                .where("Reaction.uri", "in", records.map(r => r.ref.uri))
+                .execute()).map(t => t.topicId)
 
-            await updateTopicsCurrentVersionBatch(trx, topicIdsList.map(r => r.topicId))
+            topicIdsList = unique(topicIdsList)
+
+            await updateTopicsCurrentVersionBatch(trx, topicIdsList)
+
+            return topicIdsList
         }
     })
+
+    if(topicIdsList){
+        await addUpdateContributionsJobForTopics(ctx, topicIdsList)
+    }
 }
 
 
@@ -490,7 +500,6 @@ export const processArticlesBatch: BatchRecordProcessor<Article.Record> = async 
 
 
 export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record> = async (ctx, records) => {
-    console.log("processing topic versions", records.map(r => r.record.props))
     const contents: { ref: ATProtoStrongRef, record: SyncContentProps }[] = records.map(r => ({
         record: {
             format: r.record.format,
@@ -516,13 +525,9 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
         props: r.record.props ? JSON.stringify(r.record.props) : undefined,
     }))
 
-    console.log("processing topic version", records, contents.length, topics.length, topicVersions.length)
-
     await ctx.kysely.transaction().execute(async (trx) => {
         await processRecordsBatch(trx, records)
         await processContentsBatch(trx, contents)
-
-        console.log("processing contents")
 
         await trx
             .insertInto("Topic")
@@ -554,6 +559,24 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
         }
 
     })
+
+    await addUpdateContributionsJobForTopics(ctx, topics.map(t => t.id))
+}
+
+
+export async function addUpdateContributionsJobForTopics(ctx: AppContext, ids: string[]){
+    for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        const jobId = `update-topic-contributions:${id}`;
+        const existingJob = await ctx.queue.getJob(jobId);
+
+        if (!existingJob) {
+            await ctx.queue.add(
+                jobId,
+                { id }
+            )
+        }
+    }
 }
 
 

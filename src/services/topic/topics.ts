@@ -22,6 +22,8 @@ import {getSynonymsToTopicsMap, getTopicsReferencedInText} from "#/services/topi
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
 import {gett} from "#/utils/arrays";
 import {PrismaTransactionClient} from "#/services/sync/sync-update";
+import {ProfileViewBasic as ProfileViewBasicCA} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
+import {diff} from "#/services/topic/diff";
 
 
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
@@ -294,7 +296,8 @@ export async function getTopicHistory(db: PrismaTransactionClient, id: string, a
                             diff: true,
                             message: true,
                             props: true,
-                            title: true
+                            title: true,
+                            prevAcceptedUri: true
                         }
                     }
                 }
@@ -364,6 +367,9 @@ export async function getTopicHistory(db: PrismaTransactionClient, id: string, a
                 voteCounts
             }
 
+            const contributionStr = v.content.topicVersion.contribution
+            const contribution = contributionStr ? JSON.parse(contributionStr) : undefined
+
             const props = Array.isArray(v.content.topicVersion.props) ? v.content.topicVersion.props as unknown as TopicProp[] : []
 
             const view: VersionInHistory = {
@@ -379,8 +385,10 @@ export async function getTopicHistory(db: PrismaTransactionClient, id: string, a
                 status: status,
                 addedChars: v.content.topicVersion.charsAdded ?? undefined,
                 removedChars: v.content.topicVersion.charsDeleted ?? undefined,
-                props: props,
-                createdAt: v.createdAt.toISOString()
+                props,
+                createdAt: v.createdAt.toISOString(),
+                contribution,
+                prevAccepted: v.content.topicVersion.prevAcceptedUri ?? undefined
             }
             return view
         }).filter(v => v != null)
@@ -599,95 +607,124 @@ export const getTopicVersionHandler: CAHandler<{
 }
 
 
-/*
+type TopicContributor = {profile: ProfileViewBasicCA, all: number, monetized: number}
 
-function showAuthors(topic: TopicHistoryProps, topicVersion: TopicVersionProps) {
-    const versionText = topicVersion.content.text
-
-    function newAuthorNode(authors: string[], childNode){
-        const authorNode: SerializedAuthorNode = {
-            children: [childNode],
-            type: "author",
-            authors: authors,
-            direction: 'ltr',
-            version: childNode.version,
-            format: 'left',
-            indent: 0
-        }
-        return authorNode
-    }
-
-    const parsed = editorStateFromJSON(versionText)
-    if(!parsed) {
-        return versionText
-    }
-    let prevNodes = []
-    let prevAuthors = []
-
-    for(let i = 0; i < topic.versions.length; i++){
-        const parsedVersion = editorStateFromJSON(decompress(topic.versions[i].content.text))
-        if(!parsedVersion) continue
-        const nodes = parsedVersion.root.children
-        const {matches} = JSON.parse(topic.versions[i].content.topicVersion.diff)
-        const versionAuthor = topic.versions[i].author.did
-        let nodeAuthors: string[] = []
-        for(let j = 0; j < nodes.length; j++){
-            let authors = null
-            for(let k = 0; k < matches.length; k++){
-                if(matches[k] && matches[k].y == j){
-                    const prevNodeAuthors = prevAuthors[matches[k].x]
-                    if(getAllText(prevNodes[matches[k].x]) == getAllText(nodes[matches[k].y])){
-                        authors = prevNodeAuthors
-                    } else {
-                        if(!prevNodeAuthors.includes(versionAuthor)){
-                            authors = [...prevNodeAuthors, versionAuthor]
-                        } else {
-                            authors = prevNodeAuthors
-                        }
-                    }
-                    break
-                }
-            }
-            if(authors === null) authors = [versionAuthor]
-            nodeAuthors.push(authors)
-        }
-        prevAuthors = [...nodeAuthors]
-        prevNodes = [...nodes]
-        if(topic.versions[i].uri == topicVersion.uri) break
-    }
-    const newChildren = []
-    for(let i = 0; i < prevNodes.length; i++){
-        newChildren.push(newAuthorNode(prevAuthors[i], prevNodes[i]))
-    }
-    parsed.root.children = newChildren
-    return JSON.stringify(parsed)
+type TopicVersionAuthorProps = {
+    text: string
+    format: string
+    authors: TopicContributor[]
 }
- */
-
 
 export const getTopicVersionAuthors: CAHandler<{
     params: { did: string, rkey: string }
-}> = async (ctx, agent, {params}) => {
+}, TopicVersionAuthorProps> = async (ctx, agent, {params}) => {
     const {did, rkey} = params
+
+    const id = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey)
+    if(!id){
+        return {error: "No se encontró el tema."}
+    }
+    const history = await getTopicHistory(ctx.db, id)
+
+    const authors = new Map<string, TopicContributor>()
+
+    history.versions.forEach(v => {
+        const profile: ProfileViewBasicCA = {
+            ...v.author,
+            $type: "ar.cabildoabierto.actor.defs#profileViewBasic",
+        }
+        let contribution = v.contribution
+
+        if(contribution){
+            const cur = authors.get(profile.did)
+            if(cur){
+                authors.set(profile.did, {
+                    profile,
+                    all: parseFloat((contribution.all ?? 0).toString()) + cur.all,
+                    monetized: parseFloat((contribution.monetized ?? 0).toString()) + cur.monetized
+                })
+            } else {
+                authors.set(profile.did, {
+                    profile,
+                    all: parseFloat((contribution.all ?? 0).toString()),
+                    monetized: parseFloat((contribution.monetized ?? 0).toString())
+                })
+            }
+        }
+    })
+
 
     return {
         data: {
             text: "En construcción",
-            format: "markdown"
+            format: "markdown",
+            authors: Array.from(authors.values())
         }
+    }
+}
+
+export type MatchesType = {
+    matches: {x: number, y: number}[]
+    common: {x: number, y: number}[]
+    perfectMatches: {x: number, y: number}[]
+}
+
+export type TopicVersionChangesProps = {
+    prevText: string
+    prevFormat: string | undefined
+    curText: string
+    curFormat: string | undefined
+    curAuthor: ProfileViewBasicCA
+    prevAuthor: ProfileViewBasicCA
+    diff: MatchesType
+}
+
+
+function anyEditorStateToNodesForDiff(text: string, format?: string | null) {
+    const mdOrLexical = anyEditorStateToMarkdownOrLexical(text, format)
+    if (mdOrLexical.format == "lexical"){
+        return null
+    } else {
+        return mdOrLexical.text.split("\n\n")
     }
 }
 
 
 export const getTopicVersionChanges: CAHandler<{
-    params: { did: string, rkey: string }
-}> = async (ctx, agent, {params}) => {
-    const {did, rkey} = params
+    params: { curDid: string, curRkey: string, prevDid: string, prevRkey: string }
+}, TopicVersionChangesProps> = async (ctx, agent, {params}) => {
+    const {curDid, prevDid, curRkey, prevRkey} = params
+
+    const curUri = getUri(curDid, "ar.cabildoabierto.wiki.topicVersion", curRkey)
+    const prevUri = getUri(prevDid, "ar.cabildoabierto.wiki.topicVersion", prevRkey)
+    const cur = await getTopicVersion(ctx, agent, curUri)
+    const prev = await getTopicVersion(ctx, agent, prevUri)
+
+    if(!cur.data || !prev.data){
+        return {error: "No se encontró una de las versiones."}
+    }
+
+    const nodes1 = anyEditorStateToNodesForDiff(prev.data.text, prev.data.format)
+    const nodes2 = anyEditorStateToNodesForDiff(cur.data.text, cur.data.format)
+
+    if(!nodes1 || !nodes2){
+        return {error: "No se pudo procesar una de las versiones."}
+    }
+
+    const d = diff(nodes1, nodes2)
+    if(!d){
+        return {error: "Ocurrió un error al analizar los cambios."}
+    }
 
     return {
         data: {
-            text: "En construcción.",
-            format: "markdown"
+            curText: cur.data.text,
+            curFormat: cur.data.format,
+            prevText: prev.data.text,
+            prevFormat: prev.data.format,
+            curAuthor: cur.data.author,
+            prevAuthor: prev.data.author,
+            diff: d
         }
     }
 }

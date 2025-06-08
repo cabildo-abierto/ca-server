@@ -169,6 +169,9 @@ model TopicVersion {
   contribution     String?
   diff             String?
   props            Json?
+  prevAcceptedUri  String?
+  prevAccepted     TopicVersion?  @relation("prevAccepted", fields: [prevAcceptedUri], references: [uri])
+  nextVersions     TopicVersion[] @relation("prevAccepted")
 }
 
 model TopicCategory {
@@ -237,7 +240,7 @@ model Content {
   text                 String?
   textBlobId           String?
   textBlob             Blob?         @relation(fields: [textBlobId], references: [cid])
-  format               String        @default("lexical-compressed")
+  format               String?
   numWords             Int?
   topicVersion         TopicVersion?
   article              Article?

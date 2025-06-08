@@ -8,6 +8,7 @@ import {updateEngagementCounts} from "#/services/feed/getUserEngagement";
 import {deleteCollection} from "#/services/delete";
 import {updateTopicPopularityScores} from "#/services/topic/popularity";
 import {updateTopicsCategories} from "#/services/topic/categories";
+import {updateTopicContributions} from "#/services/topic/contributions";
 
 
 export async function addRepeatingJob(ctx: AppContext, name: string, every: number, delay: number){
@@ -59,6 +60,8 @@ export function createWorker(ctx: AppContext){
                 await syncAllUsers(ctx, (job.data as { mustUpdateCollections: string[] }).mustUpdateCollections)
             } else if(job.name == "update-topics-categories") {
                 await updateTopicsCategories(ctx)
+            } else if(job.name.startsWith("update-topic-contributions")) {
+                await updateTopicContributions(ctx, (job.data as {id: string}).id)
             } else {
                 console.log("No handler for job:", job.name)
             }

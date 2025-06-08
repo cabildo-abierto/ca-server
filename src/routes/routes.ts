@@ -208,12 +208,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/topic-version-authors/:did/:rkey',
-        makeHandler(ctx, getTopicVersionAuthors)
-    )
-
-    router.get(
-        '/topic-version-changes/:did/:rkey',
+        '/topic-version-changes/:curDid/:curRkey/:prevDid/:prevRkey',
         makeHandler(ctx, getTopicVersionChanges)
     )
 

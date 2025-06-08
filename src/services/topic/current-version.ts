@@ -4,6 +4,8 @@ import {AppContext} from "#/index";
 import {TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {PrismaTransactionClient, SyncUpdate} from "#/services/sync/sync-update";
 import {getDidFromUri, getRkeyFromUri, getUri} from "#/utils/uri";
+import {VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {addUpdateContributionsJobForTopics} from "#/services/sync/process-batch";
 
 
 export function getTopicLastEditFromVersions(topic: {versions: {content: {record: {createdAt: Date}}}[]}){
@@ -64,7 +66,9 @@ export async function processDeleteTopicVersion(ctx: AppContext, uri: string){
 
     const su = new SyncUpdate(ctx.db)
     su.addUpdatesAsTransaction(updates)
-    return {su}
+    await su.apply()
+
+    await addUpdateContributionsJobForTopics(ctx, [id])
 }
 
 
@@ -112,6 +116,11 @@ export async function updateTopicsLastEdit(ctx: AppContext) {
 }
 
 
+export function isVersionMonetized(version: VersionInHistory){
+    return true // TO DO
+}
+
+
 export function isVersionAccepted(status?: TopicVersionStatus){
     if(!status) return true
 
@@ -138,11 +147,9 @@ export function getTopicCurrentVersion(versions: {status?: TopicVersionStatus}[]
 
 
 export async function updateTopicCurrentVersion(db: PrismaTransactionClient, id: string){
-    console.log("Updating topic current version", id)
     const topicHistory = await getTopicHistory(db, id)
 
     const currentVersion = getTopicCurrentVersion(topicHistory.versions)
-    console.log("Current version", currentVersion)
 
     const uri = currentVersion != null ? topicHistory.versions[currentVersion].uri : null
 

@@ -47,7 +47,7 @@ export async function sessionAgent(
     res: ServerResponse<IncomingMessage>,
     ctx: AppContext
 ): Promise<Agent> {
-    const CAAgent = new AtpBaseClient("http://127.0.0.1:" + env.PORT)
+    const CAAgent = new AtpBaseClient(`${env.HOST}:${env.PORT}`)
 
     const session = await getIronSession<Session>(req, res, cookieOptions)
     if (session.did) {

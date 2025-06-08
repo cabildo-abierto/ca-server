@@ -71,7 +71,7 @@ export type Content = {
     uri: string;
     text: string | null;
     textBlobId: string | null;
-    format: Generated<string>;
+    format: string | null;
     numWords: number | null;
     lastReferencesUpdate: Timestamp | null;
     selfLabels: string[];
@@ -191,6 +191,7 @@ export type TopicVersion = {
     contribution: string | null;
     diff: string | null;
     props: unknown | null;
+    prevAcceptedUri: string | null;
 };
 export type User = {
     did: string;

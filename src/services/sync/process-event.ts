@@ -28,6 +28,7 @@ import {isReactionCollection} from "#/utils/type-utils";
 import {CID} from "multiformats/cid";
 import {deleteRecordsDB} from "#/services/delete";
 import {
+    addUpdateContributionsJobForTopics,
     processArticlesBatch, processDatasetsBatch,
     processFollowsBatch,
     processPostsBatch,
@@ -89,9 +90,8 @@ export async function processDelete(ctx: AppContext, uri: string) {
     const c = getCollectionFromUri(uri)
 
     if (isTopicVersion(c)) {
-        const {su, error} = await processDeleteTopicVersion(ctx, uri)
-        if (error || !su) throw Error(error)
-        await su.apply()
+        await processDeleteTopicVersion(ctx, uri)
+
     } else if (isReactionCollection(c)) {
         await processDeleteReaction(ctx, uri)
     } else {
@@ -263,7 +263,7 @@ export async function processDeleteReaction(ctx: AppContext, uri: string) {
         Si los likes se borran individualmente, los likes quedan zombies: el usuario no ve el corazón rojo y tampoco aparece en el contador.
      */
     // TO DO: Bastante seguro que no hace falta que esto sea una transaction
-    const t = async (db: PrismaTransactionClient) => {
+    const id = await ctx.db.$transaction(async (db) => {
         const type = getCollectionFromUri(uri)
         if (!isReactionCollection(type)) return
 
@@ -312,19 +312,19 @@ export async function processDeleteReaction(ctx: AppContext, uri: string) {
         await db.record.deleteMany({where: {uri: {in: uris}}})
 
         if (type == "ar.cabildoabierto.wiki.voteReject" || type == "ar.cabildoabierto.wiki.voteAccept") {
-            const id = await getTopicIdFromTopicVersionUri(db, subjectId.subjectId)
+            const {did, rkey} = splitUri(subjectId.subjectId)
+            const id = await getTopicIdFromTopicVersionUri(db, did, rkey)
             if (id) {
                 await updateTopicCurrentVersion(db, id)
-                console.log("done updating current version")
+                return id
             } else {
                 throw Error("No se encontró el tema votado.")
             }
         }
+    })
+    if(id) {
+        await addUpdateContributionsJobForTopics(ctx, [id])
     }
-
-    const su = new SyncUpdate(ctx.db)
-    su.addFunctionTransaction(t)
-    await su.apply()
 }
 
 

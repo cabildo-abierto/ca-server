@@ -156,6 +156,14 @@
           "removedChars": {
             "type": "integer"
           },
+          "prevAccepted": {
+            "type": "string",
+            "format": "at-uri"
+          },
+          "contribution": {
+            "type": "ref",
+            "ref": "#topicVersionContribution"
+          },
           "props": {
             "type": "array",
             "items": {
@@ -300,6 +308,18 @@
           "lastEdit": {
             "type": "string",
             "format": "datetime"
+          }
+        }
+      },
+      "topicVersionContribution": {
+        "type": "object",
+        "required": ["monetized", "all"],
+        "properties": {
+          "monetized": {
+            "type": "string"
+          },
+          "all": {
+            "type": "string"
           }
         }
       }

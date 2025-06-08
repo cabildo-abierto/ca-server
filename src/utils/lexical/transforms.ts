@@ -1,5 +1,6 @@
 import removeMarkdown from "remove-markdown";
 import {decompress} from "../compression";
+import {SerializedEditorState} from "lexical";
 
 
 export function markdownToPlainText(md: string) {
@@ -40,8 +41,8 @@ export function htmlToMarkdown(html: string){
 }
 
 
-export function anyEditorStateToMarkdownOrLexical(text: string | null, format: string): {text: string, format: string} {
-    if(!text) {
+export function anyEditorStateToMarkdownOrLexical(text: string | null, format?: string | null): {text: string, format: string} {
+    if(!text || text.length == 0) {
         return {text: "", format: "markdown"}
     } else if (format == "markdown") {
         return {text, format: "markdown"}
