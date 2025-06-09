@@ -36,7 +36,6 @@ export type FeedElementQueryResult = {
     _count: {
         replies: number
     }
-    uniqueViewsCount: number
     uniqueLikesCount: number
     uniqueRepostsCount: number
     content: {

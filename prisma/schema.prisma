@@ -50,7 +50,6 @@ model User {
   messagesSent        ChatMessage[]    @relation("messagesSent")
   messagesReceived    ChatMessage[]    @relation("messagesReceived")
   paymentPromises     PaymentPromise[] @relation("authorPromises")
-  views               View[]
   records             Record[]
   blobs               Blob[]
   followers           Follow[]
@@ -64,6 +63,8 @@ model User {
   orgValidation      String?
 
   validationRequests ValidationRequest[]
+
+  readSessions ReadSession[]
 }
 
 enum ValidationType {
@@ -225,9 +226,6 @@ model Record {
   uniqueAcceptsCount Int @default(0)
   uniqueRejectsCount Int @default(0)
 
-  views            View[]
-  uniqueViewsCount Int    @default(0)
-
   replies Post[] @relation("reply")
   rootOf  Post[] @relation("root")
 
@@ -250,6 +248,17 @@ model Content {
   selfLabels           String[]
   embeds               Json[]
   datasetsUsed         Dataset[]
+  readSessions         ReadSession[]
+}
+
+model ReadSession {
+  id     String       @id @default(uuid())
+  userId String
+  user User           @relation(fields: [userId], references: [did])
+  createdAt           DateTime        @default(now()) @map("created_at")
+  readChunks Json
+  readContentId String
+  readContent Content @relation(fields: [readContentId], references: [uri])
 }
 
 model Post {
@@ -334,16 +343,6 @@ model Blob {
 
   contentOf Content[]
   previewOf Visualization[]
-}
-
-model View {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now()) @map("created_at")
-  userBy    User     @relation(fields: [userById], references: [did])
-  userById  String
-
-  recordId String?
-  record   Record? @relation(fields: [recordId], references: [uri])
 }
 
 model Visualization {

@@ -129,6 +129,13 @@ export type Reaction = {
     uri: string;
     subjectId: string | null;
 };
+export type ReadSession = {
+    id: string;
+    userId: string;
+    created_at: Generated<Timestamp>;
+    readChunks: unknown;
+    readContentId: string;
+};
 export type Record = {
     uri: string;
     cid: string | null;
@@ -141,7 +148,6 @@ export type Record = {
     uniqueRepostsCount: Generated<number>;
     uniqueAcceptsCount: Generated<number>;
     uniqueRejectsCount: Generated<number>;
-    uniqueViewsCount: Generated<number>;
 };
 export type Reference = {
     id: string;
@@ -227,12 +233,6 @@ export type ValidationRequest = {
     result: Generated<ValidationRequestResult>;
     rejectReason: string | null;
 };
-export type View = {
-    id: string;
-    created_at: Generated<Timestamp>;
-    userById: string;
-    recordId: string | null;
-};
 export type Visualization = {
     uri: string;
     spec: string;
@@ -261,6 +261,7 @@ export type DB = {
     PaymentPromise: PaymentPromise;
     Post: Post;
     Reaction: Reaction;
+    ReadSession: ReadSession;
     Record: Record;
     Reference: Reference;
     Subscription: Subscription;
@@ -270,7 +271,6 @@ export type DB = {
     TopicVersion: TopicVersion;
     User: User;
     ValidationRequest: ValidationRequest;
-    View: View;
     Visualization: Visualization;
     VoteReject: VoteReject;
 };

@@ -110,9 +110,6 @@
             "ar.cabildoabierto.embed.visualization#view"
           ]
         },
-        "uniqueViewsCount": {
-          "type": "integer"
-        },
         "bskyRepostCount": {
           "type": "integer"
         },
@@ -194,9 +191,6 @@
         "record": {
           "type": "unknown"
         },
-        "uniqueViewsCount": {
-          "type": "integer"
-        },
         "bskyRepostCount": {
           "type": "integer"
         },
@@ -275,9 +269,6 @@
         },
         "record": {
           "type": "unknown"
-        },
-        "uniqueViewsCount": {
-          "type": "integer"
         },
         "bskyRepostCount": {
           "type": "integer"

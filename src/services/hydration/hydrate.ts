@@ -94,7 +94,6 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
             likeCount: e.uniqueLikesCount,
             repostCount: e.uniqueRepostsCount,
             replyCount: e._count.replies,
-            uniqueViewsCount: e.uniqueViewsCount ?? undefined,
             viewer,
             topicsMentioned: topicsMentioned.map(m => ({
                 count: m.count,
@@ -158,7 +157,6 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
             likeCount: e.uniqueLikesCount,
             repostCount: e.uniqueRepostsCount,
             replyCount: e._count.replies,
-            uniqueViewsCount: e.uniqueViewsCount ?? undefined,
             viewer
         }
     }
@@ -268,11 +266,9 @@ function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView
             $type: "ar.cabildoabierto.feed.defs#postView",
             embed: embedView,
             ...(caData ? {
-                uniqueViewsCount: caData.uniqueViewsCount ?? undefined,
                 likeCount: caData.uniqueLikesCount,
                 repostCount: caData.uniqueRepostsCount,
             } : {
-                uniqueViewsCount: 0,
                 likeCount: 0,
                 repostCount: 0
             }),

@@ -12,7 +12,7 @@ import {getAllTopics} from "#/services/topic/topics";
 import {sessionAgent} from "#/utils/session-agent";
 import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration";
 import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation";
-import {processPayment} from "#/services/donations/donations";
+import {processPayment} from "#/services/monetization/donations";
 import {updateTopicContributionsHandler} from "#/services/topic/contributions";
 
 

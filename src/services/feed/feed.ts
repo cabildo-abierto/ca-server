@@ -24,7 +24,6 @@ export const getFeedByKind: CAHandler<{params: {kind: string}, query: {cursor?: 
     } else {
         return {error: "Invalid feed kind:" + kind}
     }
-    console.log("getting feed", kind, cursor, new Date())
     return getFeed({ctx, agent, pipeline, cursor})
 }
 

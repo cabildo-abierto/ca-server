@@ -73,6 +73,13 @@ export function deleteRecordsDB(ctx: AppContext, uris: string[]){
                 }
             }
         }),
+        ctx.db.readSession.deleteMany({
+            where: {
+                readContentId: {
+                    in: uris
+                }
+            }
+        }),
         ctx.db.reference.deleteMany({
             where: {
                 referencingContentId: {
