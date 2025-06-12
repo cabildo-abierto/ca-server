@@ -1,7 +1,7 @@
 import {CAHandler} from "#/utils/handler";
 import {getUri} from "#/utils/uri";
 
-type ReadChunks = {
+export type ReadChunks = {
     chunk: number
     duration: number
 }[]

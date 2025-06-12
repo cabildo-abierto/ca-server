@@ -206,16 +206,6 @@ export async function deleteUser(ctx: AppContext, did: string) {
                 authorId: did
             }
         }),
-        ctx.db.view.deleteMany({
-            where: {
-                userById: did
-            }
-        }),
-        ctx.db.view.deleteMany({
-            where: {
-                userById: did
-            }
-        }),
         ctx.db.user.deleteMany({
             where: {
                 did: did

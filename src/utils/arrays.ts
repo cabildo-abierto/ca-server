@@ -10,6 +10,14 @@ export function max<T>(a: T[], f?: (x: T) => number): T | undefined {
     return a.reduce((max, current) => ((f ? f(current) > f(max) : current > max) ? current : max));
 }
 
+export function sum<T>(a: T[], f: (x: T) => number): number {
+    return a.reduce((acc, x) => acc+f(x), 0)
+}
+
+export function count<T>(a: T[], f: (x: T) => boolean): number {
+    return sum(a, x => f(x) ? 1 : 0)
+}
+
 
 
 export const removeNullValues = <K, V>(m: Map<K, V | null>): Map<K, V> => {

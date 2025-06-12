@@ -1,20 +1,22 @@
-import {getTopicHistory} from "./topics";
+import {getTopic, getTopicHistory} from "./topics";
 import {max} from "#/utils/arrays";
 import {AppContext} from "#/index";
-import {TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {TopicProp, TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {PrismaTransactionClient, SyncUpdate} from "#/services/sync/sync-update";
 import {getDidFromUri, getRkeyFromUri, getUri} from "#/utils/uri";
 import {VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {addUpdateContributionsJobForTopics} from "#/services/sync/process-batch";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
+import {getTopicTitle} from "#/services/topic/utils";
 
 
-export function getTopicLastEditFromVersions(topic: {versions: {content: {record: {createdAt: Date}}}[]}){
+export function getTopicLastEditFromVersions(topic: { versions: { content: { record: { createdAt: Date } } }[] }) {
     const dates = topic.versions.map(v => v.content.record.createdAt)
     return max(dates)
 }
 
 
-export async function getTopicIdFromTopicVersionUri(db: PrismaTransactionClient, did: string, rkey: string){
+export async function getTopicIdFromTopicVersionUri(db: PrismaTransactionClient, did: string, rkey: string) {
     const res = await db.topicVersion.findMany({
         select: {
             topicId: true
@@ -29,14 +31,14 @@ export async function getTopicIdFromTopicVersionUri(db: PrismaTransactionClient,
 }
 
 
-export async function processDeleteTopicVersion(ctx: AppContext, uri: string){
+export async function processDeleteTopicVersion(ctx: AppContext, uri: string) {
     const id = await getTopicIdFromTopicVersionUri(ctx.db, getDidFromUri(uri), getRkeyFromUri(uri))
-    if(!id) return {error: "Ocurrió un error al borrar la versión."}
+    if (!id) return {error: "Ocurrió un error al borrar la versión."}
     const topicHistory = await getTopicHistory(ctx.db, id)
-    if(!topicHistory) return {error: "Ocurrió un error al borrar la versión."}
+    if (!topicHistory) return {error: "Ocurrió un error al borrar la versión."}
 
     const currentVersion = getTopicCurrentVersion(topicHistory.versions)
-    if(!currentVersion) return {error: "Ocurrió un error al borrar la versión."}
+    if (!currentVersion) return {error: "Ocurrió un error al borrar la versión."}
 
     const index = topicHistory.versions.findIndex(v => v.uri == uri)
 
@@ -46,6 +48,7 @@ export async function processDeleteTopicVersion(ctx: AppContext, uri: string){
     const currentVersionId = newCurrentVersionIndex != null ? spliced[newCurrentVersionIndex].uri : undefined
 
     const updates = [
+        ctx.db.readSession.deleteMany({where: {readContentId: uri}}),
         ctx.db.hasReacted.deleteMany({where: {recordId: uri}}),
         ctx.db.voteReject.deleteMany({where: {reaction: {subjectId: uri}}}),
         ctx.db.reaction.deleteMany({where: {subjectId: uri}}),
@@ -101,14 +104,14 @@ export async function updateTopicsLastEdit(ctx: AppContext) {
 
     if (updates.length === 0) return;
 
-    const ids = updates.map(({ id }) => id);
-    const lastEdits = updates.map(({ lastEdit }) => lastEdit);
+    const ids = updates.map(({id}) => id);
+    const lastEdits = updates.map(({lastEdit}) => lastEdit);
 
     const query = `
         UPDATE "Topic"
-        SET "lastEdit" = CASE 
+        SET "lastEdit" = CASE
             ${updates.map((_, i) => `WHEN "id" = $${i * 2 + 2} THEN $${i * 2 + 1}`).join(" ")}
-        END
+            END
         WHERE "id" IN (${ids.map((_, i) => `$${i * 2 + 2}`).join(", ")});
     `;
 
@@ -116,29 +119,29 @@ export async function updateTopicsLastEdit(ctx: AppContext) {
 }
 
 
-export function isVersionMonetized(version: VersionInHistory){
+export function isVersionMonetized(version: VersionInHistory) {
     return true // TO DO
 }
 
 
-export function isVersionAccepted(status?: TopicVersionStatus){
-    if(!status) return true
+export function isVersionAccepted(status?: TopicVersionStatus) {
+    if (!status) return true
 
-    function catToNumber(cat: string){
+    function catToNumber(cat: string) {
         return 0 // TO DO
     }
 
     const relevantVotes = max(status.voteCounts, x => catToNumber(x.category))
 
-    if(relevantVotes == undefined) return true
+    if (relevantVotes == undefined) return true
 
     return relevantVotes.rejects == 0 // TO DO: && relevantVotes.accepts > 0
 }
 
 
-export function getTopicCurrentVersion(versions: {status?: TopicVersionStatus}[]): number | null {
-    for(let i = versions.length-1; i >= 0; i--){
-        if(isVersionAccepted(versions[i].status)){
+export function getTopicCurrentVersion(versions: { status?: TopicVersionStatus }[]): number | null {
+    for (let i = versions.length - 1; i >= 0; i--) {
+        if (isVersionAccepted(versions[i].status)) {
             return i
         }
     }
@@ -146,7 +149,7 @@ export function getTopicCurrentVersion(versions: {status?: TopicVersionStatus}[]
 }
 
 
-export async function updateTopicCurrentVersion(db: PrismaTransactionClient, id: string){
+export async function updateTopicCurrentVersion(db: PrismaTransactionClient, id: string) {
     const topicHistory = await getTopicHistory(db, id)
 
     const currentVersion = getTopicCurrentVersion(topicHistory.versions)
@@ -163,6 +166,34 @@ export async function updateTopicCurrentVersion(db: PrismaTransactionClient, id:
     })
 
     return {}
+}
+
+
+// TO DO: Estaría bueno cachear esto...
+export const getTopicTitleHandler: CAHandlerNoAuth<{ params: { id: string } }, {
+    title: string
+}> = async (ctx, agent, {params}) => {
+    const topic = await ctx.db.topic.findUnique({
+        select: {
+            id: true,
+            currentVersion: {
+                select: {
+                    props: true
+                }
+            }
+        },
+        where: {
+            id: params.id,
+        }
+    })
+    if(!topic) {
+        return {error: "No se encontró el tema"}
+    }
+    return {
+        data: {
+            title: getTopicTitle({id: topic.id, props: topic.currentVersion?.props as TopicProp[] | undefined})
+        }
+    }
 }
 
 

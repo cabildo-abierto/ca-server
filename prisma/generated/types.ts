@@ -25,7 +25,7 @@ export type ValidationRequestResult = (typeof ValidationRequestResult)[keyof typ
 export const PromiseStatus = {
     Pending: "Pending",
     Confirmed: "Confirmed",
-    Canceled: "Canceled"
+    Payed: "Payed"
 } as const;
 export type PromiseStatus = (typeof PromiseStatus)[keyof typeof PromiseStatus];
 export const ReferenceType = {
@@ -92,6 +92,13 @@ export type Dataset = {
     title: string;
     description: string | null;
 };
+export type Donation = {
+    id: string;
+    created_at: Generated<Timestamp>;
+    userById: string | null;
+    transactionId: string;
+    amount: number;
+};
 export type Follow = {
     uri: string;
     userFollowedId: string | null;
@@ -111,11 +118,10 @@ export type InviteCode = {
 export type PaymentPromise = {
     id: string;
     created_at: Generated<Timestamp>;
-    authorId: string;
-    subscriptionId: string;
+    userMonthId: string;
     amount: number;
-    contentUri: string;
     status: Generated<PromiseStatus>;
+    contentId: string;
 };
 export type Post = {
     uri: string;
@@ -155,17 +161,6 @@ export type Reference = {
     count: Generated<number>;
     referencedTopicId: string;
     referencingContentId: string;
-};
-export type Subscription = {
-    id: string;
-    userId: string | null;
-    created_at: Generated<Timestamp>;
-    boughtByUserId: string;
-    usedAt: Timestamp | null;
-    price: number;
-    paymentId: string | null;
-    endsAt: Timestamp | null;
-    promisesCreated: Generated<boolean>;
 };
 export type Topic = {
     id: string;
@@ -218,6 +213,15 @@ export type User = {
     userValidationHash: string | null;
     orgValidation: string | null;
 };
+export type UserMonth = {
+    id: string;
+    userId: string;
+    monthStart: Timestamp;
+    monthEnd: Timestamp;
+    wasActive: boolean;
+    value: number;
+    promisesCreated: Generated<boolean>;
+};
 export type ValidationRequest = {
     id: string;
     type: ValidationType;
@@ -255,6 +259,7 @@ export type DB = {
     Content: Content;
     DataBlock: DataBlock;
     Dataset: Dataset;
+    Donation: Donation;
     Follow: Follow;
     HasReacted: HasReacted;
     InviteCode: InviteCode;
@@ -264,12 +269,12 @@ export type DB = {
     ReadSession: ReadSession;
     Record: Record;
     Reference: Reference;
-    Subscription: Subscription;
     Topic: Topic;
     TopicCategory: TopicCategory;
     TopicToCategory: TopicToCategory;
     TopicVersion: TopicVersion;
     User: User;
+    UserMonth: UserMonth;
     ValidationRequest: ValidationRequest;
     Visualization: Visualization;
     VoteReject: VoteReject;

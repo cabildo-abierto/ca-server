@@ -14,6 +14,7 @@ import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/ser
 import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation";
 import {processPayment} from "#/services/monetization/donations";
 import {updateTopicContributionsHandler} from "#/services/topic/contributions";
+import {getStatsDashboard} from "#/services/admin/stats";
 
 
 function isAdmin(did: string) {
@@ -147,6 +148,12 @@ export const adminRoutes = (ctx: AppContext) => {
     )
 
     router.post('/update-topic-contributions/:id', makeHandler(ctx, updateTopicContributionsHandler))
+
+    router.get("/stats-dashboard", makeAdminHandler(ctx, getStatsDashboard))
+
+    router.post(
+        "/create-user-months", startJobHandler(ctx, "create-user-months")
+    )
 
     return router
 }

@@ -2,8 +2,6 @@ import {CAHandler} from "#/utils/handler";
 import MercadoPagoConfig, {Preference} from "mercadopago";
 import {SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
-import {range} from "#/utils/arrays";
-import {v4 as uuidv4} from 'uuid'
 
 type Donation = {
     date: Date
@@ -13,29 +11,32 @@ type Donation = {
 export type DonationHistory = Donation[]
 
 export const getDonationHistory: CAHandler<{}, DonationHistory> = async (ctx, agent, {}) => {
-    const subscriptions = await ctx.db.subscription.findMany({
+    const subscriptions = await ctx.db.donation.findMany({
         where: {
-            userId: agent.did
+            userById: agent.did
         }
     })
 
     return {data: subscriptions.map(s => ({
         date: s.createdAt,
-        amount: s.price
+        amount: s.amount
     }))}
 }
 
 
-export const getMonthlyValue: CAHandler<{}, number> = async (ctx, agent, {}) => {
-    return {data: 1200}
+export const getMonthlyValueHandler: CAHandler<{}, number> = async (ctx, agent, {}) => {
+    return {data: getMonthlyValue()}
 }
 
 
-export const createPreference: CAHandler<{quantity: number, value: number}, {id: string}> = async (ctx, agent, {quantity, value}) => {
+export function getMonthlyValue() {
+    return 1200
+}
+
+
+export const createPreference: CAHandler<{amount: number}, {id: string}> = async (ctx, agent, {amount}) => {
     const client = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN! })
     const preference = new Preference(client)
-
-    const amount = quantity * value
 
     const title = "Aporte de $" + amount + " a Cabildo Abierto"
 
@@ -62,8 +63,7 @@ export const createPreference: CAHandler<{quantity: number, value: number}, {id:
                 items: items,
                 metadata: {
                     user_id: agent.did,
-                    donated_quantity: quantity,
-                    item_value: value
+                    amount: amount,
                 },
                 payment_methods: {
                     excluded_payment_types: [
@@ -99,32 +99,15 @@ const getPaymentDetails = async (paymentId: string) => {
 };
 
 
-export async function buySubscriptions(ctx: AppContext, agent: SessionAgent, quantity: number, value: number, paymentId: string) {
-    const values: {
-        id: string,
-        boughtByUserId: string,
-        price: number,
-        paymentId: string,
-        isDonation: boolean,
-        userId: string | null,
-        usedAt: Date | null,
-        endsAt: Date | null
-    }[] = range(quantity).map((d) => ({
-        id: uuidv4(),
-        boughtByUserId: agent.did,
-        price: value,
-        paymentId: paymentId,
-        isDonation: true,
-        userId: null,
-        usedAt: null,
-        endsAt: null
-    }))
-
+export async function createDonation(ctx: AppContext, agent: SessionAgent, amount: number, paymentId: string) {
     try {
-        await ctx.kysely
-            .insertInto("Subscription")
-            .values(values)
-            .execute()
+        await ctx.db.donation.create({
+            data: {
+                userById: agent.did,
+                transactionId: paymentId,
+                amount
+            }
+        })
     } catch (e) {
         return {error: "error on buy subscriptions"}
     }
@@ -148,16 +131,15 @@ export const processPayment: CAHandler<{data: any}, {}> = async (ctx, agent, par
         return {error: "El pago no fue aprobado."}
     }
 
-    const donatedQuantity = paymentDetails.metadata.donated_quantity
-    const itemValue = paymentDetails.metadata.item_value
+    const donationAmount = paymentDetails.metadata.amount
     const userId = paymentDetails.metadata.user_id
 
-    const {error} = await buySubscriptions(ctx, agent, donatedQuantity, itemValue, paymentId)
+    const {error} = await createDonation(ctx, agent, donationAmount, paymentId)
 
     if(error) {
         console.log("error", error)
         console.log("details", paymentDetails)
-        console.log(userId, donatedQuantity, itemValue, paymentId)
+        console.log(userId, donationAmount, paymentId)
         return {error: "Ocurrió un error al procesar un pago."}
     }
 

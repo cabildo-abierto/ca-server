@@ -9,6 +9,7 @@ import {deleteCollection} from "#/services/delete";
 import {updateTopicPopularityScores} from "#/services/topic/popularity";
 import {updateTopicsCategories} from "#/services/topic/categories";
 import {updateTopicContributions} from "#/services/topic/contributions";
+import {createUserMonths} from "#/services/monetization/user-months";
 
 
 export async function addRepeatingJob(ctx: AppContext, name: string, every: number, delay: number){
@@ -61,7 +62,9 @@ export function createWorker(ctx: AppContext){
             } else if(job.name == "update-topics-categories") {
                 await updateTopicsCategories(ctx)
             } else if(job.name.startsWith("update-topic-contributions")) {
-                await updateTopicContributions(ctx, (job.data as {id: string}).id)
+                await updateTopicContributions(ctx, (job.data as { id: string }).id)
+            } else if(job.name == "create-user-months") {
+                await createUserMonths(ctx)
             } else {
                 console.log("No handler for job:", job.name)
             }
@@ -80,6 +83,7 @@ export async function setupWorker(ctx: AppContext){
     await addRepeatingJob(ctx, "update-topics-categories", 60*24*mins, 60*mins+5)
     await addRepeatingJob(ctx, "update-categories-graph", 60*24*mins, 60*mins+7)
     await addRepeatingJob(ctx, "update-references", 60*24*mins, 60*mins+10)
+    await addRepeatingJob(ctx, "create-user-months", 60*24*mins, 60*mins+15)
 
     const waitingJobs = await ctx.queue.getJobs(['waiting'])
     const delayedJobs = await ctx.queue.getJobs(['delayed'])

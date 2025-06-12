@@ -46,8 +46,9 @@ import { createDataset } from '#/services/dataset/write';
 import {searchContents} from "#/services/feed/search";
 import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion";
 import {cancelValidationRequest, createValidationRequest, getValidationRequest } from '#/services/user/validation';
-import {createPreference, getDonationHistory, getMonthlyValue, processPayment} from '#/services/monetization/donations';
+import {createPreference, getDonationHistory, getMonthlyValueHandler, processPayment} from '#/services/monetization/donations';
 import { storeReadSession } from '#/services/monetization/read-tracking';
+import { getTopicTitleHandler } from '#/services/topic/current-version';
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -315,13 +316,15 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get('/donation-history', makeHandler(ctx, getDonationHistory))
 
-    router.get('/monthly-value', makeHandler(ctx, getMonthlyValue))
+    router.get('/monthly-value', makeHandler(ctx, getMonthlyValueHandler))
 
     router.post('/donate/create-preference', makeHandler(ctx, createPreference))
 
     router.post('/notify-payment', makeHandler(ctx, processPayment))
 
     router.post('/read-session/:did/:collection/:rkey', makeHandler(ctx, storeReadSession))
+
+    router.get("/topic-title/:id", makeHandlerNoAuth(ctx, getTopicTitleHandler))
 
     router.use(adminRoutes(ctx))
 
