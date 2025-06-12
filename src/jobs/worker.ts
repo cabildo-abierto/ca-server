@@ -1,14 +1,14 @@
-import {updateCategoriesGraph} from "#/services/topic/graph";
+import {updateCategoriesGraph} from "#/services/wiki/graph";
 import {Worker} from 'bullmq';
 import {AppContext} from "#/index";
 import {syncAllUsers, syncUser} from "#/services/sync/sync-user";
 import {dbHandleToDid} from "#/services/user/users";
-import {updateReferences} from "#/services/topic/references";
+import {updateReferences} from "#/services/wiki/references";
 import {updateEngagementCounts} from "#/services/feed/getUserEngagement";
 import {deleteCollection} from "#/services/delete";
-import {updateTopicPopularityScores} from "#/services/topic/popularity";
-import {updateTopicsCategories} from "#/services/topic/categories";
-import {updateTopicContributions} from "#/services/topic/contributions";
+import {updateTopicPopularityScores} from "#/services/wiki/popularity";
+import {updateTopicsCategories} from "#/services/wiki/categories";
+import {updateTopicContributions} from "#/services/wiki/contributions";
 import {createUserMonths} from "#/services/monetization/user-months";
 
 

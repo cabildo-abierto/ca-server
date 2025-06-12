@@ -4,7 +4,7 @@ import {TopicsGraph} from "#/lib/types";
 import {logTimes} from "#/utils/utils";
 import {CAHandler} from "#/utils/handler";
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {getTopicCategories} from "#/services/topic/utils";
+import {getTopicCategories} from "#/services/wiki/utils";
 
 
 

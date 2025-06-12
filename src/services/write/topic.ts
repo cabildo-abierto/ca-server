@@ -9,7 +9,7 @@ import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {isTopicProp, isNumberProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 
 
-export async function createTopicVersionATProto(agent: SessionAgent, {id, text, format, message, props, embeds}: CreateTopicVersionProps){
+export async function createTopicVersionATProto(agent: SessionAgent, {id, text, format, message, props, embeds, claimsAuthorship}: CreateTopicVersionProps){
     let blob: BlobRef | null = null
 
     if(text){
@@ -43,7 +43,8 @@ export async function createTopicVersionATProto(agent: SessionAgent, {id, text, 
         id,
         props: validatedProps,
         createdAt: new Date().toISOString(),
-        embeds: embeds ?? []
+        embeds: embeds ?? [],
+        claimsAuthorship: claimsAuthorship
     }
 
     const {data} = await agent.bsky.com.atproto.repo.createRecord({

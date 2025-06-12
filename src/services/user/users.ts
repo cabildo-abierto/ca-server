@@ -11,7 +11,7 @@ import {unique} from "#/utils/arrays";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {getIronSession} from "iron-session";
 import {createCAUser} from "#/services/user/access";
-import {dbUserToProfileViewBasic} from "#/services/topic/topics";
+import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {Record as FollowRecord} from "#/lex-api/types/app/bsky/graph/follow"
 import {processCreate, processFollow} from "#/services/sync/process-event";
 import {Record as BskyProfileRecord, validateRecord as validateBskyProfile} from "#/lex-api/types/app/bsky/actor/profile"

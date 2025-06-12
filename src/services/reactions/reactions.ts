@@ -15,7 +15,7 @@ import {
 } from "#/services/sync/sync-update";
 import {SessionAgent} from "#/utils/session-agent";
 import {$Typed} from "@atproto/api";
-import {createVoteAcceptAT, createVoteRejectAT, VoteRejectProps} from "#/services/topic/votes";
+import {createVoteAcceptAT, createVoteRejectAT, VoteRejectProps} from "#/services/wiki/votes";
 import {deleteRecordAT} from "#/services/delete";
 
 

@@ -154,6 +154,8 @@ export type Record = {
     uniqueRepostsCount: Generated<number>;
     uniqueAcceptsCount: Generated<number>;
     uniqueRejectsCount: Generated<number>;
+    uniqueMonetizationAcceptsCount: Generated<number>;
+    uniqueMonetizationRejectsCount: Generated<number>;
 };
 export type Reference = {
     id: string;

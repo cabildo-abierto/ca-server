@@ -17,7 +17,7 @@ import {
 } from "#/lex-server/types/app/bsky/feed/defs";
 import {FeedSkeleton} from "#/services/feed/feed";
 import {decompress} from "#/utils/compression";
-import {getAllText} from "#/services/topic/diff";
+import {getAllText} from "#/services/wiki/diff";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {
@@ -28,9 +28,9 @@ import {
 import {creationDateSortKey} from "#/services/feed/utils";
 import {Dataplane, FeedElementQueryResult} from "#/services/hydration/dataplane";
 import {markdownToPlainText} from "#/utils/lexical/transforms";
-import {hydrateTopicViewBasicFromUri} from "#/services/topic/topics";
+import {hydrateTopicViewBasicFromUri} from "#/services/wiki/topics";
 import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {getTopicTitle} from "#/services/topic/utils";
+import {getTopicTitle} from "#/services/wiki/utils";
 import {isMain as isVisualizationEmbed, View as VisualizationEmbedView, Main as VisualizationEmbed, isDatasetDataSource} from "#/lex-server/types/ar/cabildoabierto/embed/visualization"
 import {hydrateDatasetView} from "#/services/dataset/read";
 import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article"

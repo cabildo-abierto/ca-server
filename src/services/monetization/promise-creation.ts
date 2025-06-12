@@ -3,8 +3,8 @@ import {getChunksReadByContent, getValidatedReadSessions} from "#/services/monet
 import {sum} from "#/utils/arrays";
 import {getMonthlyValue} from "#/services/monetization/donations";
 import {getCollectionFromUri, isArticle, splitUri} from "#/utils/uri";
-import {getTopicHistory} from "#/services/topic/topics";
-import {getTopicIdFromTopicVersionUri, isVersionAccepted, isVersionMonetized} from "#/services/topic/current-version";
+import {getTopicIdFromTopicVersionUri, isVersionAccepted, isVersionMonetized} from "#/services/wiki/current-version";
+import {getTopicHistory} from "#/services/wiki/history";
 
 
 export async function createPaymentPromises(ctx: AppContext) {

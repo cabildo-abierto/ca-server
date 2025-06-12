@@ -3,7 +3,7 @@ import {uploadStringBlob} from "#/services/blob";
 import {CAHandler} from "#/utils/handler";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {SessionAgent} from "#/utils/session-agent";
-import {getTopicsMentioned} from "#/services/topic/topics";
+import {getTopicsMentioned} from "#/services/wiki/topics";
 import {Transaction} from "kysely";
 import {DB, ReferenceType} from "../../../prisma/generated/types";
 import {v4 as uuidv4} from 'uuid'

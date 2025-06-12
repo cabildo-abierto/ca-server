@@ -1,5 +1,5 @@
 import {AppContext} from "#/index";
-import {getTopicCategories} from "#/services/topic/utils";
+import {getTopicCategories} from "#/services/wiki/utils";
 import {
     TopicProp
 } from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";

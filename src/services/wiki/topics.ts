@@ -1,29 +1,20 @@
 import {fetchTextBlobs} from "../blob";
-import {getCollectionFromUri, getUri, splitUri} from "#/utils/uri";
+import {getUri, splitUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {CAHandler, CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
-import {
-    CategoryVotes,
-    TopicHistory,
-    TopicProp,
-    TopicVersionStatus,
-    TopicView,
-    VersionInHistory
-} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {TopicProp, TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion";
-import {getTopicCurrentVersion, getTopicIdFromTopicVersionUri} from "#/services/topic/current-version";
+import {getTopicCurrentVersion, getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
 import {SessionAgent} from "#/utils/session-agent";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import {Prisma} from "@prisma/client";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
-import {getTopicTitle} from "#/services/topic/utils";
-import {getSynonymsToTopicsMap, getTopicsReferencedInText} from "#/services/topic/references";
+import {getTopicTitle} from "#/services/wiki/utils";
+import {getSynonymsToTopicsMap, getTopicsReferencedInText} from "#/services/wiki/references";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
 import {gett} from "#/utils/arrays";
-import {PrismaTransactionClient} from "#/services/sync/sync-update";
-import {ProfileViewBasic as ProfileViewBasicCA} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
-import {diff} from "#/services/topic/diff";
+import {getTopicHistoryHandler} from "#/services/wiki/history";
 
 
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
@@ -269,147 +260,6 @@ export function dbUserToProfileViewBasic(author: {
 }
 
 
-export async function getTopicHistory(db: PrismaTransactionClient, id: string, agent?: SessionAgent) {
-    const versions = await db.record.findMany({
-        select: {
-            uri: true,
-            cid: true,
-            createdAt: true,
-            author: {
-                select: {
-                    did: true,
-                    handle: true,
-                    displayName: true,
-                    avatar: true
-                }
-            },
-            content: {
-                select: {
-                    textBlob: true,
-                    text: true,
-                    topicVersion: {
-                        select: {
-                            charsAdded: true,
-                            charsDeleted: true,
-                            accCharsAdded: true,
-                            contribution: true,
-                            diff: true,
-                            message: true,
-                            props: true,
-                            title: true,
-                            prevAcceptedUri: true
-                        }
-                    }
-                }
-            },
-            uniqueAcceptsCount: true,
-            uniqueRejectsCount: true,
-            reactions: agent?.did ? {
-                select: {
-                    uri: true
-                },
-                where: {
-                    record: {
-                        collection: {
-                            in: ["ar.cabildoabierto.wiki.voteAccept", "ar.cabildoabierto.wiki.voteReject"]
-                        },
-                        authorId: agent.did
-                    }
-                }
-            } : undefined
-        },
-        where: {
-            content: {
-                topicVersion: {
-                    topicId: id
-                }
-            },
-            cid: {
-                not: null
-            }
-        },
-        orderBy: {
-            createdAt: "asc"
-        }
-    })
-
-    const topicHistory: TopicHistory = {
-        id,
-        versions: versions.map(v => {
-            if (!v.content || !v.content.topicVersion || !v.cid) return null
-
-            let accept: string | undefined
-            let reject: string | undefined
-
-            const voteCounts: CategoryVotes[] = [
-                {
-                    accepts: v.uniqueAcceptsCount,
-                    rejects: v.uniqueRejectsCount,
-                    category: "Beginner" // TO DO
-                }
-            ]
-
-            if(v.reactions){
-                v.reactions.forEach(a => {
-                    const collection = getCollectionFromUri(a.uri)
-                    if (collection == "ar.cabildoabierto.wiki.voteAccept") {
-                        accept = a.uri
-                    } else if(collection == "ar.cabildoabierto.wiki.voteReject") {
-                        reject = a.uri
-                    }
-                })
-            }
-
-            const author = dbUserToProfileViewBasic(v.author)
-            if (!author) return null
-
-            const status: TopicVersionStatus = {
-                voteCounts
-            }
-
-            const contributionStr = v.content.topicVersion.contribution
-            const contribution = contributionStr ? JSON.parse(contributionStr) : undefined
-
-            const props = Array.isArray(v.content.topicVersion.props) ? v.content.topicVersion.props as unknown as TopicProp[] : []
-
-            const view: VersionInHistory = {
-                $type: "ar.cabildoabierto.wiki.topicVersion#versionInHistory",
-                uri: v.uri,
-                cid: v.cid,
-                author,
-                message: v.content.topicVersion.message,
-                viewer: {
-                    accept,
-                    reject
-                },
-                status: status,
-                addedChars: v.content.topicVersion.charsAdded ?? undefined,
-                removedChars: v.content.topicVersion.charsDeleted ?? undefined,
-                props,
-                createdAt: v.createdAt.toISOString(),
-                contribution,
-                prevAccepted: v.content.topicVersion.prevAcceptedUri ?? undefined
-            }
-            return view
-        }).filter(v => v != null)
-    }
-    return topicHistory
-}
-
-
-export const getTopicHistoryHandler: CAHandler<{ params: { id: string } }, TopicHistory> = async (ctx, agent, {params}) => {
-    const {id} = params
-    try {
-        const topicHistory = await getTopicHistory(ctx.db, id, agent)
-
-        return {data: topicHistory}
-    } catch (e) {
-        console.error("Error getting topic " + id)
-        console.error(e)
-        return {error: "No se pudo obtener el historial."}
-    }
-}
-
 export const redisCacheEnabled = false
 
 async function cached<T>(ctx: AppContext, key: string[], fn: () => Promise<{ data?: T, error?: string }>): Promise<{
@@ -607,127 +457,10 @@ export const getTopicVersionHandler: CAHandler<{
 }
 
 
-type TopicContributor = {profile: ProfileViewBasicCA, all: number, monetized: number}
-
-type TopicVersionAuthorProps = {
-    text: string
-    format: string
-    authors: TopicContributor[]
-}
-
-export const getTopicVersionAuthors: CAHandler<{
-    params: { did: string, rkey: string }
-}, TopicVersionAuthorProps> = async (ctx, agent, {params}) => {
-    const {did, rkey} = params
-
-    const id = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey)
-    if(!id){
-        return {error: "No se encontró el tema."}
-    }
-    const history = await getTopicHistory(ctx.db, id)
-
-    const authors = new Map<string, TopicContributor>()
-
-    history.versions.forEach(v => {
-        const profile: ProfileViewBasicCA = {
-            ...v.author,
-            $type: "ar.cabildoabierto.actor.defs#profileViewBasic",
-        }
-        let contribution = v.contribution
-
-        if(contribution){
-            const cur = authors.get(profile.did)
-            if(cur){
-                authors.set(profile.did, {
-                    profile,
-                    all: parseFloat((contribution.all ?? 0).toString()) + cur.all,
-                    monetized: parseFloat((contribution.monetized ?? 0).toString()) + cur.monetized
-                })
-            } else {
-                authors.set(profile.did, {
-                    profile,
-                    all: parseFloat((contribution.all ?? 0).toString()),
-                    monetized: parseFloat((contribution.monetized ?? 0).toString())
-                })
-            }
-        }
-    })
 
 
-    return {
-        data: {
-            text: "En construcción",
-            format: "markdown",
-            authors: Array.from(authors.values())
-        }
-    }
-}
-
-export type MatchesType = {
-    matches: {x: number, y: number}[]
-    common: {x: number, y: number}[]
-    perfectMatches: {x: number, y: number}[]
-}
-
-export type TopicVersionChangesProps = {
-    prevText: string
-    prevFormat: string | undefined
-    curText: string
-    curFormat: string | undefined
-    curAuthor: ProfileViewBasicCA
-    prevAuthor: ProfileViewBasicCA
-    diff: MatchesType
-}
 
 
-function anyEditorStateToNodesForDiff(text: string, format?: string | null) {
-    const mdOrLexical = anyEditorStateToMarkdownOrLexical(text, format)
-    if (mdOrLexical.format == "lexical"){
-        return null
-    } else {
-        return mdOrLexical.text.split("\n\n")
-    }
-}
-
-
-export const getTopicVersionChanges: CAHandler<{
-    params: { curDid: string, curRkey: string, prevDid: string, prevRkey: string }
-}, TopicVersionChangesProps> = async (ctx, agent, {params}) => {
-    const {curDid, prevDid, curRkey, prevRkey} = params
-
-    const curUri = getUri(curDid, "ar.cabildoabierto.wiki.topicVersion", curRkey)
-    const prevUri = getUri(prevDid, "ar.cabildoabierto.wiki.topicVersion", prevRkey)
-    const cur = await getTopicVersion(ctx, agent, curUri)
-    const prev = await getTopicVersion(ctx, agent, prevUri)
-
-    if(!cur.data || !prev.data){
-        return {error: "No se encontró una de las versiones."}
-    }
-
-    const nodes1 = anyEditorStateToNodesForDiff(prev.data.text, prev.data.format)
-    const nodes2 = anyEditorStateToNodesForDiff(cur.data.text, cur.data.format)
-
-    if(!nodes1 || !nodes2){
-        return {error: "No se pudo procesar una de las versiones."}
-    }
-
-    const d = diff(nodes1, nodes2)
-    if(!d){
-        return {error: "Ocurrió un error al analizar los cambios."}
-    }
-
-    return {
-        data: {
-            curText: cur.data.text,
-            curFormat: cur.data.format,
-            prevText: prev.data.text,
-            prevFormat: prev.data.format,
-            curAuthor: cur.data.author,
-            prevAuthor: prev.data.author,
-            diff: d
-        }
-    }
-}
 
 
 export async function getTopicsTitles(ctx: AppContext, ids: string[]) {
@@ -751,12 +484,9 @@ export async function getTopicsTitles(ctx: AppContext, ids: string[]) {
 
 
 export const getTopicsMentioned: CAHandler<{title: string, text: string}, TopicMention[]> = async (ctx, agent, {title, text}) => {
-    const t1 = Date.now()
     const m = await getSynonymsToTopicsMap(ctx)
     const refs = getTopicsReferencedInText(text + " " + title, m)
-    const t2 = Date.now()
     const titles = await getTopicsTitles(ctx, refs.map(r => r.topicId))
-    const t3 = Date.now()
     const data = refs
         .map(r => ({id: r.topicId, count: r.count, title: gett(titles, r.topicId)}))
         .sort((a, b) => (b.count - a.count))

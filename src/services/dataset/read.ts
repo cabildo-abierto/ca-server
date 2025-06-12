@@ -1,7 +1,7 @@
 import {decompress} from "#/utils/compression";
 import {DatasetView, DatasetViewBasic} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
 import {CAHandler} from "#/utils/handler";
-import {dbUserToProfileViewBasic} from "#/services/topic/topics";
+import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {getUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {Dataplane} from "#/services/hydration/dataplane";

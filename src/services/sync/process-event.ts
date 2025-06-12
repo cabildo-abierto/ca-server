@@ -22,7 +22,7 @@ import {
     processDeleteTopicVersion,
     getTopicIdFromTopicVersionUri,
     updateTopicCurrentVersion
-} from "#/services/topic/current-version";
+} from "#/services/wiki/current-version";
 import {decrementReactionCounter, ReactionRecord} from "#/services/reactions/reactions";
 import {isReactionCollection} from "#/utils/type-utils";
 import {CID} from "multiformats/cid";

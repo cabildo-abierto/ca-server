@@ -1,11 +1,11 @@
 import { CAHandler } from "#/utils/handler"
 import {AppContext} from "#/index";
-import {getTopicHistory} from "#/services/topic/topics";
 import {Dataplane, getBlobKey} from "#/services/hydration/dataplane";
 import {BlobRef} from "#/services/hydration/hydrate";
-import {nodesCharDiff} from "#/services/topic/diff";
+import {nodesCharDiff} from "#/services/wiki/diff";
 import {decompress} from "#/utils/compression";
-import {isVersionAccepted, isVersionMonetized} from "#/services/topic/current-version";
+import {isVersionAccepted, isVersionMonetized} from "#/services/wiki/current-version";
+import {getTopicHistory} from "#/services/wiki/history";
 
 
 

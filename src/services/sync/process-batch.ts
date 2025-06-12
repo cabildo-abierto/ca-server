@@ -28,7 +28,7 @@ import {
 } from "#/services/sync/process-event";
 import {ReactionRecord, ReactionType} from "#/services/reactions/reactions";
 import {v4 as uuidv4} from 'uuid'
-import {isTopicVote} from "#/services/topic/votes";
+import {isTopicVote} from "#/services/wiki/votes";
 import {isRecord as isVoteReject} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject"
 import {JsonArray} from "@prisma/client/runtime/library";
 import {Prisma} from "@prisma/client";
@@ -523,6 +523,7 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
         topicId: r.record.id,
         message: r.record.message ? r.record.message : undefined,
         props: r.record.props ? JSON.stringify(r.record.props) : undefined,
+        authorship: r.record.claimsAuthorship
     }))
 
     await ctx.kysely.transaction().execute(async (trx) => {

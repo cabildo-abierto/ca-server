@@ -44,6 +44,9 @@
             "createdAt": {
               "type": "string",
               "format": "datetime"
+            },
+            "claimsAuthorship": {
+              "type": "boolean"
             }
           }
         }
@@ -170,6 +173,9 @@
               "type": "ref",
               "ref": "#topicProp"
             }
+          },
+          "claimsAuthorship": {
+            "type": "boolean"
           }
         }
       },

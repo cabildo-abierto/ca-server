@@ -2,18 +2,18 @@ import express from 'express'
 import type {AppContext} from '#/index'
 import {CAHandler, CAHandlerNoAuth, makeHandler} from "#/utils/handler";
 import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user";
-import {updateReferencesHandler} from "#/services/topic/references";
+import {updateReferencesHandler} from "#/services/wiki/references";
 import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete";
 import {getAvailableInviteCodes} from "#/services/user/access";
 import {updateEngagementCountsHandler} from "#/services/feed/getUserEngagement";
-import {updateTopicsPopularityHandler} from "#/services/topic/popularity";
+import {updateTopicsPopularityHandler} from "#/services/wiki/popularity";
 import {getUsers} from "#/services/user/users";
-import {getAllTopics} from "#/services/topic/topics";
+import {getAllTopics} from "#/services/wiki/topics";
 import {sessionAgent} from "#/utils/session-agent";
 import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration";
 import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation";
 import {processPayment} from "#/services/monetization/donations";
-import {updateTopicContributionsHandler} from "#/services/topic/contributions";
+import {updateTopicContributionsHandler} from "#/services/wiki/contributions";
 import {getStatsDashboard} from "#/services/admin/stats";
 
 

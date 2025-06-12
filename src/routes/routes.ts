@@ -25,20 +25,18 @@ import {addLike, removeLike, removeRepost, repost} from "#/services/reactions/re
 import {getThread} from "#/services/thread/thread";
 import {
     getTopicHandler,
-    getTopicHistoryHandler,
     getTopicVersionHandler,
-    getTopicVersionChanges,
     getTopTrendingTopics,
     getTopicsHandler,
     getCategories,
     getTopicsMentioned
-} from "#/services/topic/topics";
+} from "#/services/wiki/topics";
 import {getTopicFeed} from "#/services/feed/topic";
 import {deleteRecordHandler, deleteRecordsHandler} from "#/services/delete";
-import {getCategoriesGraph, getCategoryGraph} from "#/services/topic/graph";
+import {getCategoriesGraph, getCategoryGraph} from "#/services/wiki/graph";
 import {createTopicVersion} from "#/services/write/topic";
 import path from "path";
-import {cancelEditVote, voteEdit} from "#/services/topic/votes";
+import {cancelEditVote, voteEdit} from "#/services/wiki/votes";
 import { adminRoutes } from './admin-routes';
 import { fetchURLMetadata } from '#/services/write/metadata';
 import {getDataset, getDatasets } from '#/services/dataset/read';
@@ -48,7 +46,9 @@ import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/di
 import {cancelValidationRequest, createValidationRequest, getValidationRequest } from '#/services/user/validation';
 import {createPreference, getDonationHistory, getMonthlyValueHandler, processPayment} from '#/services/monetization/donations';
 import { storeReadSession } from '#/services/monetization/read-tracking';
-import { getTopicTitleHandler } from '#/services/topic/current-version';
+import { getTopicTitleHandler } from '#/services/wiki/current-version';
+import {getTopicHistoryHandler} from "#/services/wiki/history";
+import {getNewVersionDiff, getTopicVersionChanges} from '#/services/wiki/changes';
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -211,6 +211,11 @@ export const createRouter = (ctx: AppContext) => {
     router.get(
         '/topic-version-changes/:curDid/:curRkey/:prevDid/:prevRkey',
         makeHandler(ctx, getTopicVersionChanges)
+    )
+
+    router.post(
+        '/diff',
+        makeHandler(ctx, getNewVersionDiff)
     )
 
     router.post(

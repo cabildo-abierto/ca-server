@@ -3,7 +3,7 @@ import {AppContext} from "#/index";
 import {gett, unique} from "#/utils/arrays";
 import {decompress} from "#/utils/compression";
 import {CAHandler} from "#/utils/handler";
-import {getTopicSynonyms} from "#/services/topic/utils";
+import {getTopicSynonyms} from "#/services/wiki/utils";
 import {getCollectionFromUri, getDidFromUri, isPost} from "#/utils/uri";
 import {BlobRef} from "#/services/hydration/hydrate";
 import {fetchTextBlobs} from "#/services/blob";

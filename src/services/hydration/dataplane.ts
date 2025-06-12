@@ -12,7 +12,7 @@ import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
 import {articleUris, getCollectionFromUri, getDidFromUri, isArticle, postUris, topicVersionUris} from "#/utils/uri";
 import {AppBskyEmbedRecord} from "@atproto/api";
 import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
-import {TopicQueryResultBasic} from "#/services/topic/topics";
+import {TopicQueryResultBasic} from "#/services/wiki/topics";
 import {authorQuery, reactionsQuery, recordQuery} from "#/utils/utils";
 import {FeedViewPost, isPostView, PostView} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {fetchTextBlobs} from "#/services/blob";

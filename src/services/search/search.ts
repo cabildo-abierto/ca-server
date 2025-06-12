@@ -8,7 +8,7 @@ import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/
 import { Prisma } from "@prisma/client";
 import {AppContext} from "#/index";
 import { JsonObject } from "@prisma/client/runtime/library";
-import {hydrateTopicViewBasicFromTopicId} from "#/services/topic/topics";
+import {hydrateTopicViewBasicFromTopicId} from "#/services/wiki/topics";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {SessionAgent} from "#/utils/session-agent";
 

@@ -1,4 +1,4 @@
-import {getTopic, getTopicHistory} from "./topics";
+import {getTopic} from "./topics";
 import {max} from "#/utils/arrays";
 import {AppContext} from "#/index";
 import {TopicProp, TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
@@ -7,7 +7,8 @@ import {getDidFromUri, getRkeyFromUri, getUri} from "#/utils/uri";
 import {VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {addUpdateContributionsJobForTopics} from "#/services/sync/process-batch";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
-import {getTopicTitle} from "#/services/topic/utils";
+import {getTopicTitle} from "#/services/wiki/utils";
+import {getTopicHistory} from "#/services/wiki/history";
 
 
 export function getTopicLastEditFromVersions(topic: { versions: { content: { record: { createdAt: Date } } }[] }) {

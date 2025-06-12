@@ -8,7 +8,7 @@ import {hydrateFeedViewContent} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {isNotFoundPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {Dataplane} from "#/services/hydration/dataplane";
-import {getTopicIdFromTopicVersionUri} from "#/services/topic/current-version";
+import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
 
 
 const getTopicRepliesSkeleton = async (ctx: AppContext, agent: SessionAgent, id: string) => {

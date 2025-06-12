@@ -4,7 +4,7 @@ import {ImagePayload} from "#/services/write/post";
 import {AppContext} from "#/index";
 import {BlobRef} from "#/services/hydration/hydrate";
 import {getBlobKey} from "#/services/hydration/dataplane";
-import {redisCacheTTL} from "#/services/topic/topics";
+import {redisCacheTTL} from "#/services/wiki/topics";
 import {imageSize} from "image-size";
 import {range} from "#/utils/arrays";
 
