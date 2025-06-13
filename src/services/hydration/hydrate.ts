@@ -28,12 +28,12 @@ import {
 import {creationDateSortKey} from "#/services/feed/utils";
 import {Dataplane, FeedElementQueryResult} from "#/services/hydration/dataplane";
 import {markdownToPlainText} from "#/utils/lexical/transforms";
-import {hydrateTopicViewBasicFromUri} from "#/services/wiki/topics";
+import {hydrateEmbedViews, hydrateTopicViewBasicFromUri} from "#/services/wiki/topics";
 import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {getTopicTitle} from "#/services/wiki/utils";
 import {isMain as isVisualizationEmbed, View as VisualizationEmbedView, Main as VisualizationEmbed, isDatasetDataSource} from "#/lex-server/types/ar/cabildoabierto/embed/visualization"
 import {hydrateDatasetView} from "#/services/dataset/read";
-import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article"
+import {ArticleEmbed, Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 
 
 const queryResultToProfileViewBasic = (e: FeedElementQueryResult["author"]): CAProfileViewBasic | null => {
@@ -79,6 +79,11 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
 
     if (!text || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
 
+    const record = e.record ? JSON.parse(e.record) as ArticleRecord : undefined
+    console.log("article record", record?.embeds)
+    const embeds = hydrateEmbedViews(author.did, record?.embeds ?? [])
+    console.log("embed views", embeds)
+
     return {
         data: {
             $type: "ar.cabildoabierto.feed.defs#fullArticleView",
@@ -99,7 +104,8 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
                 count: m.count,
                 title: getTopicTitle(m.referencedTopic),
                 id: m.referencedTopic.id
-            }))
+            })),
+            embeds
         }
     }
 }

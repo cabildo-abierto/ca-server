@@ -1,15 +1,86 @@
-import {processCreate, processTopicVersion} from "../sync/process-event";
+import {processTopicVersion} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
 import {CAHandler} from "#/utils/handler";
 import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {uploadStringBlob} from "#/services/blob";
+import {uploadBase64Blob, uploadStringBlob} from "#/services/blob";
 import {BlobRef} from "@atproto/lexicon";
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
-import {isTopicProp, isNumberProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+import {ArticleEmbedView, ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
+import {isView as isImagesEmbedView, Image} from "#/lex-api/types/app/bsky/embed/images"
+import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 
 
-export async function createTopicVersionATProto(agent: SessionAgent, {id, text, format, message, props, embeds, claimsAuthorship}: CreateTopicVersionProps){
+export async function getEmbedsFromEmbedViews(agent: SessionAgent, embeds?: ArticleEmbedView[], embedContexts?: EmbedContext[]): Promise<{data?: ArticleEmbed[], error?: string}> {
+    let embedMains: ArticleEmbed[] = []
+    if(embeds){
+        for(let i = 0; i < embeds.length; i++){
+            const e = embeds[i]
+            if(isImagesEmbedView(e.value)){
+                if(embedContexts && embedContexts[i]){
+                    const context = embedContexts[i]
+                    if(context?.base64files){
+                        const blobs = await Promise.all(context.base64files.map(f => uploadBase64Blob(agent, f)))
+                        const images: Image[] = []
+                        for(let j = 0; j < blobs.length; j++){
+                            const b = blobs[j]
+                            images.push({
+                                $type: "app.bsky.embed.images#image",
+                                image: b.ref,
+                                alt: ""
+                            })
+                        }
+                        embedMains.push({
+                            $type: "ar.cabildoabierto.feed.article#articleEmbed",
+                            value: {
+                                $type: "app.bsky.embed.images",
+                                images
+                            },
+                            index: e.index
+                        })
+                    }
+                } else {
+                    const images: Image[] = []
+                    for(let j = 0; j < e.value.images.length; j++){
+                        const img = e.value.images[j]
+                        const url = img.fullsize && img.fullsize.length > 0 ? img.fullsize : img.thumb
+                        const res = await fetch(url)
+                        if(!res.ok){
+                            return {error: "No se encontró la imagen."}
+                        }
+                        const blob = await res.blob();
+                        const arrayBuffer = await blob.arrayBuffer();
+                        const buffer = Buffer.from(arrayBuffer);
+                        const base64 = buffer.toString('base64');
+                        const blobRef = await uploadBase64Blob(agent, base64)
+                        images.push({
+                            $type: "app.bsky.embed.images#image",
+                            image: blobRef.ref,
+                            alt: ""
+                        })
+                    }
+                    embedMains.push({
+                        $type: "ar.cabildoabierto.feed.article#articleEmbed",
+                        value: {
+                            $type: "app.bsky.embed.images",
+                            images
+                        },
+                        index: e.index
+                    })
+                }
+            } else if(isVisualizationEmbed(e.value)){
+                embedMains.push({
+                    $type: "ar.cabildoabierto.feed.article#articleEmbed",
+                    value: e.value,
+                    index: e.index
+                })
+            }
+        }
+    }
+    return {data: embedMains}
+}
+
+
+export async function createTopicVersionATProto(agent: SessionAgent, {id, text, format, message, props, embeds, embedContexts, claimsAuthorship}: CreateTopicVersionProps){
     let blob: BlobRef | null = null
 
     if(text){
@@ -35,6 +106,11 @@ export async function createTopicVersionATProto(agent: SessionAgent, {id, text, 
         }
     }
 
+    const embedMains = await getEmbedsFromEmbedViews(agent, embeds, embedContexts)
+    if(embedMains.error){
+        return {error: embedMains.error}
+    }
+
     const record: TopicVersionRecord = {
         $type: "ar.cabildoabierto.wiki.topicVersion",
         text: text && blob ? blob : undefined,
@@ -43,7 +119,7 @@ export async function createTopicVersionATProto(agent: SessionAgent, {id, text, 
         id,
         props: validatedProps,
         createdAt: new Date().toISOString(),
-        embeds: embeds ?? [],
+        embeds: embedMains.data,
         claimsAuthorship: claimsAuthorship
     }
 
@@ -56,6 +132,11 @@ export async function createTopicVersionATProto(agent: SessionAgent, {id, text, 
 }
 
 
+export type EmbedContext = {
+    base64files?: string[]
+} | null
+
+
 type CreateTopicVersionProps = {
     id: string
     text?: string
@@ -63,7 +144,8 @@ type CreateTopicVersionProps = {
     props?: TopicProp[]
     message?: string,
     claimsAuthorship?: boolean
-    embeds?: ArticleEmbed[]
+    embeds?: ArticleEmbedView[]
+    embedContexts?: EmbedContext[]
 }
 
 

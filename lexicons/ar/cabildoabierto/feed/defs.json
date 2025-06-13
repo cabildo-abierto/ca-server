@@ -316,6 +316,13 @@
         "threadgate": {
           "type": "ref",
           "ref": "app.bsky.feed.defs#threadgateView"
+        },
+        "embeds": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "ar.cabildoabierto.feed.article#articleEmbedView"
+          }
         }
       }
     },

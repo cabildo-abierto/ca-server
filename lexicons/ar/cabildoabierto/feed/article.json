@@ -50,7 +50,25 @@
           "value": {
             "type": "union",
             "refs": [
-              "ar.cabildoabierto.embed.visualization"
+              "ar.cabildoabierto.embed.visualization",
+              "app.bsky.embed.images"
+            ]
+          },
+          "index": {
+            "type": "integer"
+          }
+        }
+      },
+      "articleEmbedView": {
+        "type": "object",
+        "required": ["value", "index"],
+        "properties": {
+          "value": {
+            "type": "union",
+            "refs": [
+              "ar.cabildoabierto.embed.visualization",
+              "ar.cabildoabierto.embed.visualization#view",
+              "app.bsky.embed.images#view"
             ]
           },
           "index": {

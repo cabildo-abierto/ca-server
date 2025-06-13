@@ -122,7 +122,8 @@ export async function uploadImageSrcBlob(agent: SessionAgent, src: string){
 
 
 export async function uploadBase64Blob(agent: SessionAgent, base64: string){
-    const arrayBuffer = Buffer.from(base64, "base64")
+    const base64Data = base64.replace(/^data:.*?;base64,/, '');
+    const arrayBuffer = Buffer.from(base64Data, "base64")
     const uint8 = new Uint8Array(arrayBuffer);
     const res = await agent.bsky.uploadBlob(uint8)
     return {ref: res.data.blob, size: imageSize(uint8)}

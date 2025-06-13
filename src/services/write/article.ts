@@ -1,4 +1,4 @@
-import {processArticle, processCreate} from "#/services/sync/process-event";
+import {processArticle} from "#/services/sync/process-event";
 import {uploadStringBlob} from "#/services/blob";
 import {CAHandler} from "#/utils/handler";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
@@ -9,14 +9,16 @@ import {DB, ReferenceType} from "../../../prisma/generated/types";
 import {v4 as uuidv4} from 'uuid'
 import {ATProtoStrongRef} from "#/lib/types";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
-import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
+import {ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article";
+import {EmbedContext, getEmbedsFromEmbedViews} from "#/services/write/topic";
 
 export type CreateArticleProps = {
     title: string
     format: string
     text: string
     enDiscusion: boolean
-    embeds?: ArticleEmbed[]
+    embeds?: ArticleEmbedView[]
+    embedContexts?: EmbedContext[]
 }
 
 export const createArticleAT = async (agent: SessionAgent, article: CreateArticleProps) => {
@@ -24,13 +26,18 @@ export const createArticleAT = async (agent: SessionAgent, article: CreateArticl
     const text = article.text
     const blobRef = await uploadStringBlob(agent, text)
 
+    const embedMains = await getEmbedsFromEmbedViews(agent, article.embeds, article.embedContexts)
+    if(embedMains.error){
+        return {error: embedMains.error}
+    }
+
     const record: ArticleRecord = {
         "$type": "ar.cabildoabierto.feed.article",
         title: article.title,
         format: article.format,
         text: blobRef,
         createdAt: new Date().toISOString(),
-        embeds: article.embeds,
+        embeds: embedMains.data,
         labels: article.enDiscusion ? {$type: "com.atproto.label.defs#selfLabels", values: [{val: "ca:en discusión"}]} : undefined
     }
 
@@ -48,10 +55,15 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
     let record: ArticleRecord
     let mentions: TopicMention[] | undefined
     try {
-        [{ref, record}, {data: mentions}] = await Promise.all([
+        const [res, {data}] = await Promise.all([
             createArticleAT(agent, article),
             getTopicsMentioned(ctx, agent, article)
         ])
+        if(res.error || !res.ref || !res.record) return {error: res.error}
+
+        ref = res.ref
+        record = res.record
+        mentions = data
     } catch (err) {
         return {error: "Ocurrió un error al publicar el artículo."}
     }

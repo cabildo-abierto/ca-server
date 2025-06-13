@@ -15,7 +15,10 @@ import {getSynonymsToTopicsMap, getTopicsReferencedInText} from "#/services/wiki
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
 import {gett} from "#/utils/arrays";
 import {getTopicHistoryHandler} from "#/services/wiki/history";
-
+import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+import {ArticleEmbed, ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article"
+import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
+import {isMain as isImagesEmbed, View as ImagesEmbedView} from "#/lex-api/types/app/bsky/embed/images"
 
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
     return await getTopics(ctx, agent, [], "popular", 10)
@@ -349,6 +352,43 @@ export const getCachedTopicVersion = async (ctx: AppContext, agent: SessionAgent
 }
 
 
+export function hydrateEmbedViews(authorId: string, embeds: ArticleEmbed[]): ArticleEmbedView[] {
+    const views: ArticleEmbedView[] = []
+    for(let i = 0; i < embeds.length; i++) {
+        const e = embeds[i]
+        if(isVisualizationEmbed(e.value)){
+            views.push({
+                $type: "ar.cabildoabierto.feed.article#articleEmbedView",
+                value: {
+                    ...e.value,
+                    $type: "ar.cabildoabierto.embed.visualization"
+                },
+                index: e.index
+            })
+        } else if(isImagesEmbed(e.value)) {
+            const embed = e.value
+            const imagesView: $Typed<ImagesEmbedView> = {
+                $type: "app.bsky.embed.images#view",
+                images: embed.images.map(i => {
+                    return {
+                        $type: "app.bsky.embed.images#viewImage",
+                        alt: i.alt,
+                        thumb: `https://cdn.bsky.app/img/feed_thumbnail/plain/${authorId}/${i.image.ref.$link}`,
+                        fullsize: `https://cdn.bsky.app/img/feed_fullsize/plain/${authorId}/${i.image.ref.$link}`
+                    }
+                })
+            }
+            views.push({
+                $type: "ar.cabildoabierto.feed.article#articleEmbedView",
+                value: imagesView,
+                index: e.index
+            })
+        }
+    }
+    return views
+}
+
+
 export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri: string): Promise<{
     data?: TopicView,
     error?: string
@@ -422,13 +462,15 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
     const id = topic.content.topicVersion.topic.id
 
     if (!author || !topic.cid) {
-        console.log(author != null, topic.cid != null)
         return {error: "No se encontró el tema " + id + "."}
     }
 
     const {text: transformedText, format: transformedFormat} = anyEditorStateToMarkdownOrLexical(text, topic.content.format)
 
     const props = Array.isArray(topic.content.topicVersion.props) ? topic.content.topicVersion.props as unknown as TopicProp[] : []
+
+    const record = topic.record ? JSON.parse(topic.record) as TopicVersionRecord : undefined
+    const embeds = record ? hydrateEmbedViews(author.did, record.embeds ?? []) : []
 
     const view: TopicView = {
         $type: "ar.cabildoabierto.wiki.topicVersion#topicView",
@@ -442,7 +484,8 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
         createdAt: topic.createdAt.toISOString(),
         lastEdit: topic.content.topicVersion.topic.lastEdit?.toISOString() ?? topic.createdAt.toISOString(),
         currentVersion: topic.content.topicVersion.topic.currentVersionId ?? undefined,
-        record: topic.record ? JSON.parse(topic.record) : undefined
+        record: topic.record ? JSON.parse(topic.record) : undefined,
+        embeds
     }
 
     return {data: view}

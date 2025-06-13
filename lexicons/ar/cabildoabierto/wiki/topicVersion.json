@@ -101,6 +101,13 @@
           "author": {
             "type": "ref",
             "ref": "ar.cabildoabierto.actor.defs#profileViewBasic"
+          },
+          "embeds": {
+            "type": "array",
+            "items": {
+              "type": "ref",
+              "ref": "#articleEmbedView"
+            }
           }
         }
       },

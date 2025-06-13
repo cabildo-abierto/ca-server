@@ -53,6 +53,7 @@ export interface TopicView {
   lastEdit: string
   createdAt: string
   author: ArCabildoabiertoActorDefs.ProfileViewBasic
+  embeds?: ArticleEmbedView[]
 }
 
 const hashTopicView = 'topicView'
