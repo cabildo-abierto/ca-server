@@ -26,7 +26,7 @@ function countSynonymInText(regex: RegExp, textCleaned: string): number {
 
 
 export const updateReferencesHandler: CAHandler = async (ctx, agent, {}) => {
-    await ctx.queue.add("update-references", {})
+    await ctx.worker?.addJob("update-references", {})
 
     return {data: {}}
 }
@@ -305,7 +305,6 @@ export async function getSynonymsToTopicsMap(ctx: AppContext, topicsList?: strin
     const topics = await ctx.db.topic.findMany({
         select: {
             id: true,
-            synonyms: true,
             currentVersion: {
                 select: {
                     props: true

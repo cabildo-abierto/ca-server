@@ -150,6 +150,23 @@ type CreateTopicVersionProps = {
 
 
 export const createTopicVersion: CAHandler<CreateTopicVersionProps> = async (ctx, agent, params) => {
+    if(params.text == undefined){
+        const exists = await ctx.db.topic.findFirst({
+            where: {
+                id: {
+                    equals: params.id,
+                    mode: 'insensitive'
+                },
+                versions: {
+                    some: {}
+                }
+            }
+        })
+        if(exists){
+            return {error: "Ya existe un tema con ese nombre."}
+        }
+    }
+
     const {error, ref, record} = await createTopicVersionATProto(agent, params)
     if(!error && ref && record){
         await processTopicVersion(ctx, ref, record)

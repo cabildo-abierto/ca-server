@@ -500,12 +500,6 @@ export const getTopicVersionHandler: CAHandler<{
 }
 
 
-
-
-
-
-
-
 export async function getTopicsTitles(ctx: AppContext, ids: string[]) {
     const res = await ctx.db.topic.findMany({
         select: {

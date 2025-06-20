@@ -42,7 +42,7 @@ export const deleteRecordsHandler: CAHandler<{uris: string[], atproto: boolean}>
 
 export const deleteCollectionHandler: CAHandler<{params: {collection: string}}, {}> = async (ctx, agent, {params}) => {
     const {collection} = params
-    await ctx.queue.add("delete-collection", {collection})
+    await ctx.worker?.addJob("delete-collection", {collection})
     return {data: {}}
 }
 

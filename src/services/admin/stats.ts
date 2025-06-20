@@ -30,3 +30,5 @@ export const getStatsDashboard: CAHandler<{}, StatsDashboard> = async (ctx, agen
 
     return {data: {lastUsers: profiles.map(p => ({...p, createdAt: users.find(u => u.did == p.did)?.createdAt.toString()}))}}
 }
+
+

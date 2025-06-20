@@ -61,7 +61,8 @@ model User {
 
   validationRequests ValidationRequest[]
 
-  readSessions ReadSession[]
+  readSessions ReadSession[] @relation("readUser")
+  readSessionsReceived ReadSession[] @relation("readAuthor")
 
   donations Donation[]
   months UserMonth[]
@@ -155,11 +156,11 @@ model Topic {
   currentVersion     TopicVersion?     @relation("currentVersion", fields: [currentVersionId], references: [uri])
   currentVersionId   String?           @unique
   referencedBy       Reference[]
-  synonyms           String[]
   categories         TopicToCategory[]
   lastSynonymsChange DateTime?
   popularityScore    Int?              @default(1)
   lastEdit           DateTime?         @updatedAt
+  readSessions       ReadSession[]
 }
 
 model TopicVersion {
@@ -262,13 +263,17 @@ model Content {
 }
 
 model ReadSession {
-  id     String       @id @default(uuid())
+  id     String        @id @default(uuid())
   userId String
-  user User           @relation(fields: [userId], references: [did])
-  createdAt           DateTime        @default(now()) @map("created_at")
+  user User            @relation("readUser", fields: [userId], references: [did])
+  createdAt            DateTime        @default(now()) @map("created_at")
   readChunks Json
-  readContentId String
-  readContent Content @relation(fields: [readContentId], references: [uri])
+  readContentId String?
+  readContent Content? @relation(fields: [readContentId], references: [uri])
+  contentAuthorId String
+  contentAuthor User   @relation("readAuthor", fields: [contentAuthorId], references: [did])
+  topicId String?
+  topic Topic?         @relation(fields: [topicId], references: [id])
 }
 
 model Post {

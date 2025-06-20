@@ -46,7 +46,6 @@ function isProfile(collection: string) {
 }
 
 export async function processEvent(ctx: AppContext, e: JetstreamEvent) {
-    console.log("Event!", e.did, e.kind == "commit" ? (e as CommitEvent).commit.uri : e.kind)
     if (e.kind == "commit") {
         const c = e as CommitEvent
 

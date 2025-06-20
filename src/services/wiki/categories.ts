@@ -34,7 +34,6 @@ export async function updateTopicsCategories(ctx: AppContext) {
 
     await ctx.kysely.transaction().execute(async (trx) => {
         console.log('Inserting categories.');
-        console.log(allCategoryIds)
         await ctx.kysely
             .insertInto('TopicCategory')
             .values(allCategoryIds.map((id) => ({id})))

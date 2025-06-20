@@ -254,7 +254,7 @@ export const syncUserHandler: CAHandler<{
     const {handleOrDid} = params
     const {c} = query
 
-    await ctx.queue.add("sync-user", {
+    await ctx.worker?.addJob("sync-user", {
         handleOrDid,
         collectionsMustUpdate: c ? (typeof c == "string" ? [c] : c) : undefined
     })
@@ -267,7 +267,7 @@ export const syncAllUsersHandler: CAHandler<{
     query: { c: string | string[] | undefined }
 }, {}> = async (ctx, agent, {query}) => {
     const data = {collectionsMustUpdate: query.c ? (typeof query.c == "string" ? [query.c] : query.c) : []}
-    await ctx.queue.add("sync-all-users", data)
+    await ctx.worker?.addJob("sync-all-users", data)
     console.log("Added sync all users to queue with data", data)
     return {data: {}}
 }

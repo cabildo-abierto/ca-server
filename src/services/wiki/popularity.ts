@@ -102,7 +102,7 @@ export async function computeTopicsPopularityScore(ctx: AppContext): Promise<{
 
 
 export const updateTopicsPopularityHandler: CAHandler<{}, {}> = async (ctx, agent, {}) => {
-    await ctx.queue.add("update-topics-popularity", {})
+    await ctx.worker?.addJob("update-topics-popularity", {})
     return {data: {}}
 }
 

@@ -15,8 +15,7 @@ export async function getFullTopicList(ctx: AppContext){
                     categoryId: true
                 }
             },
-            lastEdit: true,
-            synonyms: true
+            lastEdit: true
         },
         where: {
             versions: {

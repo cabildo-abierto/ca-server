@@ -80,9 +80,7 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
     if (!text || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
 
     const record = e.record ? JSON.parse(e.record) as ArticleRecord : undefined
-    console.log("article record", record?.embeds)
     const embeds = hydrateEmbedViews(author.did, record?.embeds ?? [])
-    console.log("embed views", embeds)
 
     return {
         data: {
@@ -196,6 +194,9 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
         }
         if (!title) return null
 
+        const embedsData = caData.content.embeds ?? []
+        const embeds = hydrateEmbedViews(author.did, embedsData as unknown as ArticleEmbed[])
+
         return {
             $type: "ar.cabildoabierto.embed.selectionQuote#view",
             start: embed.start,
@@ -205,7 +206,7 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
             quotedContentTitle: title,
             quotedContent,
             quotedContentAuthor: author,
-            quotedContentEmbeds: caData.content.embeds as unknown as ArticleEmbed[]
+            quotedContentEmbeds: embeds
         }
     } else {
         return null

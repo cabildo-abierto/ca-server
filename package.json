@@ -7,6 +7,7 @@
   "main": "index.ts",
   "private": true,
   "scripts": {
+    "worker": "tsx watch --clear-screen=false src/worker.ts | pino-pretty",
     "dev": "tsx watch --clear-screen=false src/index.ts | pino-pretty",
     "build": "tsup",
     "typecheck": "tsc --noEmit",

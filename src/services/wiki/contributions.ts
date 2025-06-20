@@ -11,8 +11,7 @@ import {getTopicHistory} from "#/services/wiki/history";
 
 export const updateTopicContributionsHandler: CAHandler<{params: {id: string}}, {}> = async (ctx, agent, {params}) => {
     const {id} = params
-    console.log("adding job", id)
-    await ctx.queue.add(`update-topic-contributions:${id}`, {id})
+    await ctx.worker?.addJob(`update-topic-contributions`, [id])
     return {data: {}}
 }
 
@@ -47,15 +46,28 @@ function getMarkdown(v: {content: {textBlobId: string | null, format: string | n
 }
 
 
-export const updateTopicContributions = async (ctx: AppContext, id: string) => {
+export const updateTopicContributions = async (ctx: AppContext, topicIds: string[]) => {
     const t1 = Date.now()
 
-    const history = await getTopicHistory(ctx.db, id)
-    history.versions = history.versions.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    type TopicVersion = {
+        uri: string
+        authorship: boolean
+        topicId: string
+        content: {
+            format: string | null
+            textBlobId: string | null
+            record: {
+                authorId: string
+                createdAt: Date
+            }
+        }
+    }
 
-    const versions = await ctx.db.topicVersion.findMany({
+    const versions: TopicVersion[] = await ctx.db.topicVersion.findMany({
         select: {
             uri: true,
+            topicId: true,
+            authorship: true,
             content: {
                 select: {
                     format: true,
@@ -70,7 +82,9 @@ export const updateTopicContributions = async (ctx: AppContext, id: string) => {
             }
         },
         where: {
-            topicId: id
+            topicId: {
+                in: topicIds
+            }
         },
         orderBy: {
             content: {
@@ -92,7 +106,13 @@ export const updateTopicContributions = async (ctx: AppContext, id: string) => {
     const dataplane = new Dataplane(ctx)
     await dataplane.fetchTextBlobs(blobRefs)
 
-    let updates: {
+    const versionsByTopic = new Map<string, TopicVersion[]>()
+
+    versions.forEach(v => {
+        versionsByTopic.set(v.topicId, [...(versionsByTopic.get(v.topicId) ?? []), v])
+    })
+
+    type Upd = {
         uri: string
         topicId: string
         charsAdded: number
@@ -101,54 +121,57 @@ export const updateTopicContributions = async (ctx: AppContext, id: string) => {
         contribution?: string
         diff: string
         prevAcceptedUri: string | undefined
-    }[] = []
-
-    let prev = ""
-    let accCharsAdded = 0
-    let monetizedCharsAdded = 0
-    let prevAccepted = undefined
-    for(let i = 0; i < versions.length; i++){
-        const v = versions[i]
-        const vH = history.versions.find(e => e.uri == versions[i].uri)
-        if (!vH || !isVersionAccepted(vH.status)) continue
-
-        const markdown = getMarkdown(v, dataplane)
-        if(markdown == null) {
-            console.log(`La versión ${i} no se pudo transformar a markdown.`)
-            console.log("content", v.content)
-            continue
-        }
-
-        const d = nodesCharDiff(prev.split("\n\n"), markdown.split("\n\n"))
-        if(d == null) {
-            console.log(`Error computing diff between versions ${i} and ${i-1} of ${id}`)
-            return
-        }
-
-        accCharsAdded += d.charsAdded
-        if(isVersionMonetized(vH)){
-            monetizedCharsAdded += d.charsAdded
-        }
-        console.log(`Version ${i} prevAccepted ${prevAccepted}`)
-        updates.push({
-            uri: versions[i].uri,
-            charsAdded: d.charsAdded,
-            charsDeleted: d.charsDeleted,
-            accCharsAdded: accCharsAdded,
-            diff: JSON.stringify(d),
-            topicId: id,
-            prevAcceptedUri: prevAccepted
-        })
-        prev = markdown
-        prevAccepted = v.uri
     }
 
-    for(let i = 0; i < updates.length; i++){
-        updates[i].contribution = JSON.stringify({
-            all: updates[i].charsAdded / accCharsAdded,
-            monetized: updates[i].charsAdded / monetizedCharsAdded
-        })
-    }
+    let updates: Upd[] = []
+
+    versionsByTopic.entries().forEach(([topicId, topicVersions]) => {
+        let prev = ""
+        let accCharsAdded = 0
+        let monetizedCharsAdded = 0
+        let prevAccepted = undefined
+        const versionUpdates: Upd[] = []
+
+        for(let i = 0; i < topicVersions.length; i++){
+            const v = topicVersions[i]
+
+            const markdown = getMarkdown(v, dataplane)
+            if(markdown == null) {
+                continue
+            }
+
+            const d = nodesCharDiff(prev.split("\n\n"), markdown.split("\n\n"))
+            if(d == null) {
+                console.log(`Error computing diff between versions ${i} and ${i-1} of ${topicId}`)
+                return
+            }
+
+            accCharsAdded += d.charsAdded
+            if(v.authorship){
+                monetizedCharsAdded += d.charsAdded
+            }
+            versionUpdates.push({
+                uri: v.uri,
+                charsAdded: d.charsAdded,
+                charsDeleted: d.charsDeleted,
+                accCharsAdded: accCharsAdded,
+                diff: JSON.stringify(d),
+                topicId,
+                prevAcceptedUri: prevAccepted
+            })
+            prev = markdown
+            prevAccepted = v.uri
+        }
+
+        for(let i = 0; i < versionUpdates.length; i++){
+            versionUpdates[i].contribution = JSON.stringify({
+                all: versionUpdates[i].charsAdded / accCharsAdded,
+                monetized: versionUpdates[i].charsAdded / monetizedCharsAdded
+            })
+        }
+        updates = [...updates, ...versionUpdates]
+    })
+
 
     if(updates.length > 0){
         await ctx.kysely

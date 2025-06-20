@@ -331,7 +331,6 @@ export class Dataplane {
                                 categoryId: true,
                             }
                         },
-                        synonyms: true,
                         currentVersion: {
                             select: {
                                 props: true,
@@ -378,7 +377,6 @@ export class Dataplane {
                         categoryId: true,
                     }
                 },
-                synonyms: true,
                 currentVersion: {
                     select: {
                         props: true,

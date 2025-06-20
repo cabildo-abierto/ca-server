@@ -9,7 +9,7 @@ import {ReactionType} from "#/services/reactions/reactions";
 
 export const updateEngagementCountsHandler: CAHandler = async (ctx, agent, params) => {
     console.log("Added update engagement counts to queue.")
-    await ctx.queue.add("update-engagement-counts", {})
+    await ctx.worker?.addJob("update-engagement-counts", {})
 
     return {data: {}}
 }

@@ -15,6 +15,7 @@ import {getPendingValidationRequests, setValidationRequestResult} from "#/servic
 import {processPayment} from "#/services/monetization/donations";
 import {updateTopicContributionsHandler} from "#/services/wiki/contributions";
 import {getStatsDashboard} from "#/services/admin/stats";
+import {getRepoCounts} from "#/services/admin/repo";
 
 
 function isAdmin(did: string) {
@@ -64,7 +65,7 @@ function makeAdminHandlerNoAuth<P, Q>(ctx: AppContext, handler: CAHandlerNoAuth<
 
 function startJobHandler(ctx: AppContext, job: string): express.Handler {
     return makeAdminHandler<{}, {}>(ctx, async () => {
-        await ctx.queue.add(job, {})
+        await ctx.worker?.addJob(job, {})
         console.log("added job", job)
         return {data: {}}
     })
@@ -83,7 +84,7 @@ export const adminRoutes = (ctx: AppContext) => {
         makeAdminHandler(ctx, syncUserHandler)
     )
     router.post(
-        "/delete-user/:handleOrDid",
+        "/user/delete/:handleOrDid",
         makeAdminHandler(ctx, deleteUserHandler)
     )
 
@@ -154,6 +155,8 @@ export const adminRoutes = (ctx: AppContext) => {
     router.post(
         "/create-user-months", startJobHandler(ctx, "create-user-months")
     )
+
+    router.get("/repo/:handleOrDid", makeAdminHandler(ctx, getRepoCounts))
 
     return router
 }

@@ -49,6 +49,7 @@ import { storeReadSession } from '#/services/monetization/read-tracking';
 import { getTopicTitleHandler } from '#/services/wiki/current-version';
 import {getTopicHistoryHandler} from "#/services/wiki/history";
 import {getNewVersionDiff, getTopicVersionChanges} from '#/services/wiki/changes';
+import { getNotifications } from '#/services/notifications/notifications';
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -330,6 +331,8 @@ export const createRouter = (ctx: AppContext) => {
     router.post('/read-session/:did/:collection/:rkey', makeHandler(ctx, storeReadSession))
 
     router.get("/topic-title/:id", makeHandlerNoAuth(ctx, getTopicTitleHandler))
+
+    router.get("/notifications", makeHandler(ctx, getNotifications))
 
     router.use(adminRoutes(ctx))
 

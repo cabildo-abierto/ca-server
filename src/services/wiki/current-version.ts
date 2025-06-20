@@ -120,7 +120,7 @@ export async function updateTopicsLastEdit(ctx: AppContext) {
 }
 
 
-export function isVersionMonetized(version: VersionInHistory) {
+export function isVersionMonetized(version: any) {
     return true // TO DO
 }
 

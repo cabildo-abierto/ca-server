@@ -1,5 +1,6 @@
 import {CAHandler} from "#/utils/handler";
-import {getUri} from "#/utils/uri";
+import {getDidFromUri, getUri, isTopicVersion} from "#/utils/uri";
+import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
 
 export type ReadChunks = {
     chunk: number
@@ -14,6 +15,11 @@ export const storeReadSession: CAHandler<{
     const {did, collection, rkey} = params.params;
     const uri = getUri(did, collection, rkey);
 
+    let topicId: string | undefined
+    if(isTopicVersion(collection)){
+        topicId = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey)
+    }
+
     try {
         await ctx.db.readSession.create({
             data: {
@@ -22,7 +28,9 @@ export const storeReadSession: CAHandler<{
                 readChunks: {
                     chunks: params.chunks,
                     totalChunks: params.totalChunks
-                }
+                },
+                contentAuthorId: getDidFromUri(uri),
+                topicId
             }
         })
     } catch (err) {

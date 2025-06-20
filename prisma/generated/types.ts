@@ -140,7 +140,9 @@ export type ReadSession = {
     userId: string;
     created_at: Generated<Timestamp>;
     readChunks: unknown;
-    readContentId: string;
+    readContentId: string | null;
+    contentAuthorId: string;
+    topicId: string | null;
 };
 export type Record = {
     uri: string;
@@ -154,8 +156,6 @@ export type Record = {
     uniqueRepostsCount: Generated<number>;
     uniqueAcceptsCount: Generated<number>;
     uniqueRejectsCount: Generated<number>;
-    uniqueMonetizationAcceptsCount: Generated<number>;
-    uniqueMonetizationRejectsCount: Generated<number>;
 };
 export type Reference = {
     id: string;
@@ -168,7 +168,6 @@ export type Topic = {
     id: string;
     protection: Generated<EditorStatus>;
     currentVersionId: string | null;
-    synonyms: string[];
     lastSynonymsChange: Timestamp | null;
     popularityScore: Generated<number | null>;
     lastEdit: Timestamp | null;

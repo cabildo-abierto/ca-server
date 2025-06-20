@@ -12,16 +12,15 @@ import cors from 'cors'
 import {createServer} from "src/lex-server";
 import {Server as XrpcServer} from "src/lex-server"
 import {MirrorMachine} from "#/services/sync/mirror-machine";
-import {Queue} from "bullmq";
 import Redis from "ioredis"
-import {setupWorker} from "#/jobs/worker";
+import {CAWorker} from "#/jobs/worker";
 import { Kysely, PostgresDialect } from 'kysely'
 import { Pool } from 'pg'
 import { DB } from '#/../prisma/generated/types'
 import { createClient as createSBClient, SupabaseClient } from '@supabase/supabase-js'
 import 'dotenv/config'
 
-const redisUrl = process.env.REDIS_URL as string
+export const redisUrl = process.env.REDIS_URL as string
 
 
 export type AppContext = {
@@ -31,9 +30,63 @@ export type AppContext = {
     resolver: BidirectionalResolver
     xrpc: XrpcServer
     ioredis: Redis
-    queue: Queue
+    worker: CAWorker | undefined
     kysely: Kysely<DB>
     sb: SupabaseClient
+}
+
+
+export async function setupAppContext(useWorker: boolean) {
+    const logger = pino({name: 'server start'})
+
+    const db = new PrismaClient()
+
+    const ioredis = new Redis(redisUrl, {maxRetriesPerRequest: null, family: 6})
+
+    const kysely = new Kysely<DB>({
+        dialect: new PostgresDialect({
+            pool: new Pool({
+                connectionString: process.env.DATABASE_URL,
+            }),
+        }),
+    })
+
+    const sb = createSBClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        global: {
+            headers: {
+                Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`
+            }
+        }
+    })
+
+    const oauthClient = await createClient(ioredis)
+
+    const baseIdResolver = createIdResolver()
+    const resolver = createBidirectionalResolver(baseIdResolver)
+    const xrpc = createServer()
+
+    let worker: CAWorker | undefined = undefined
+    if(useWorker){
+        worker = new CAWorker(ioredis)
+    }
+
+    const ctx: AppContext = {
+        db,
+        logger,
+        oauthClient,
+        resolver,
+        xrpc,
+        ioredis: ioredis,
+        kysely,
+        worker,
+        sb
+    }
+
+    if(worker){
+        await worker.setup(ctx)
+    }
+
+    return {ctx, logger}
 }
 
 export class Server {
@@ -44,52 +97,10 @@ export class Server {
     ) {
     }
 
-    static async create() {
+    static async create(worker: boolean) {
         const {NODE_ENV, HOST, PORT} = env
 
-        const logger = pino({name: 'server start'})
-
-        const db = new PrismaClient()
-
-        const ioredis = new Redis(redisUrl, {maxRetriesPerRequest: null, family: 6})
-
-        const kysely = new Kysely<DB>({
-            dialect: new PostgresDialect({
-                pool: new Pool({
-                    connectionString: process.env.DATABASE_URL,
-                }),
-            }),
-        })
-
-        const queue = new Queue('bgJobs', {connection: ioredis})
-
-        const sb = createSBClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
-            global: {
-                headers: {
-                    Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`
-                }
-            }
-        })
-
-        const oauthClient = await createClient(ioredis)
-
-        const baseIdResolver = createIdResolver()
-        const resolver = createBidirectionalResolver(baseIdResolver)
-        const xrpc = createServer()
-        const ctx: AppContext = {
-            db,
-            logger,
-            oauthClient,
-            resolver,
-            xrpc,
-            ioredis: ioredis,
-            queue,
-            kysely,
-            sb
-        }
-
-        await setupWorker(ctx)
-        console.log("Worker setup.")
+        const {ctx, logger} = await setupAppContext(worker)
 
         const ingester = new MirrorMachine(ctx)
         ingester.run()
@@ -155,8 +166,8 @@ export class Server {
     }
 }
 
-const run = async () => {
-    const server = await Server.create()
+export const run = async (worker: boolean) => {
+    const server = await Server.create(worker)
 
     const onCloseSignal = async () => {
         setTimeout(() => process.exit(1), 10000).unref() // Force shutdown after 10s
@@ -168,4 +179,4 @@ const run = async () => {
     process.on('SIGTERM', onCloseSignal)
 }
 
-run()
+run(true)
