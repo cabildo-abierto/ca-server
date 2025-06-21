@@ -378,6 +378,10 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB>, topi
         })
     }
 
+    if(updates.length == 0){
+        return
+    }
+
     try {
         await trx
             .insertInto("Topic")
@@ -497,7 +501,7 @@ function parseRecords<T>(records: UserRepoElement[], validate: (r: UserRepoEleme
             parsedRecords.push({ref, record: res.value})
         } else {
             console.log("Invalid record:", ref.uri)
-            console.log("Reason:", res.error)
+            console.log("Reason:", res.error.message)
         }
     }
     return parsedRecords
@@ -680,6 +684,7 @@ export async function processDeleteReactionsBatch(ctx: AppContext, uris: string[
 
 export async function processDeleteTopicVersionsBatch(ctx: AppContext, uris: string[]){
     console.log("Deleting topic versions batch", uris.length)
+    console.log(uris)
 
     await ctx.kysely.transaction().execute(async (trx) => {
         try {
@@ -727,6 +732,7 @@ export async function processDeleteTopicVersionsBatch(ctx: AppContext, uris: str
                 .where("uri", "in", uris)
                 .execute()
 
+            console.log("updating topic current versions for", topicIds.map(t => t.id))
             await updateTopicsCurrentVersionBatch(trx, topicIds.map(t => t.id))
         } catch (err) {
             console.log(err)

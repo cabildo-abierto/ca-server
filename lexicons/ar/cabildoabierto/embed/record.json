@@ -1,0 +1,27 @@
+{
+  "lexicon": 1,
+  "id": "ar.cabildoabierto.embed.record",
+  "description": "Una representación de un registro embebido (ej. en un post). Se usa para citar posts o artículos completos.",
+  "defs": {
+    "main": {
+      "type": "object",
+      "required": ["record"],
+      "properties": {
+        "record": { "type": "ref", "ref": "com.atproto.repo.strongRef" }
+      }
+    },
+    "view": {
+      "type": "object",
+      "required": ["record"],
+      "properties": {
+        "record": {
+          "type": "union",
+          "refs": [
+            "ar.cabildoabierto.feed.defs#postView",
+            "ar.cabildoabierto.feed.defs#articleView"
+          ]
+        }
+      }
+    }
+  }
+}

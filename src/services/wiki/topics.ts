@@ -105,7 +105,6 @@ export type TopicQueryResultBasic = {
     lastEdit: Date | null
     popularityScore: number | null
     categories: {categoryId: string}[]
-    synonyms: string[]
     currentVersion: {
         props: Prisma.JsonValue
         categories: string | null
@@ -158,13 +157,7 @@ export function topicQueryResultToTopicViewBasic(t: TopicQueryResultBasic): $Typ
             }
         })
 
-        if(t.categories.length > 0) props.push({
-            name: "Sinónimos",
-            value: {
-                $type: "ar.cabildoabierto.wiki.topicVersion#stringListProp",
-                value: t.synonyms
-            }
-        }); else if(t.currentVersion && t.currentVersion.synonyms) props.push({
+        if(t.currentVersion && t.currentVersion.synonyms) props.push({
             name: "Sinónimos",
             value: {
                 $type: "ar.cabildoabierto.wiki.topicVersion#stringListProp",

@@ -106,7 +106,7 @@
             "type": "array",
             "items": {
               "type": "ref",
-              "ref": "#articleEmbedView"
+              "ref": "ar.cabildoabierto.feed.article#articleEmbedView"
             }
           }
         }

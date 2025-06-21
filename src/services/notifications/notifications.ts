@@ -6,6 +6,14 @@ export const getNotifications: CAHandler<{}, BskyNotification[]> = async (ctx, a
 
     const {data} = await agent.bsky.app.bsky.notification.listNotifications()
 
+    agent.bsky.app.bsky.notification.updateSeen({seenAt: new Date().toISOString()})
 
     return {data: data.notifications}
+}
+
+
+export const getUnreadNotificationsCount: CAHandler<{}, number> = async (ctx, agent, {}) => {
+    const {data} = await agent.bsky.app.bsky.notification.getUnreadCount()
+
+    return {data: data.count}
 }

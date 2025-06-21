@@ -160,7 +160,8 @@
         "author",
         "record",
         "indexedAt",
-        "title"
+        "title",
+        "summary"
       ],
       "properties": {
         "uri": {
@@ -241,6 +242,8 @@
         "author",
         "record",
         "indexedAt",
+        "text",
+        "summary",
         "title"
       ],
       "properties": {
@@ -264,6 +267,16 @@
           "description": "The full article text"
         },
         "format":  {
+          "type": "string",
+          "maxLength": 50
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 3000,
+          "maxGraphemes": 300,
+          "description": "A summary of the article to be shown in the feed."
+        },
+        "summaryFormat":  {
           "type": "string",
           "maxLength": 50
         },

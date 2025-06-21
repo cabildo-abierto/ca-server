@@ -51,7 +51,6 @@ export const getMainProfileFeedSkeleton = (did: string) : GetSkeletonProps => {
             CASkeleton = CASkeleton.filter(x => new Date(x.createdAt) <= newCursorDate)
         }
 
-
         return {
             skeleton: concat([bskySkeleton.skeleton, CASkeleton]),
             cursor: bskySkeleton.skeleton.length > 0 ? bskySkeleton.cursor : undefined

@@ -13,12 +13,32 @@ import {articleUris, getCollectionFromUri, getDidFromUri, isArticle, postUris, t
 import {AppBskyEmbedRecord} from "@atproto/api";
 import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
 import {TopicQueryResultBasic} from "#/services/wiki/topics";
-import {authorQuery, reactionsQuery, recordQuery} from "#/utils/utils";
-import {FeedViewPost, isPostView, PostView} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
+import {reactionsQuery, recordQuery} from "#/utils/utils";
+import {
+    FeedViewPost,
+    isPostView, isReasonRepost,
+    isSkeletonReasonRepost,
+    PostView
+} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {fetchTextBlobs} from "#/services/blob";
 import {Prisma} from "@prisma/client";
 import {env} from "#/lib/env";
 import { AtpBaseClient } from "#/lex-api";
+import {RepostQueryResult} from "#/services/feed/inicio/following";
+import {isView as isEmbedRecordView} from "#/lex-api/types/app/bsky/embed/record"
+import {isViewNotFound, isViewRecord} from "@atproto/api/dist/client/types/app/bsky/embed/record";
+
+
+function getUriFromEmbed(embed: PostView["embed"]): string | null {
+    if(isEmbedRecordView(embed)) {
+        if(isViewRecord(embed.record)){
+            return embed.record.uri
+        } else if(isViewNotFound(embed.record)){
+            return embed.record.uri
+        }
+    }
+    return null
+}
 
 
 export type FeedElementQueryResult = {
@@ -26,13 +46,6 @@ export type FeedElementQueryResult = {
     cid: string
     createdAt: Date | string,
     record: string | null
-    author: {
-        did: string
-        handle: string | null
-        displayName: string | null
-        avatar: string | null
-        CAProfileUri: string | null
-    }
     _count: {
         replies: number
     }
@@ -104,10 +117,10 @@ export function getBlobKey(blob: BlobRef) {
 
 export function blobRefsFromContents(contents: {
     content?: { textBlobId?: string | null } | null,
-    author: { did: string }
+    uri: string
 }[]) {
     const blobRefs: { cid: string, authorId: string }[] = contents
-        .map(a => (a.content?.textBlobId != null ? {cid: a.content.textBlobId, authorId: a.author.did} : null))
+        .map(a => (a.content?.textBlobId != null ? {cid: a.content.textBlobId, authorId: getDidFromUri(a.uri)} : null))
         .filter(x => x != null)
 
     return blobRefs
@@ -117,36 +130,24 @@ export function blobRefsFromContents(contents: {
 export class Dataplane {
     ctx: AppContext
     agent: Agent
-    caContents: Map<string, FeedElementQueryResult>
-    bskyPosts: Map<string, BskyPostView>
-    likes: Map<string, string | null>
-    reposts: Map<string, string | null>
-    bskyUsers: Map<string, ProfileViewBasic>
-    caUsers: Map<string, CAProfileViewBasic>
-    topicsByUri: Map<string, TopicQueryResultBasic>
-    topicsById: Map<string, TopicQueryResultBasic>
-    textBlobs: Map<string, string>
-    datasets: Map<string, DatasetQueryResult>
-    datasetContents: Map<string, string[]>
-    topicsMentioned: Map<string, TopicMentionedProps[]>
-    sbFiles: Map<string, string>
+    caContents: Map<string, FeedElementQueryResult> = new Map()
+    bskyPosts: Map<string, BskyPostView> = new Map()
+    likes: Map<string, string | null> = new Map()
+    reposts: Map<string, RepostQueryResult | null> = new Map() // mapea uri del post a información del repost asociado
+    bskyUsers: Map<string, ProfileViewBasic> = new Map()
+    caUsers: Map<string, CAProfileViewBasic> = new Map()
+    topicsByUri: Map<string, TopicQueryResultBasic> = new Map()
+    topicsById: Map<string, TopicQueryResultBasic> = new Map()
+    textBlobs: Map<string, string> = new Map()
+    datasets: Map<string, DatasetQueryResult> = new Map()
+    datasetContents: Map<string, string[]> = new Map()
+    topicsMentioned: Map<string, TopicMentionedProps[]> = new Map()
+    sbFiles: Map<string, string> = new Map()
+    requires: Map<string, string[]> = new Map() // mapea un uri a una lista de uris que sabemos que ese contenido requiere que fetcheemos
 
     constructor(ctx: AppContext, agent?: Agent) {
         this.ctx = ctx
         this.agent = agent ?? new Agent(new AtpBaseClient(`${env.HOST}:${env.PORT}`))
-        this.caContents = new Map()
-        this.bskyPosts = new Map()
-        this.likes = new Map()
-        this.reposts = new Map()
-        this.bskyUsers = new Map()
-        this.caUsers = new Map()
-        this.topicsByUri = new Map()
-        this.topicsById = new Map()
-        this.textBlobs = new Map()
-        this.datasets = new Map()
-        this.datasetContents = new Map()
-        this.topicsMentioned = new Map()
-        this.sbFiles = new Map()
     }
 
     async fetchCAContentsAndBlobs(uris: string[]) {
@@ -180,7 +181,6 @@ export class Dataplane {
                     uri: true,
                     cid: true,
                     createdAt: true,
-                    ...authorQuery,
                     ...reactionsQuery,
                     record: true,
                     content: {
@@ -205,7 +205,6 @@ export class Dataplane {
                     uri: true,
                     cid: true,
                     createdAt: true,
-                    ...authorQuery,
                     ...reactionsQuery,
                     record: true,
                     content: {
@@ -237,7 +236,6 @@ export class Dataplane {
                     uri: true,
                     cid: true,
                     createdAt: true,
-                    ...authorQuery,
                     ...reactionsQuery,
                     record: true,
                     content: {
@@ -272,14 +270,10 @@ export class Dataplane {
         const res = [...postContents, ...articleContents, ...topicVersionContents]
 
         res.forEach(r => {
-            if (r.cid && r.author.handle) {
+            if (r.cid) {
                 contents.push({
                     ...r,
                     cid: r.cid,
-                    author: {
-                        ...r.author,
-                        handle: r.author.handle
-                    },
                     content: {
                         ...r.content,
                         text: r.content?.text ?? null,
@@ -306,12 +300,17 @@ export class Dataplane {
         this.textBlobs = joinMaps(this.textBlobs, m)
     }
 
-    async fetchPostAndArticleViewsHydrationData(uris: string[]) {
+    async fetchPostAndArticleViewsHydrationData(uris: string[], otherDids: string[] = []) {
+        const required = uris.flatMap(u => this.requires.get(u)).filter(x => x != null)
+        uris = unique([...uris, ...required])
+        const dids = unique([...uris.map(getDidFromUri), ...otherDids])
+
         await Promise.all([
             this.fetchBskyPosts(postUris(uris)),
             this.fetchCAContentsAndBlobs(uris),
             this.fetchEngagement(uris),
-            this.fetchTopicsBasicByUris(topicVersionUris(uris))
+            this.fetchTopicsBasicByUris(topicVersionUris(uris)),
+            this.fetchUsersHydrationData(dids)
         ])
     }
 
@@ -428,7 +427,10 @@ export class Dataplane {
     async fetchFeedHydrationData(skeleton: FeedSkeleton) {
         const uris = skeleton.map(p => p.post)
         const urisWithReplies = await this.expandUrisWithReplies(uris)
-        await this.fetchPostAndArticleViewsHydrationData(urisWithReplies)
+        const repostDids = skeleton
+            .map(p => p.reason && isSkeletonReasonRepost(p.reason) && p.reason.repost ? getDidFromUri(p.reason.repost) : null)
+            .filter(x => x != null)
+        await this.fetchPostAndArticleViewsHydrationData(urisWithReplies, repostDids)
     }
 
 
@@ -510,26 +512,27 @@ export class Dataplane {
                     collection: {
                         in: ["app.bsky.feed.like", "app.bsky.feed.repost"]
                     }
+                },
+                subjectId: {
+                    in: uris
                 }
             }
         })
-
-        const likesMap = new Map<string, string | null>(uris.map(uri => [uri, null]))
-        const repostsMap = new Map<string, string | null>(uris.map(uri => [uri, null]))
 
         reactions.forEach(l => {
             if (l.subjectId) {
                 if (getCollectionFromUri(l.uri) == "app.bsky.feed.like") {
-                    likesMap.set(l.subjectId, l.uri)
+                    if(!this.likes.has(l.subjectId)) this.likes.set(l.subjectId, l.uri)
                 }
                 if (getCollectionFromUri(l.uri) == "app.bsky.feed.repost") {
-                    repostsMap.set(l.subjectId, l.uri)
+                    if(!this.reposts.has(l.subjectId)) this.reposts.set(l.subjectId, {
+                        uri: l.uri,
+                        createdAt: null,
+                        reaction: null
+                    })
                 }
             }
         })
-
-        this.likes = joinMaps(this.likes, likesMap)
-        this.reposts = joinMaps(this.reposts, repostsMap)
     }
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
@@ -557,6 +560,26 @@ export class Dataplane {
                 }
                 if (isPostView(f.reply.root)) {
                     m.set(f.reply.root.uri, f.reply.root)
+                }
+            }
+            if(f.post.embed){
+                console.log("storing post with embed", f.post.uri)
+                const embedUri = getUriFromEmbed(f.post.embed)
+                console.log("embed uri", embedUri)
+                if(embedUri) {
+                    this.requires.set(f.post.uri, [...(this.requires.get(f.post.uri) ?? []), embedUri])
+                }
+            }
+            if(f.reason){
+                if(isReasonRepost(f.reason)) {
+                    this.reposts.set(f.post.uri, {
+                        createdAt: new Date(f.reason.indexedAt),
+                        reaction: {
+                            subject: {
+                                uri: f.post.uri
+                            }
+                        }
+                    })
                 }
             }
         })
@@ -726,7 +749,7 @@ export class Dataplane {
     async fetchFilesFromStorage(filePaths: string[], bucket: string) {
         for(let i = 0; i < filePaths.length; i ++) {
             const path = filePaths[i]
-            const { data, error } = await this.ctx.sb.storage
+            const { data } = await this.ctx.sb.storage
                 .from(bucket)
                 .download(path)
 

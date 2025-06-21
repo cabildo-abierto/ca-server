@@ -13,13 +13,9 @@ import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
 import {isTopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 
-type RepostQueryResult = {
-    author: {
-        did: string,
-        handle: string | null,
-        displayName: string | null
-    },
-    createdAt: Date
+export type RepostQueryResult = {
+    uri?: string
+    createdAt: Date | null
     reaction: {
         subject: {
             uri: string
@@ -34,7 +30,8 @@ function skeletonFromArticleReposts(p: RepostQueryResult): SkeletonFeedPost | nu
             $type: "app.bsky.feed.defs#skeletonFeedPost",
             post: p.reaction.subject.uri,
             reason: {
-                $type: "app.bsky.feed.defs#skeletonReasonRepost"
+                $type: "app.bsky.feed.defs#skeletonReasonRepost",
+                repost: p.uri
             }
         }
     }
@@ -141,9 +138,10 @@ export async function getArticlesForFollowingFeed(ctx: AppContext, following: st
 }
 
 
-export async function getArticleRepostsForFollowingFeed(ctx: AppContext, following: string[]): Promise<RepostQueryResult[]> {
-    return ctx.db.record.findMany({
+export async function getArticleRepostsForFollowingFeed(ctx: AppContext, following: string[], dataplane: Dataplane): Promise<RepostQueryResult[]> {
+    const res = await ctx.db.record.findMany({
         select: {
+            uri: true,
             createdAt: true,
             author: {
                 select: {
@@ -154,6 +152,7 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, followi
             },
             reaction: {
                 select: {
+                    uri: true,
                     subject: {
                         select: {
                             uri: true,
@@ -175,6 +174,20 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, followi
         },
         take: 10
     })
+    res.forEach(r => {
+        const uri = r.reaction?.subject?.uri
+        const repostUri = r.reaction?.uri
+        if(uri && repostUri) dataplane.reposts.set(uri, {
+            reaction: {
+                subject: {
+                    uri
+                }
+            },
+            uri: repostUri,
+            createdAt: r.createdAt
+        })
+    })
+    return res
 }
 
 
@@ -182,10 +195,7 @@ export async function getBskyTimeline(agent: SessionAgent, limit: number, data: 
     feed: $Typed<FeedViewPost>[],
     cursor: string | undefined
 }> {
-    const t1 = Date.now()
     const res = await agent.bsky.getTimeline({limit, cursor})
-    const t2 = Date.now()
-    // logTimes("getBskyTimeline", [t1, t2])
 
     const newCursor = res.data.cursor
 
@@ -209,7 +219,7 @@ export const getFollowingFeedSkeleton: GetSkeletonProps = async (ctx, agent, dat
 
     const articlesQuery = getArticlesForFollowingFeed(ctx, following)
 
-    const articleRepostsQuery: Promise<RepostQueryResult[]> = getArticleRepostsForFollowingFeed(ctx, following)
+    const articleRepostsQuery: Promise<RepostQueryResult[]> = getArticleRepostsForFollowingFeed(ctx, following, data)
 
     let [timeline, articles, articleReposts] = await Promise.all([timelineQuery, articlesQuery, articleRepostsQuery])
 
@@ -218,7 +228,7 @@ export const getFollowingFeedSkeleton: GetSkeletonProps = async (ctx, agent, dat
     if (lastInTimeline) {
         const lastInTimelineDate = new Date(lastInTimeline)
         articles = articles.filter(a => a.createdAt >= lastInTimelineDate)
-        articleReposts = articleReposts.filter(a => a.createdAt >= lastInTimelineDate)
+        articleReposts = articleReposts.filter(a => a.createdAt && a.createdAt >= lastInTimelineDate)
     }
 
     const timelineSkeleton = getSkeletonFromTimeline(timeline.feed, following)
