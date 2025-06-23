@@ -26,7 +26,8 @@ import {env} from "#/lib/env";
 import { AtpBaseClient } from "#/lex-api";
 import {RepostQueryResult} from "#/services/feed/inicio/following";
 import {isView as isEmbedRecordView} from "#/lex-api/types/app/bsky/embed/record"
-import {isViewNotFound, isViewRecord} from "@atproto/api/dist/client/types/app/bsky/embed/record";
+import {isView as isEmbedRecordWithMediaView} from "#/lex-api/types/app/bsky/embed/recordWithMedia"
+import {isViewNotFound, isViewRecord} from "#/lex-api/types/app/bsky/embed/record";
 
 
 function getUriFromEmbed(embed: PostView["embed"]): string | null {
@@ -35,6 +36,12 @@ function getUriFromEmbed(embed: PostView["embed"]): string | null {
             return embed.record.uri
         } else if(isViewNotFound(embed.record)){
             return embed.record.uri
+        }
+    } else if(isEmbedRecordWithMediaView(embed)){
+        if(isViewRecord(embed.record.record)){
+            return embed.record.record.uri
+        } else if(isViewNotFound(embed.record.record)){
+            return embed.record.record.uri
         }
     }
     return null
@@ -563,9 +570,7 @@ export class Dataplane {
                 }
             }
             if(f.post.embed){
-                console.log("storing post with embed", f.post.uri)
                 const embedUri = getUriFromEmbed(f.post.embed)
-                console.log("embed uri", embedUri)
                 if(embedUri) {
                     this.requires.set(f.post.uri, [...(this.requires.get(f.post.uri) ?? []), embedUri])
                 }
@@ -726,9 +731,12 @@ export class Dataplane {
         dids = dids.filter(d => !this.bskyUsers.has(d))
         if (dids.length == 0) return
 
-        const {data} = await agent.bsky.getProfiles({actors: dids})
+        const didBatches: string[][] = []
+        for(let i = 0; i < dids.length; i += 25) didBatches.push(dids.slice(i, i+25))
+        const data = await Promise.all(didBatches.map(b => agent.bsky.getProfiles({actors: b})))
+        const profiles = data.flatMap(d => d.data.profiles)
 
-        const views: ProfileViewBasic[] = data.profiles.map(p => ({
+        const views: ProfileViewBasic[] = profiles.map(p => ({
             ...p,
             $type: "app.bsky.actor.defs#profileViewBasic"
         }))

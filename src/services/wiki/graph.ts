@@ -115,10 +115,7 @@ export const getCategoriesGraph: CAHandler<{}, TopicsGraph> = async (ctx, agent,
 
     const nodeIds = categories.map(cat => cat.category)
 
-    const nodeLabels = new Map<string, string>()
-    categories.forEach(({category, size}) => {
-        nodeLabels.set(category, category + " (" + size + ")")
-    })
+    const data = categories.map(c => ({id: c.category, categorySize: c.size}))
 
     return {
         data: {
@@ -127,9 +124,7 @@ export const getCategoriesGraph: CAHandler<{}, TopicsGraph> = async (ctx, agent,
                 x: l.idCategoryA,
                 y: l.idCategoryB
             })).filter(e => e.x != e.y),
-            nodeLabels: Array.from(nodeLabels.entries()).map(([a, b]) => ({
-                id: a, label: b
-            }))
+            data
         }
     }
 }
@@ -173,8 +168,7 @@ export const getCategoryGraph: CAHandler<{params: {c: string}}, TopicsGraph> = a
                 categories: {
                     none: {}
                 }
-            },
-            take: 500
+            }
         })
     } else {
         topics = await ctx.db.topic.findMany({
@@ -198,8 +192,7 @@ export const getCategoryGraph: CAHandler<{params: {c: string}}, TopicsGraph> = a
                 categories: {
                     some: {categoryId: cat}
                 }
-            },
-            take: 500
+            }
         })
     }
     const t2 = Date.now()

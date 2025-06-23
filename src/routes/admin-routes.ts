@@ -4,7 +4,7 @@ import {CAHandler, CAHandlerNoAuth, makeHandler} from "#/utils/handler";
 import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user";
 import {updateReferencesHandler} from "#/services/wiki/references";
 import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete";
-import {getAvailableInviteCodes} from "#/services/user/access";
+import {createInviteCodes, getAvailableInviteCodes} from "#/services/user/access";
 import {updateEngagementCountsHandler} from "#/services/feed/getUserEngagement";
 import {updateTopicsPopularityHandler} from "#/services/wiki/popularity";
 import {getUsers} from "#/services/user/users";
@@ -89,8 +89,13 @@ export const adminRoutes = (ctx: AppContext) => {
     )
 
     router.get(
-        "/codes",
+        "/invite-code/all",
         makeAdminHandler(ctx, getAvailableInviteCodes)
+    )
+
+    router.post(
+        "/invite-code/create",
+        makeAdminHandler(ctx, createInviteCodes)
     )
 
     router.post(

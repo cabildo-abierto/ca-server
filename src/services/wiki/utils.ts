@@ -55,7 +55,7 @@ export function getTopicCategories(props?: TopicProp[], topicCategories?: string
 
     return unique([
         ...propsCategories,
-        ...(topicCategories ?? []), // deprecated
+        ...(topicCategories ?? []),
         ...(currentVersionCategories ? JSON.parse(currentVersionCategories) : []) // deprecated
     ])
 }

@@ -102,11 +102,16 @@ export async function createCAUser(ctx: AppContext, agent: SessionAgent, code: s
 }
 
 
-// TO DO
-export async function createCodes(ctx: AppContext, amount: number){
-    await ctx.db.inviteCode.createMany({
-        data: new Array(amount).fill({})
-    })
+export const createInviteCodes: CAHandler<{query: {c: number}}, {}> = async (ctx, agent, {query}) => {
+    console.log(`Creating ${query.c} invite codes.`)
+    try {
+        await ctx.db.inviteCode.createMany({
+            data: new Array(query.c).fill({})
+        })
+    } catch (err) {
+        console.error(`Error creating invite codes: ${err}`)
+    }
+    return {data: {}}
 }
 
 

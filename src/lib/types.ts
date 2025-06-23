@@ -46,7 +46,7 @@ export type Account = {
 export type TopicsGraph = {
     nodeIds: string[]
     edges: {x: string, y: string}[]
-    nodeLabels?: {id: string, label: string}[]
+    data?: {id: string, categorySize?: number}[]
 }
 
 
