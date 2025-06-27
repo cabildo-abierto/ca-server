@@ -90,6 +90,7 @@ export type DatasetQueryResult = {
     }
     dataset: {
         title: string
+        description: string | null
         columns: string[]
         dataBlocks: {
             blob: {

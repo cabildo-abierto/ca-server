@@ -83,6 +83,7 @@ export const hydrateDatasetViewBasic = (uri: string, data: Dataplane): DatasetVi
             uri: d.uri,
             cid: d.cid,
             author,
+            description: d.dataset.description ?? undefined,
             createdAt: new Date(d.createdAt).toISOString(),
             columns: d.dataset.columns.map(c => ({
                 $type: "ar.cabildoabierto.data.dataset#column",
