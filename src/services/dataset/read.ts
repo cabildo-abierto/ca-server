@@ -1,11 +1,15 @@
 import {decompress} from "#/utils/compression";
-import {DatasetView, DatasetViewBasic} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
+import {Column, DatasetView, DatasetViewBasic} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
 import {CAHandler} from "#/utils/handler";
 import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {getUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
+import {Main as Visualization, isColumnFilter} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
+import {TopicsDatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset"
+import {sql} from "kysely";
+import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 
 
 export const getDataset: CAHandler<{
@@ -21,6 +25,75 @@ export const getDataset: CAHandler<{
     const view = hydrateDatasetView(uri, dataplane)
     if(!view) return {error: "Ocurrió un error al obtener el dataset."}
     return {data: view}
+}
+
+type TopicDatasetSpec = {
+    filters: Visualization["filters"]
+}
+
+function stringListIncludes(name: string, value: string) {
+    const type = `ar.cabildoabierto.wiki.topicVersion#stringListProp`
+    const path = `$[*] ? (@.name == "${name}" && @.value."$type" == "${type}" && exists(@.value.value[*] ? (@ == "${value}")))`;
+    return sql<boolean>`
+        jsonb_path_exists("TopicVersion"."props", ${path}::jsonpath)
+    `;
+}
+
+
+export const getTopicsDataset: CAHandler<TopicDatasetSpec, TopicsDatasetView> = async (ctx, agent, params) => {
+    const filters = params.filters ? params.filters.filter(f => isColumnFilter(f)): []
+    if(filters.length == 0) return {error: "Aplicá al menos un filtro."}
+
+    const includesFilters: {name: string, value: string}[] = []
+    filters.forEach(f => {
+        if(f.operator == "includes" && f.operands && f.operands.length > 0) {
+            includesFilters.push({name: f.column, value: f.operands[0]})
+        }
+    })
+
+    const topics = await ctx.kysely
+        .selectFrom('Topic')
+        .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
+        .select(['id', 'TopicVersion.props'])
+        .where((eb) =>
+            eb.and(includesFilters.map(f => stringListIncludes(f.name, f.value)))
+        )
+        .execute()
+
+    let data: string = ""
+    let columns: Column[] = []
+    if(topics.length == 0){
+        data = JSON.stringify([])
+    } else {
+        const props = topics[0].props as TopicProp[]
+        columns = [{name: "tema"}, ...props.map(p => ({
+            name: p.name
+        }))]
+        const rows = topics.map(t => {
+            const props = t.props as TopicProp[]
+
+            const row: Record<string, any> = {
+                Tema: t.id
+            }
+            props.forEach(p => {
+                const valid = validateTopicProp(p)
+                if(valid.success && "value" in valid.value.value){
+                    row[p.name] = valid.value.value.value
+                }
+            })
+
+            return row
+        })
+        data = JSON.stringify(rows)
+    }
+
+    const dataset: TopicsDatasetView = {
+        $type: "ar.cabildoabierto.data.dataset#topicsDatasetView",
+        data,
+        columns
+    }
+
+    return {data: dataset}
 }
 
 

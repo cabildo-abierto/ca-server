@@ -13,6 +13,15 @@
             "#topicsDataSource"
           ]
         },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "union",
+            "refs": [
+              "#columnFilter"
+            ]
+          }
+        },
         "spec": {
           "type": "union",
           "refs": [
@@ -44,6 +53,20 @@
     "topicsDataSource": {
       "type": "object",
       "properties": {
+      }
+    },
+    "columnFilter": {
+      "type": "object",
+      "required": ["column", "operator"],
+      "properties": {
+        "column": {"type": "string"},
+        "operator": {"type":  "string"},
+        "operands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "hemicycle" : {
@@ -167,8 +190,11 @@
           "type": "string"
         },
         "dataset": {
-          "type": "ref",
-          "ref": "ar.cabildoabierto.data.dataset#datasetView"
+          "type": "union",
+          "refs": [
+            "ar.cabildoabierto.data.dataset#datasetView",
+            "ar.cabildoabierto.data.dataset#topicsDatasetView"
+          ]
         }
       }
     }
