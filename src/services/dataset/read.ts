@@ -66,14 +66,14 @@ export const getTopicsDataset: CAHandler<TopicDatasetSpec, TopicsDatasetView> = 
         data = JSON.stringify([])
     } else {
         const props = topics[0].props as TopicProp[]
-        columns = [{name: "tema"}, ...props.map(p => ({
+        columns = [{name: "Tema"}, ...props.map(p => ({
             name: p.name
         }))]
         const rows = topics.map(t => {
             const props = t.props as TopicProp[]
 
             const row: Record<string, any> = {
-                Tema: t.id
+                "Tema": t.id
             }
             props.forEach(p => {
                 const valid = validateTopicProp(p)

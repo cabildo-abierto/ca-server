@@ -77,6 +77,22 @@
     "table" : {
       "type": "object",
       "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#tableVisualizationColumn"
+          },
+          "description": "Se puede usar para mostrar solo algunas de las columnas y para opcionalmente renombrar algunas."
+        }
+      }
+    },
+    "tableVisualizationColumn": {
+      "type": "object",
+      "required": ["columnName"],
+      "properties": {
+        "columnName": {"type":  "string"},
+        "alias": {"type":  "string"}
       }
     },
     "twoAxisPlot": {
