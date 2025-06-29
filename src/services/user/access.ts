@@ -32,7 +32,7 @@ export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (c
 
     try {
         const url = await ctx.oauthClient.authorize(handle, {
-            scope: 'atproto transition:generic',
+            scope: 'atproto transition:generic transition:chat.bsky transition:email',
         })
         return {data: {url}}
     } catch (err) {

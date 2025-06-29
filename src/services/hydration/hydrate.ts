@@ -228,8 +228,11 @@ function hydrateVisualizationEmbedView(embed: VisualizationEmbed, data: Dataplan
         if(dataset){
             return {
                 ...embed,
+                dataset: {
+                    ...dataset,
+                    $type: "ar.cabildoabierto.data.dataset#datasetView"
+                },
                 $type: "ar.cabildoabierto.embed.visualization#view",
-                dataset
             }
         }
     }

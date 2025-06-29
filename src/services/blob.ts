@@ -68,9 +68,7 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
     if(blobs.length == 0) return []
     const keys: string[] = blobs.map(b => getBlobKey(b))
 
-    const t1 = Date.now()
     const blobContents: (string | null)[] = await ctx.ioredis.mget(keys)
-    const t2 = Date.now()
 
     const pending: {i: number, blob: BlobRef}[] = []
     for(let i = 0; i < blobContents.length; i++){
@@ -80,7 +78,6 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
     }
 
     const res = await Promise.all(pending.map(p => fetchTextBlob(p.blob, retries)))
-    const t3 = Date.now()
 
     for(let i = 0; i < pending.length; i++){
         const r = res[i]

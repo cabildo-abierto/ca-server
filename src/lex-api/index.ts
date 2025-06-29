@@ -198,6 +198,31 @@ import * as AppBskyActorPutPreferences from './types/app/bsky/actor/putPreferenc
 import * as AppBskyActorSearchActors from './types/app/bsky/actor/searchActors.js'
 import * as AppBskyActorSearchActorsTypeahead from './types/app/bsky/actor/searchActorsTypeahead.js'
 import * as AppBskyRichtextFacet from './types/app/bsky/richtext/facet.js'
+import * as ChatBskyConvoAcceptConvo from './types/chat/bsky/convo/acceptConvo.js'
+import * as ChatBskyConvoAddReaction from './types/chat/bsky/convo/addReaction.js'
+import * as ChatBskyConvoDefs from './types/chat/bsky/convo/defs.js'
+import * as ChatBskyConvoDeleteMessageForSelf from './types/chat/bsky/convo/deleteMessageForSelf.js'
+import * as ChatBskyConvoGetConvoAvailability from './types/chat/bsky/convo/getConvoAvailability.js'
+import * as ChatBskyConvoGetConvoForMembers from './types/chat/bsky/convo/getConvoForMembers.js'
+import * as ChatBskyConvoGetConvo from './types/chat/bsky/convo/getConvo.js'
+import * as ChatBskyConvoGetLog from './types/chat/bsky/convo/getLog.js'
+import * as ChatBskyConvoGetMessages from './types/chat/bsky/convo/getMessages.js'
+import * as ChatBskyConvoLeaveConvo from './types/chat/bsky/convo/leaveConvo.js'
+import * as ChatBskyConvoListConvos from './types/chat/bsky/convo/listConvos.js'
+import * as ChatBskyConvoMuteConvo from './types/chat/bsky/convo/muteConvo.js'
+import * as ChatBskyConvoRemoveReaction from './types/chat/bsky/convo/removeReaction.js'
+import * as ChatBskyConvoSendMessageBatch from './types/chat/bsky/convo/sendMessageBatch.js'
+import * as ChatBskyConvoSendMessage from './types/chat/bsky/convo/sendMessage.js'
+import * as ChatBskyConvoUnmuteConvo from './types/chat/bsky/convo/unmuteConvo.js'
+import * as ChatBskyConvoUpdateAllRead from './types/chat/bsky/convo/updateAllRead.js'
+import * as ChatBskyConvoUpdateRead from './types/chat/bsky/convo/updateRead.js'
+import * as ChatBskyActorDeclaration from './types/chat/bsky/actor/declaration.js'
+import * as ChatBskyActorDefs from './types/chat/bsky/actor/defs.js'
+import * as ChatBskyActorDeleteAccount from './types/chat/bsky/actor/deleteAccount.js'
+import * as ChatBskyActorExportAccountData from './types/chat/bsky/actor/exportAccountData.js'
+import * as ChatBskyModerationGetActorMetadata from './types/chat/bsky/moderation/getActorMetadata.js'
+import * as ChatBskyModerationGetMessageContext from './types/chat/bsky/moderation/getMessageContext.js'
+import * as ChatBskyModerationUpdateActorAccess from './types/chat/bsky/moderation/updateActorAccess.js'
 
 export * as ArCabildoabiertoActorCaProfile from './types/ar/cabildoabierto/actor/caProfile.js'
 export * as ArCabildoabiertoActorDefs from './types/ar/cabildoabierto/actor/defs.js'
@@ -388,6 +413,31 @@ export * as AppBskyActorPutPreferences from './types/app/bsky/actor/putPreferenc
 export * as AppBskyActorSearchActors from './types/app/bsky/actor/searchActors.js'
 export * as AppBskyActorSearchActorsTypeahead from './types/app/bsky/actor/searchActorsTypeahead.js'
 export * as AppBskyRichtextFacet from './types/app/bsky/richtext/facet.js'
+export * as ChatBskyConvoAcceptConvo from './types/chat/bsky/convo/acceptConvo.js'
+export * as ChatBskyConvoAddReaction from './types/chat/bsky/convo/addReaction.js'
+export * as ChatBskyConvoDefs from './types/chat/bsky/convo/defs.js'
+export * as ChatBskyConvoDeleteMessageForSelf from './types/chat/bsky/convo/deleteMessageForSelf.js'
+export * as ChatBskyConvoGetConvoAvailability from './types/chat/bsky/convo/getConvoAvailability.js'
+export * as ChatBskyConvoGetConvoForMembers from './types/chat/bsky/convo/getConvoForMembers.js'
+export * as ChatBskyConvoGetConvo from './types/chat/bsky/convo/getConvo.js'
+export * as ChatBskyConvoGetLog from './types/chat/bsky/convo/getLog.js'
+export * as ChatBskyConvoGetMessages from './types/chat/bsky/convo/getMessages.js'
+export * as ChatBskyConvoLeaveConvo from './types/chat/bsky/convo/leaveConvo.js'
+export * as ChatBskyConvoListConvos from './types/chat/bsky/convo/listConvos.js'
+export * as ChatBskyConvoMuteConvo from './types/chat/bsky/convo/muteConvo.js'
+export * as ChatBskyConvoRemoveReaction from './types/chat/bsky/convo/removeReaction.js'
+export * as ChatBskyConvoSendMessageBatch from './types/chat/bsky/convo/sendMessageBatch.js'
+export * as ChatBskyConvoSendMessage from './types/chat/bsky/convo/sendMessage.js'
+export * as ChatBskyConvoUnmuteConvo from './types/chat/bsky/convo/unmuteConvo.js'
+export * as ChatBskyConvoUpdateAllRead from './types/chat/bsky/convo/updateAllRead.js'
+export * as ChatBskyConvoUpdateRead from './types/chat/bsky/convo/updateRead.js'
+export * as ChatBskyActorDeclaration from './types/chat/bsky/actor/declaration.js'
+export * as ChatBskyActorDefs from './types/chat/bsky/actor/defs.js'
+export * as ChatBskyActorDeleteAccount from './types/chat/bsky/actor/deleteAccount.js'
+export * as ChatBskyActorExportAccountData from './types/chat/bsky/actor/exportAccountData.js'
+export * as ChatBskyModerationGetActorMetadata from './types/chat/bsky/moderation/getActorMetadata.js'
+export * as ChatBskyModerationGetMessageContext from './types/chat/bsky/moderation/getMessageContext.js'
+export * as ChatBskyModerationUpdateActorAccess from './types/chat/bsky/moderation/updateActorAccess.js'
 
 export const COM_ATPROTO_MODERATION = {
   DefsReasonSpam: 'com.atproto.moderation.defs#reasonSpam',
@@ -424,12 +474,14 @@ export class AtpBaseClient extends XrpcClient {
   ar: ArNS
   com: ComNS
   app: AppNS
+  chat: ChatNS
 
   constructor(options: FetchHandler | FetchHandlerOptions) {
     super(options, schemas)
     this.ar = new ArNS(this)
     this.com = new ComNS(this)
     this.app = new AppNS(this)
+    this.chat = new ChatNS(this)
   }
 
   /** @deprecated use `this` instead */
@@ -468,15 +520,15 @@ export class ArCabildoabiertoNS {
 
 export class ArCabildoabiertoActorNS {
   _client: XrpcClient
-  caProfile: CaProfileRecord
+  caProfile: ArCabildoabiertoActorCaProfileRecord
 
   constructor(client: XrpcClient) {
     this._client = client
-    this.caProfile = new CaProfileRecord(client)
+    this.caProfile = new ArCabildoabiertoActorCaProfileRecord(client)
   }
 }
 
-export class CaProfileRecord {
+export class ArCabildoabiertoActorCaProfileRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -533,6 +585,24 @@ export class CaProfileRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<ArCabildoabiertoActorCaProfile.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'ar.cabildoabierto.actor.caProfile'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -548,15 +618,15 @@ export class CaProfileRecord {
 
 export class ArCabildoabiertoDataNS {
   _client: XrpcClient
-  dataset: DatasetRecord
+  dataset: ArCabildoabiertoDataDatasetRecord
 
   constructor(client: XrpcClient) {
     this._client = client
-    this.dataset = new DatasetRecord(client)
+    this.dataset = new ArCabildoabiertoDataDatasetRecord(client)
   }
 }
 
-export class DatasetRecord {
+export class ArCabildoabiertoDataDatasetRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -608,6 +678,24 @@ export class DatasetRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<ArCabildoabiertoDataDataset.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'ar.cabildoabierto.data.dataset'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -631,11 +719,11 @@ export class ArCabildoabiertoEmbedNS {
 
 export class ArCabildoabiertoFeedNS {
   _client: XrpcClient
-  article: ArticleRecord
+  article: ArCabildoabiertoFeedArticleRecord
 
   constructor(client: XrpcClient) {
     this._client = client
-    this.article = new ArticleRecord(client)
+    this.article = new ArCabildoabiertoFeedArticleRecord(client)
   }
 
   getFeed(
@@ -650,7 +738,7 @@ export class ArCabildoabiertoFeedNS {
   }
 }
 
-export class ArticleRecord {
+export class ArCabildoabiertoFeedArticleRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -702,6 +790,24 @@ export class ArticleRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<ArCabildoabiertoFeedArticle.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'ar.cabildoabierto.feed.article'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -717,19 +823,19 @@ export class ArticleRecord {
 
 export class ArCabildoabiertoWikiNS {
   _client: XrpcClient
-  topicVersion: TopicVersionRecord
-  voteAccept: VoteAcceptRecord
-  voteReject: VoteRejectRecord
+  topicVersion: ArCabildoabiertoWikiTopicVersionRecord
+  voteAccept: ArCabildoabiertoWikiVoteAcceptRecord
+  voteReject: ArCabildoabiertoWikiVoteRejectRecord
 
   constructor(client: XrpcClient) {
     this._client = client
-    this.topicVersion = new TopicVersionRecord(client)
-    this.voteAccept = new VoteAcceptRecord(client)
-    this.voteReject = new VoteRejectRecord(client)
+    this.topicVersion = new ArCabildoabiertoWikiTopicVersionRecord(client)
+    this.voteAccept = new ArCabildoabiertoWikiVoteAcceptRecord(client)
+    this.voteReject = new ArCabildoabiertoWikiVoteRejectRecord(client)
   }
 }
 
-export class TopicVersionRecord {
+export class ArCabildoabiertoWikiTopicVersionRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -781,6 +887,24 @@ export class TopicVersionRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<ArCabildoabiertoWikiTopicVersion.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'ar.cabildoabierto.wiki.topicVersion'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -794,7 +918,7 @@ export class TopicVersionRecord {
   }
 }
 
-export class VoteAcceptRecord {
+export class ArCabildoabiertoWikiVoteAcceptRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -846,6 +970,24 @@ export class VoteAcceptRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<ArCabildoabiertoWikiVoteAccept.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'ar.cabildoabierto.wiki.voteAccept'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -859,7 +1001,7 @@ export class VoteAcceptRecord {
   }
 }
 
-export class VoteRejectRecord {
+export class ArCabildoabiertoWikiVoteRejectRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -904,6 +1046,24 @@ export class VoteRejectRecord {
     const collection = 'ar.cabildoabierto.wiki.voteReject'
     const res = await this._client.call(
       'com.atproto.repo.createRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<ArCabildoabiertoWikiVoteReject.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'ar.cabildoabierto.wiki.voteReject'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
       undefined,
       { collection, ...params, record: { ...record, $type: collection } },
       { encoding: 'application/json', headers },
@@ -1534,15 +1694,15 @@ export class ComAtprotoModerationNS {
 
 export class ComAtprotoLexiconNS {
   _client: XrpcClient
-  schema: SchemaRecord
+  schema: ComAtprotoLexiconSchemaRecord
 
   constructor(client: XrpcClient) {
     this._client = client
-    this.schema = new SchemaRecord(client)
+    this.schema = new ComAtprotoLexiconSchemaRecord(client)
   }
 }
 
-export class SchemaRecord {
+export class ComAtprotoLexiconSchemaRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -1587,6 +1747,24 @@ export class SchemaRecord {
     const collection = 'com.atproto.lexicon.schema'
     const res = await this._client.call(
       'com.atproto.repo.createRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<ComAtprotoLexiconSchema.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'com.atproto.lexicon.schema'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
       undefined,
       { collection, ...params, record: { ...record, $type: collection } },
       { encoding: 'application/json', headers },
@@ -2033,21 +2211,21 @@ export class AppBskyNS {
 
 export class AppBskyFeedNS {
   _client: XrpcClient
-  generator: GeneratorRecord
-  like: LikeRecord
-  postgate: PostgateRecord
-  post: PostRecord
-  repost: RepostRecord
-  threadgate: ThreadgateRecord
+  generator: AppBskyFeedGeneratorRecord
+  like: AppBskyFeedLikeRecord
+  postgate: AppBskyFeedPostgateRecord
+  post: AppBskyFeedPostRecord
+  repost: AppBskyFeedRepostRecord
+  threadgate: AppBskyFeedThreadgateRecord
 
   constructor(client: XrpcClient) {
     this._client = client
-    this.generator = new GeneratorRecord(client)
-    this.like = new LikeRecord(client)
-    this.postgate = new PostgateRecord(client)
-    this.post = new PostRecord(client)
-    this.repost = new RepostRecord(client)
-    this.threadgate = new ThreadgateRecord(client)
+    this.generator = new AppBskyFeedGeneratorRecord(client)
+    this.like = new AppBskyFeedLikeRecord(client)
+    this.postgate = new AppBskyFeedPostgateRecord(client)
+    this.post = new AppBskyFeedPostRecord(client)
+    this.repost = new AppBskyFeedRepostRecord(client)
+    this.threadgate = new AppBskyFeedThreadgateRecord(client)
   }
 
   describeFeedGenerator(
@@ -2245,7 +2423,7 @@ export class AppBskyFeedNS {
   }
 }
 
-export class GeneratorRecord {
+export class AppBskyFeedGeneratorRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -2293,6 +2471,24 @@ export class GeneratorRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyFeedGenerator.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.feed.generator'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -2306,7 +2502,7 @@ export class GeneratorRecord {
   }
 }
 
-export class LikeRecord {
+export class AppBskyFeedLikeRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -2354,6 +2550,24 @@ export class LikeRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyFeedLike.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.feed.like'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -2367,7 +2581,7 @@ export class LikeRecord {
   }
 }
 
-export class PostgateRecord {
+export class AppBskyFeedPostgateRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -2415,6 +2629,24 @@ export class PostgateRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyFeedPostgate.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.feed.postgate'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -2428,7 +2660,7 @@ export class PostgateRecord {
   }
 }
 
-export class PostRecord {
+export class AppBskyFeedPostRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -2476,6 +2708,24 @@ export class PostRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyFeedPost.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.feed.post'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -2489,7 +2739,7 @@ export class PostRecord {
   }
 }
 
-export class RepostRecord {
+export class AppBskyFeedRepostRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -2537,6 +2787,24 @@ export class RepostRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyFeedRepost.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.feed.repost'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -2550,7 +2818,7 @@ export class RepostRecord {
   }
 }
 
-export class ThreadgateRecord {
+export class AppBskyFeedThreadgateRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -2602,6 +2870,24 @@ export class ThreadgateRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyFeedThreadgate.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.feed.threadgate'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -2625,21 +2911,21 @@ export class AppBskyEmbedNS {
 
 export class AppBskyGraphNS {
   _client: XrpcClient
-  block: BlockRecord
-  follow: FollowRecord
-  listblock: ListblockRecord
-  listitem: ListitemRecord
-  list: ListRecord
-  starterpack: StarterpackRecord
+  block: AppBskyGraphBlockRecord
+  follow: AppBskyGraphFollowRecord
+  listblock: AppBskyGraphListblockRecord
+  listitem: AppBskyGraphListitemRecord
+  list: AppBskyGraphListRecord
+  starterpack: AppBskyGraphStarterpackRecord
 
   constructor(client: XrpcClient) {
     this._client = client
-    this.block = new BlockRecord(client)
-    this.follow = new FollowRecord(client)
-    this.listblock = new ListblockRecord(client)
-    this.listitem = new ListitemRecord(client)
-    this.list = new ListRecord(client)
-    this.starterpack = new StarterpackRecord(client)
+    this.block = new AppBskyGraphBlockRecord(client)
+    this.follow = new AppBskyGraphFollowRecord(client)
+    this.listblock = new AppBskyGraphListblockRecord(client)
+    this.listitem = new AppBskyGraphListitemRecord(client)
+    this.list = new AppBskyGraphListRecord(client)
+    this.starterpack = new AppBskyGraphStarterpackRecord(client)
   }
 
   getActorStarterPacks(
@@ -2864,7 +3150,7 @@ export class AppBskyGraphNS {
   }
 }
 
-export class BlockRecord {
+export class AppBskyGraphBlockRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -2912,6 +3198,24 @@ export class BlockRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyGraphBlock.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.graph.block'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -2925,7 +3229,7 @@ export class BlockRecord {
   }
 }
 
-export class FollowRecord {
+export class AppBskyGraphFollowRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -2973,6 +3277,24 @@ export class FollowRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyGraphFollow.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.graph.follow'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -2986,7 +3308,7 @@ export class FollowRecord {
   }
 }
 
-export class ListblockRecord {
+export class AppBskyGraphListblockRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -3038,6 +3360,24 @@ export class ListblockRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyGraphListblock.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.graph.listblock'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -3051,7 +3391,7 @@ export class ListblockRecord {
   }
 }
 
-export class ListitemRecord {
+export class AppBskyGraphListitemRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -3099,6 +3439,24 @@ export class ListitemRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyGraphListitem.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.graph.listitem'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -3112,7 +3470,7 @@ export class ListitemRecord {
   }
 }
 
-export class ListRecord {
+export class AppBskyGraphListRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -3160,6 +3518,24 @@ export class ListRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyGraphList.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.graph.list'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -3173,7 +3549,7 @@ export class ListRecord {
   }
 }
 
-export class StarterpackRecord {
+export class AppBskyGraphStarterpackRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -3225,6 +3601,24 @@ export class StarterpackRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyGraphStarterpack.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.graph.starterpack'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -3240,11 +3634,11 @@ export class StarterpackRecord {
 
 export class AppBskyLabelerNS {
   _client: XrpcClient
-  service: ServiceRecord
+  service: AppBskyLabelerServiceRecord
 
   constructor(client: XrpcClient) {
     this._client = client
-    this.service = new ServiceRecord(client)
+    this.service = new AppBskyLabelerServiceRecord(client)
   }
 
   getServices(
@@ -3260,7 +3654,7 @@ export class AppBskyLabelerNS {
   }
 }
 
-export class ServiceRecord {
+export class AppBskyLabelerServiceRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -3312,6 +3706,24 @@ export class ServiceRecord {
         ...params,
         record: { ...record, $type: collection },
       },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyLabelerService.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.labeler.service'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
       { encoding: 'application/json', headers },
     )
     return res.data
@@ -3545,11 +3957,11 @@ export class AppBskyVideoNS {
 
 export class AppBskyActorNS {
   _client: XrpcClient
-  profile: ProfileRecord
+  profile: AppBskyActorProfileRecord
 
   constructor(client: XrpcClient) {
     this._client = client
-    this.profile = new ProfileRecord(client)
+    this.profile = new AppBskyActorProfileRecord(client)
   }
 
   getPreferences(
@@ -3637,7 +4049,7 @@ export class AppBskyActorNS {
   }
 }
 
-export class ProfileRecord {
+export class AppBskyActorProfileRecord {
   _client: XrpcClient
 
   constructor(client: XrpcClient) {
@@ -3690,6 +4102,24 @@ export class ProfileRecord {
     return res.data
   }
 
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<AppBskyActorProfile.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'app.bsky.actor.profile'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
   async delete(
     params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
     headers?: Record<string, string>,
@@ -3708,5 +4138,385 @@ export class AppBskyRichtextNS {
 
   constructor(client: XrpcClient) {
     this._client = client
+  }
+}
+
+export class ChatNS {
+  _client: XrpcClient
+  bsky: ChatBskyNS
+
+  constructor(client: XrpcClient) {
+    this._client = client
+    this.bsky = new ChatBskyNS(client)
+  }
+}
+
+export class ChatBskyNS {
+  _client: XrpcClient
+  convo: ChatBskyConvoNS
+  actor: ChatBskyActorNS
+  moderation: ChatBskyModerationNS
+
+  constructor(client: XrpcClient) {
+    this._client = client
+    this.convo = new ChatBskyConvoNS(client)
+    this.actor = new ChatBskyActorNS(client)
+    this.moderation = new ChatBskyModerationNS(client)
+  }
+}
+
+export class ChatBskyConvoNS {
+  _client: XrpcClient
+
+  constructor(client: XrpcClient) {
+    this._client = client
+  }
+
+  acceptConvo(
+    data?: ChatBskyConvoAcceptConvo.InputSchema,
+    opts?: ChatBskyConvoAcceptConvo.CallOptions,
+  ): Promise<ChatBskyConvoAcceptConvo.Response> {
+    return this._client.call(
+      'chat.bsky.convo.acceptConvo',
+      opts?.qp,
+      data,
+      opts,
+    )
+  }
+
+  addReaction(
+    data?: ChatBskyConvoAddReaction.InputSchema,
+    opts?: ChatBskyConvoAddReaction.CallOptions,
+  ): Promise<ChatBskyConvoAddReaction.Response> {
+    return this._client
+      .call('chat.bsky.convo.addReaction', opts?.qp, data, opts)
+      .catch((e) => {
+        throw ChatBskyConvoAddReaction.toKnownErr(e)
+      })
+  }
+
+  deleteMessageForSelf(
+    data?: ChatBskyConvoDeleteMessageForSelf.InputSchema,
+    opts?: ChatBskyConvoDeleteMessageForSelf.CallOptions,
+  ): Promise<ChatBskyConvoDeleteMessageForSelf.Response> {
+    return this._client.call(
+      'chat.bsky.convo.deleteMessageForSelf',
+      opts?.qp,
+      data,
+      opts,
+    )
+  }
+
+  getConvoAvailability(
+    params?: ChatBskyConvoGetConvoAvailability.QueryParams,
+    opts?: ChatBskyConvoGetConvoAvailability.CallOptions,
+  ): Promise<ChatBskyConvoGetConvoAvailability.Response> {
+    return this._client.call(
+      'chat.bsky.convo.getConvoAvailability',
+      params,
+      undefined,
+      opts,
+    )
+  }
+
+  getConvoForMembers(
+    params?: ChatBskyConvoGetConvoForMembers.QueryParams,
+    opts?: ChatBskyConvoGetConvoForMembers.CallOptions,
+  ): Promise<ChatBskyConvoGetConvoForMembers.Response> {
+    return this._client.call(
+      'chat.bsky.convo.getConvoForMembers',
+      params,
+      undefined,
+      opts,
+    )
+  }
+
+  getConvo(
+    params?: ChatBskyConvoGetConvo.QueryParams,
+    opts?: ChatBskyConvoGetConvo.CallOptions,
+  ): Promise<ChatBskyConvoGetConvo.Response> {
+    return this._client.call(
+      'chat.bsky.convo.getConvo',
+      params,
+      undefined,
+      opts,
+    )
+  }
+
+  getLog(
+    params?: ChatBskyConvoGetLog.QueryParams,
+    opts?: ChatBskyConvoGetLog.CallOptions,
+  ): Promise<ChatBskyConvoGetLog.Response> {
+    return this._client.call('chat.bsky.convo.getLog', params, undefined, opts)
+  }
+
+  getMessages(
+    params?: ChatBskyConvoGetMessages.QueryParams,
+    opts?: ChatBskyConvoGetMessages.CallOptions,
+  ): Promise<ChatBskyConvoGetMessages.Response> {
+    return this._client.call(
+      'chat.bsky.convo.getMessages',
+      params,
+      undefined,
+      opts,
+    )
+  }
+
+  leaveConvo(
+    data?: ChatBskyConvoLeaveConvo.InputSchema,
+    opts?: ChatBskyConvoLeaveConvo.CallOptions,
+  ): Promise<ChatBskyConvoLeaveConvo.Response> {
+    return this._client.call('chat.bsky.convo.leaveConvo', opts?.qp, data, opts)
+  }
+
+  listConvos(
+    params?: ChatBskyConvoListConvos.QueryParams,
+    opts?: ChatBskyConvoListConvos.CallOptions,
+  ): Promise<ChatBskyConvoListConvos.Response> {
+    return this._client.call(
+      'chat.bsky.convo.listConvos',
+      params,
+      undefined,
+      opts,
+    )
+  }
+
+  muteConvo(
+    data?: ChatBskyConvoMuteConvo.InputSchema,
+    opts?: ChatBskyConvoMuteConvo.CallOptions,
+  ): Promise<ChatBskyConvoMuteConvo.Response> {
+    return this._client.call('chat.bsky.convo.muteConvo', opts?.qp, data, opts)
+  }
+
+  removeReaction(
+    data?: ChatBskyConvoRemoveReaction.InputSchema,
+    opts?: ChatBskyConvoRemoveReaction.CallOptions,
+  ): Promise<ChatBskyConvoRemoveReaction.Response> {
+    return this._client
+      .call('chat.bsky.convo.removeReaction', opts?.qp, data, opts)
+      .catch((e) => {
+        throw ChatBskyConvoRemoveReaction.toKnownErr(e)
+      })
+  }
+
+  sendMessageBatch(
+    data?: ChatBskyConvoSendMessageBatch.InputSchema,
+    opts?: ChatBskyConvoSendMessageBatch.CallOptions,
+  ): Promise<ChatBskyConvoSendMessageBatch.Response> {
+    return this._client.call(
+      'chat.bsky.convo.sendMessageBatch',
+      opts?.qp,
+      data,
+      opts,
+    )
+  }
+
+  sendMessage(
+    data?: ChatBskyConvoSendMessage.InputSchema,
+    opts?: ChatBskyConvoSendMessage.CallOptions,
+  ): Promise<ChatBskyConvoSendMessage.Response> {
+    return this._client.call(
+      'chat.bsky.convo.sendMessage',
+      opts?.qp,
+      data,
+      opts,
+    )
+  }
+
+  unmuteConvo(
+    data?: ChatBskyConvoUnmuteConvo.InputSchema,
+    opts?: ChatBskyConvoUnmuteConvo.CallOptions,
+  ): Promise<ChatBskyConvoUnmuteConvo.Response> {
+    return this._client.call(
+      'chat.bsky.convo.unmuteConvo',
+      opts?.qp,
+      data,
+      opts,
+    )
+  }
+
+  updateAllRead(
+    data?: ChatBskyConvoUpdateAllRead.InputSchema,
+    opts?: ChatBskyConvoUpdateAllRead.CallOptions,
+  ): Promise<ChatBskyConvoUpdateAllRead.Response> {
+    return this._client.call(
+      'chat.bsky.convo.updateAllRead',
+      opts?.qp,
+      data,
+      opts,
+    )
+  }
+
+  updateRead(
+    data?: ChatBskyConvoUpdateRead.InputSchema,
+    opts?: ChatBskyConvoUpdateRead.CallOptions,
+  ): Promise<ChatBskyConvoUpdateRead.Response> {
+    return this._client.call('chat.bsky.convo.updateRead', opts?.qp, data, opts)
+  }
+}
+
+export class ChatBskyActorNS {
+  _client: XrpcClient
+  declaration: ChatBskyActorDeclarationRecord
+
+  constructor(client: XrpcClient) {
+    this._client = client
+    this.declaration = new ChatBskyActorDeclarationRecord(client)
+  }
+
+  deleteAccount(
+    data?: ChatBskyActorDeleteAccount.InputSchema,
+    opts?: ChatBskyActorDeleteAccount.CallOptions,
+  ): Promise<ChatBskyActorDeleteAccount.Response> {
+    return this._client.call(
+      'chat.bsky.actor.deleteAccount',
+      opts?.qp,
+      data,
+      opts,
+    )
+  }
+
+  exportAccountData(
+    params?: ChatBskyActorExportAccountData.QueryParams,
+    opts?: ChatBskyActorExportAccountData.CallOptions,
+  ): Promise<ChatBskyActorExportAccountData.Response> {
+    return this._client.call(
+      'chat.bsky.actor.exportAccountData',
+      params,
+      undefined,
+      opts,
+    )
+  }
+}
+
+export class ChatBskyActorDeclarationRecord {
+  _client: XrpcClient
+
+  constructor(client: XrpcClient) {
+    this._client = client
+  }
+
+  async list(
+    params: OmitKey<ComAtprotoRepoListRecords.QueryParams, 'collection'>,
+  ): Promise<{
+    cursor?: string
+    records: { uri: string; value: ChatBskyActorDeclaration.Record }[]
+  }> {
+    const res = await this._client.call('com.atproto.repo.listRecords', {
+      collection: 'chat.bsky.actor.declaration',
+      ...params,
+    })
+    return res.data
+  }
+
+  async get(
+    params: OmitKey<ComAtprotoRepoGetRecord.QueryParams, 'collection'>,
+  ): Promise<{
+    uri: string
+    cid: string
+    value: ChatBskyActorDeclaration.Record
+  }> {
+    const res = await this._client.call('com.atproto.repo.getRecord', {
+      collection: 'chat.bsky.actor.declaration',
+      ...params,
+    })
+    return res.data
+  }
+
+  async create(
+    params: OmitKey<
+      ComAtprotoRepoCreateRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<ChatBskyActorDeclaration.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'chat.bsky.actor.declaration'
+    const res = await this._client.call(
+      'com.atproto.repo.createRecord',
+      undefined,
+      {
+        collection,
+        rkey: 'self',
+        ...params,
+        record: { ...record, $type: collection },
+      },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
+  async put(
+    params: OmitKey<
+      ComAtprotoRepoPutRecord.InputSchema,
+      'collection' | 'record'
+    >,
+    record: Un$Typed<ChatBskyActorDeclaration.Record>,
+    headers?: Record<string, string>,
+  ): Promise<{ uri: string; cid: string }> {
+    const collection = 'chat.bsky.actor.declaration'
+    const res = await this._client.call(
+      'com.atproto.repo.putRecord',
+      undefined,
+      { collection, ...params, record: { ...record, $type: collection } },
+      { encoding: 'application/json', headers },
+    )
+    return res.data
+  }
+
+  async delete(
+    params: OmitKey<ComAtprotoRepoDeleteRecord.InputSchema, 'collection'>,
+    headers?: Record<string, string>,
+  ): Promise<void> {
+    await this._client.call(
+      'com.atproto.repo.deleteRecord',
+      undefined,
+      { collection: 'chat.bsky.actor.declaration', ...params },
+      { headers },
+    )
+  }
+}
+
+export class ChatBskyModerationNS {
+  _client: XrpcClient
+
+  constructor(client: XrpcClient) {
+    this._client = client
+  }
+
+  getActorMetadata(
+    params?: ChatBskyModerationGetActorMetadata.QueryParams,
+    opts?: ChatBskyModerationGetActorMetadata.CallOptions,
+  ): Promise<ChatBskyModerationGetActorMetadata.Response> {
+    return this._client.call(
+      'chat.bsky.moderation.getActorMetadata',
+      params,
+      undefined,
+      opts,
+    )
+  }
+
+  getMessageContext(
+    params?: ChatBskyModerationGetMessageContext.QueryParams,
+    opts?: ChatBskyModerationGetMessageContext.CallOptions,
+  ): Promise<ChatBskyModerationGetMessageContext.Response> {
+    return this._client.call(
+      'chat.bsky.moderation.getMessageContext',
+      params,
+      undefined,
+      opts,
+    )
+  }
+
+  updateActorAccess(
+    data?: ChatBskyModerationUpdateActorAccess.InputSchema,
+    opts?: ChatBskyModerationUpdateActorAccess.CallOptions,
+  ): Promise<ChatBskyModerationUpdateActorAccess.Response> {
+    return this._client.call(
+      'chat.bsky.moderation.updateActorAccess',
+      opts?.qp,
+      data,
+      opts,
+    )
   }
 }

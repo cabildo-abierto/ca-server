@@ -22,4 +22,7 @@
   ./lexicons/app/bsky/unspecced/* \
   ./lexicons/app/bsky/video/* \
   ./lexicons/app/bsky/actor/* \
-  ./lexicons/app/bsky/richtext/*
+  ./lexicons/app/bsky/richtext/* \
+  ./lexicons/chat/bsky/convo/* \
+  ./lexicons/chat/bsky/actor/* \
+  ./lexicons/chat/bsky/moderation/*

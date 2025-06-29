@@ -115,64 +115,6 @@ export const getUsers: CAHandler<{}, CAProfileViewBasic[]> = async (ctx, agent, 
 }
 
 
-export const getConversations = async (ctx: AppContext, userId: string) => {
-    const user = await ctx.db.user.findUnique(
-        {
-            select: {
-                did: true,
-                messagesSent: {
-                    select: {
-                        id: true,
-                        createdAt: true,
-                        fromUserId: true,
-                        toUserId: true,
-                        text: true,
-                        seen: true
-                    },
-                },
-                messagesReceived: {
-                    select: {
-                        id: true,
-                        createdAt: true,
-                        fromUserId: true,
-                        toUserId: true,
-                        text: true,
-                        seen: true
-                    }
-                }
-            },
-            where: {
-                did: userId
-            }
-        }
-    )
-    if (!user) return []
-
-    let users = new Map<string, { date: Date, seen: boolean }>()
-
-    function addMessage(from: string, date: Date, seen: boolean) {
-        const y = users.get(from)
-        if (y) {
-            if (y.date.getTime() < date.getTime()) {
-                users.set(from, {date: date, seen: seen})
-            }
-        } else {
-            users.set(from, {date: date, seen: seen})
-        }
-    }
-
-    user.messagesReceived.forEach((m) => {
-        addMessage(m.fromUserId, m.createdAt, m.seen)
-    })
-
-    user.messagesSent.forEach((m) => {
-        addMessage(m.toUserId, m.createdAt, m.seen)
-    })
-
-    return Array.from(users).map(([u, d]) => ({id: u, date: d.date, seen: d.seen}))
-}
-
-
 export const follow: CAHandler<{ followedDid: string }, { followUri: string }> = async (ctx, agent, {followedDid}) => {
     try {
         const res = await agent.bsky.follow(followedDid)

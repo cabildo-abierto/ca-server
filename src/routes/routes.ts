@@ -50,6 +50,13 @@ import { getTopicTitleHandler } from '#/services/wiki/current-version';
 import {getTopicHistoryHandler} from "#/services/wiki/history";
 import {getNewVersionDiff, getTopicVersionChanges} from '#/services/wiki/changes';
 import {getNotifications, getUnreadNotificationsCount} from '#/services/notifications/notifications';
+import {
+    createConversation,
+    getConversation,
+    getConversations,
+    markConversationRead,
+    sendMessage
+} from "#/services/messaging/conversations";
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -339,6 +346,16 @@ export const createRouter = (ctx: AppContext) => {
     router.get("/notifications", makeHandler(ctx, getNotifications))
 
     router.get("/notifications/unread-count", makeHandler(ctx, getUnreadNotificationsCount))
+
+    router.get("/conversations/list", makeHandler(ctx, getConversations))
+
+    router.get("/conversation/:convoId", makeHandler(ctx, getConversation))
+
+    router.post("/send-message", makeHandler(ctx, sendMessage))
+
+    router.post("/conversation/create/:did", makeHandler(ctx, createConversation))
+
+    router.post("/conversation/read/:convoId", makeHandler(ctx, markConversationRead))
 
     router.use(adminRoutes(ctx))
 

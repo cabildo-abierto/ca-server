@@ -12,7 +12,7 @@ export const createClient = async (redis: IORedis) => {
 
   const client_id = publicUrl
       ? `${publicUrl}/client-metadata.json`
-      : `http://localhost?redirect_uri=${enc(redirect_uri)}&scope=${enc('atproto transition:generic')}`
+      : `http://localhost?redirect_uri=${enc(redirect_uri)}&scope=${enc('atproto transition:generic transition:chat.bsky transition:email')}`
 
   return new NodeOAuthClient({
     clientMetadata: {
@@ -20,7 +20,7 @@ export const createClient = async (redis: IORedis) => {
       client_id: client_id,
       application_type: 'web',
       grant_types: ['authorization_code', 'refresh_token'],
-      scope: 'atproto transition:generic',
+      scope: 'atproto transition:generic transition:chat.bsky transition:email',
       response_types: ['code'],
       redirect_uris: [redirect_uri],
       dpop_bound_access_tokens: true,
