@@ -1,12 +1,4 @@
-import removeMarkdown from "remove-markdown";
 import {decompress} from "../compression";
-import {SerializedEditorState} from "lexical";
-
-
-export function markdownToPlainText(md: string) {
-    const res = removeMarkdown(md).replace(/\n{2,}/g, '\n').trim()
-    return res
-}
 
 
 export function htmlToMarkdown(html: string){

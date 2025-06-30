@@ -343,7 +343,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get("/topic-title/:id", makeHandlerNoAuth(ctx, getTopicTitleHandler))
 
-    router.get("/notifications", makeHandler(ctx, getNotifications))
+    router.get("/notifications/list", makeHandler(ctx, getNotifications))
 
     router.get("/notifications/unread-count", makeHandler(ctx, getUnreadNotificationsCount))
 

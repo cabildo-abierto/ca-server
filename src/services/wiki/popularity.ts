@@ -1,4 +1,4 @@
-import {gett} from "#/utils/arrays";
+import {gett, unique} from "#/utils/arrays";
 import {AppContext} from "#/index";
 import {getDidFromUri} from "#/utils/uri";
 import {CAHandler} from "#/utils/handler";
@@ -30,34 +30,42 @@ function getAllContentInteractions(uri: string,
 }
 
 
-function countTopicInteractions(topic: {id: string, referencedBy: {referencingContentId: string}[], versions: {uri: string}[]}, contentInteractions: Map<string, Set<string>>){
-    const s = new Set<string>()
+function countTopicInteractions(topic: {
+    id: string
+    referencedBy: {referencingContentId: string}[], versions: {uri: string}[]}, contentInteractions: Map<string, Set<string>>,
+    humanUsers: Set<string>
+){
+    let s: string[] = []
 
-    topic.referencedBy.forEach(({referencingContentId}) => {
-        const cInteractions = gett(contentInteractions, referencingContentId)
+    try {
 
-        cInteractions.forEach((did) => {
-            s.add(did)
+        topic.referencedBy.forEach(({referencingContentId}) => {
+            const cInteractions = contentInteractions.get(referencingContentId)
+
+            if(cInteractions){
+                cInteractions.forEach((did) => {
+                    s.push(did)
+                })
+            }
         })
-    })
 
-    topic.versions.forEach((v) => {
-        const cInteractions = gett(contentInteractions, v.uri)
+        topic.versions.forEach((v) => {
+            const cInteractions = contentInteractions.get(v.uri)
 
-        cInteractions.forEach((did) => {
-            s.add(did)
+            if(cInteractions){
+                cInteractions.forEach((did) => {
+                    s.push(did)
+                })
+            }
         })
-    })
 
-    const nonHumanUsers = [
-        "did:plc:rup47j6oesjlf44wx4fizu4m"
-    ]
+        s = unique(s).filter(x => humanUsers.has(x))
 
-    nonHumanUsers.forEach((nh) => {
-        s.delete(nh)
-    })
-
-    return s.size
+        return s.length
+    } catch (error) {
+        console.log(error)
+        throw error
+    }
 }
 
 
@@ -84,16 +92,33 @@ export async function computeTopicsPopularityScore(ctx: AppContext): Promise<{
 
     console.log("got", contentInteractions.length, "content interactions and topics", topics.length)
 
-    const contentInteractionsMap = new Map<string, Set<string>>()
-    contentInteractions.map(({uri, interactions}) => {
-        contentInteractionsMap.set(uri, new Set<string>(interactions))
-    })
+    const contentInteractionsMap: Map<string, Set<string>> = new Map(contentInteractions.map(({uri, interactions}) => ([
+        uri, new Set(interactions)
+    ])))
+
+    console.log("counting interactions")
+    const res = (await ctx.db.user.findMany({
+        select: {
+            did: true,
+            handle: true
+        },
+        where: {
+            userValidationHash: {
+                not: null
+            }
+        }
+    }))
+    const humanUsers = new Set(res.map(u => u.did))
+    console.log("non human users", res.map(u => u.handle ?? u.did))
 
     const topicScores = new Map<string, number>()
     for(let i = 0; i < topics.length; i++){
-        const score = countTopicInteractions(topics[i], contentInteractionsMap)
+        const t1 = Date.now()
+        const score = countTopicInteractions(topics[i], contentInteractionsMap, humanUsers)
         topicScores.set(topics[i].id, score)
     }
+
+    console.log("returning scores")
 
     return Array.from(topicScores.entries()).map(([id, score]) => {
         return {id, score}
@@ -186,23 +211,18 @@ export async function updateTopicPopularityScores(ctx: AppContext) {
 
     const t1 = Date.now();
 
-    // Construct the CASE statement dynamically
-    const caseStatements = scores.map(({ id, score }, index) =>
-        `WHEN "id" = $${index * 2 + 1} THEN $${index * 2 + 2}`
-    ).join('\n');
+    const values = scores.map(s => ({
+        id: s.id,
+        popularityScore: s.score
+    }))
 
-    const query = `
-        UPDATE "Topic"
-        SET "popularityScore" = CASE
-            ${caseStatements}
-            ELSE "popularityScore"
-            END
-        WHERE "id" IN (${scores.map((_, index) => `$${index * 2 + 1}`).join(', ')});
-    `;
-
-    const params = scores.flatMap(({ id, score }) => [id, score]);
-
-    await ctx.db.$queryRawUnsafe(query, ...params);
+    await ctx.kysely
+        .insertInto("Topic")
+        .values(values)
+        .onConflict((oc) => oc.column("id").doUpdateSet({
+            popularityScore: eb => eb.ref("excluded.popularityScore")
+        }))
+        .execute()
 
     console.log("done after", Date.now() - t1);
 }

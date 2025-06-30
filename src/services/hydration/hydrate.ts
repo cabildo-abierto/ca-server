@@ -22,7 +22,6 @@ import {
 } from "#/lex-server/types/ar/cabildoabierto/embed/selectionQuote"
 import {creationDateSortKey} from "#/services/feed/utils";
 import {Dataplane} from "#/services/hydration/dataplane";
-import {markdownToPlainText} from "#/utils/lexical/transforms";
 import {hydrateEmbedViews, hydrateTopicViewBasicFromUri} from "#/services/wiki/topics";
 import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {getTopicTitle} from "#/services/wiki/utils";
@@ -42,6 +41,7 @@ import {
 } from "#/lex-api/types/ar/cabildoabierto/embed/record"
 import {isSkeletonReasonRepost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
+import removeMarkdown from "remove-markdown";
 
 
 
@@ -120,7 +120,14 @@ function dbLabelsToLabelsView(labels: string[], uri: string){
 function getArticleSummary(text: string, format?: string) {
     let summary = ""
     if (format == "markdown") {
-        summary = markdownToPlainText(text).slice(0, 150).replaceAll("\n", " ")
+        summary = removeMarkdown(text)
+            .trim()
+            .replaceAll("\n", " ")
+            .replaceAll("\\n", " ")
+            .replaceAll("\|", " ")
+            .replaceAll("\-\-\-", " ")
+            .slice(0, 150)
+            .trim()
     } else if (!format || format == "lexical-compressed") {
         const summaryJson = JSON.parse(decompress(text))
         summary = getAllText(summaryJson.root).slice(0, 150).replaceAll("\n", " ")

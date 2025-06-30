@@ -7,7 +7,7 @@ import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {ProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 import {createHash} from "crypto";
 
-export type FilePayload = {base64: string, fileName: string}
+export type FilePayload = { base64: string, fileName: string }
 
 type OrgType = "creador-individual" | "empresa" | "medio" | "fundacion" | "consultora" | "otro"
 
@@ -30,73 +30,97 @@ function extractMimeType(base64: string): string | null {
     return match ? match[1] : null;
 }
 
+export function sanitizeFileName(fileName: string): string {
+    return fileName
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9.\-_ ]/g, "")
+        .trim()
+        .replace(/\s+/g, "-")
+        .toLowerCase();
+}
 
 export async function uploadToSBStorage(sb: SupabaseClient, file: FilePayload, bucket: string) {
-    const id = uuid()
+    const id = uuid();
     const fileBuffer = Buffer.from(file.base64.split(',')[1], 'base64');
-    const filePath = `${id}::${file.fileName}`
+
+    const safeFileName = sanitizeFileName(file.fileName);
+    const filePath = `${id}/${safeFileName}`;
 
     const { data, error } = await sb.storage
         .from(bucket)
         .upload(filePath, fileBuffer, {
             contentType: extractMimeType(file.base64) || 'application/octet-stream'
-        })
+        });
 
-    if(error) {
-        console.log(`Error uploading file ${filePath} to stoarge`)
-        console.log(error)
+    if (error) {
+        console.log(`Error uploading file ${filePath} to storage`);
+        console.log(error);
     }
 
-    return { path: data?.path, error }
+    return { path: data?.path, error };
 }
 
 
 export const createValidationRequest: CAHandler<ValidationRequestProps, {}> = async (ctx, agent, request) => {
-    const documentacion = request.tipo == "org" && request.documentacion ? await Promise.all(request.documentacion.map((f => uploadToSBStorage(ctx.sb, f, 'validation-documents')))) : []
-    const dniFrente = request.tipo == "persona" && request.dniFrente ? await uploadToSBStorage(ctx.sb, request.dniFrente, 'validation-documents') : undefined
-    const dniDorso = request.tipo == "persona" && request.dniDorso ? await uploadToSBStorage(ctx.sb, request.dniDorso, 'validation-documents') : undefined
+    try {
+        const documentacion = request.tipo == "org" && request.documentacion ? await Promise.all(request.documentacion.map((f => uploadToSBStorage(ctx.sb, f, 'validation-documents')))) : []
+        const dniFrente = request.tipo == "persona" && request.dniFrente ? await uploadToSBStorage(ctx.sb, request.dniFrente, 'validation-documents') : undefined
+        const dniDorso = request.tipo == "persona" && request.dniDorso ? await uploadToSBStorage(ctx.sb, request.dniDorso, 'validation-documents') : undefined
 
-    if(dniFrente && dniFrente.error) return {error: "Ocurrió un error al procesar la solicitud."}
-    if(dniDorso && dniDorso.error) return {error: "Ocurrió un error al procesar la solicitud."}
-    if(documentacion && documentacion.some(x => !x || x && x.error)) return {error: "Ocurrió un error al procesar la solicitud."}
+        if (dniFrente && dniFrente.error) return {error: "Ocurrió un error al procesar la solicitud."}
+        if (dniDorso && dniDorso.error) return {error: "Ocurrió un error al procesar la solicitud."}
+        if (documentacion && documentacion.some(x => !x || x && x.error)) return {error: "Ocurrió un error al procesar la solicitud."}
 
-    if(request.tipo == "persona" && !dniFrente) return {error: "Debe incluir una foto del frente de su DNI."}
-    if(request.tipo == "persona" && !dniDorso) return {error: "Debe incluir una foto del dorso de su DNI."}
+        if (request.tipo == "persona" && !dniFrente) return {error: "Debe incluir una foto del frente de su DNI."}
+        if (request.tipo == "persona" && !dniDorso) return {error: "Debe incluir una foto del dorso de su DNI."}
 
-    const data = request.tipo == "org" ? {
-        type: ValidationType.Organizacion,
-        documentacion: documentacion ? documentacion.map(d => d?.path) as string[] : [],
-        userId: agent.did,
-        comentarios: request.comentarios,
-        sitioWeb: request.sitioWeb,
-        email: request.email,
-        tipoOrg: request.tipoOrg
-    } : {
-        type: ValidationType.Persona,
-        dniFrente: dniFrente?.path,
-        dniDorso: dniDorso?.path,
-        userId: agent.did
+        const data = request.tipo == "org" ? {
+            type: ValidationType.Organizacion,
+            documentacion: documentacion ? documentacion.map(d => d?.path) as string[] : [],
+            userId: agent.did,
+            comentarios: request.comentarios,
+            sitioWeb: request.sitioWeb,
+            email: request.email,
+            tipoOrg: request.tipoOrg
+        } : {
+            type: ValidationType.Persona,
+            dniFrente: dniFrente?.path,
+            dniDorso: dniDorso?.path,
+            userId: agent.did
+        }
+
+        await ctx.db.validationRequest.create({
+            data
+        })
+    } catch (error) {
+        console.log("error creating validation request", error)
+        return {error: "Ocurrió un error al crear la solicitud. Volvé a intentar."}
     }
-
-    await ctx.db.validationRequest.create({
-        data
-    })
 
     return {data: {}}
 }
 
 
-export const getValidationRequest: CAHandler<{}, {type: "org" | "persona" | null}> = async (ctx, agent, {}) => {
+export const getValidationRequest: CAHandler<{}, { type: "org" | "persona" | null, result?: ValidationRequestResult }> = async (ctx, agent, {}) => {
     const res = await ctx.db.validationRequest.findFirst({
         select: {
-            type: true
+            type: true,
+            result: true
         },
         where: {
             userId: agent.did
         }
     })
 
-    return {data: {type: res ? (res.type == "Persona" ? "persona" : "org") : null}}
+    if(!res) return {data: {type: null}}
+
+    return {
+        data: {
+            type: res.type == "Persona" ? "persona" : "org",
+            result: res.result
+        }
+    }
 }
 
 
@@ -111,8 +135,7 @@ export const cancelValidationRequest: CAHandler<{}, {}> = async (ctx, agent, {})
 }
 
 
-
-export type ValidationRequestView = {id: string, user: ProfileViewBasic, createdAt: Date} & ({
+export type ValidationRequestView = { id: string, user: ProfileViewBasic, createdAt: Date } & ({
     tipo: "persona"
     dniFrente: FilePayload
     dniDorso: FilePayload
@@ -128,11 +151,14 @@ export type ValidationRequestView = {id: string, user: ProfileViewBasic, created
 
 function getFileNameFromPath(path: string) {
     const s = path.split("::")
-    return s[s.length-1]
+    return s[s.length - 1]
 }
 
 
-export const getPendingValidationRequests: CAHandler<{}, {requests: ValidationRequestView[], count: number}> = async (ctx, agent, {}) => {
+export const getPendingValidationRequests: CAHandler<{}, {
+    requests: ValidationRequestView[],
+    count: number
+}> = async (ctx, agent, {}) => {
     const [requests, count] = await Promise.all([
         ctx.db.validationRequest.findMany({
             take: 10,
@@ -162,9 +188,9 @@ export const getPendingValidationRequests: CAHandler<{}, {requests: ValidationRe
 
     const res: ValidationRequestView[] = requests.map(r => {
         const user = hydrateProfileViewBasic(r.userId, dataplane)
-        if(!user) return null
+        if (!user) return null
         const tipo: "org" | "persona" = r.type == "Persona" ? "persona" : "org"
-        if(tipo == "org"){
+        if (tipo == "org") {
             const req: ValidationRequestView = {
                 tipo: "org",
                 ...r,
@@ -176,13 +202,13 @@ export const getPendingValidationRequests: CAHandler<{}, {requests: ValidationRe
                 documentacion: r.documentacion ? r.documentacion.map(d => {
                     return {
                         fileName: getFileNameFromPath(d),
-                        base64: dataplane.sbFiles.get("validation-documents:"+d) ?? "not found"
+                        base64: dataplane.sbFiles.get("validation-documents:" + d) ?? "not found"
                     }
                 }) : []
             }
             return req
         } else {
-            if(!r.dniFrente || !r.dniDorso) return null
+            if (!r.dniFrente || !r.dniDorso) return null
             const req: ValidationRequestView = {
                 tipo: "persona",
                 ...r,
@@ -212,7 +238,7 @@ type ValidationRequestResultProps = {
 }
 
 
-async function getHashFromDNI(dni: number){
+async function getHashFromDNI(dni: number) {
     const hash = createHash('sha256');
     hash.update(dni.toString());
     return hash.digest('hex');
@@ -239,7 +265,7 @@ export const setValidationRequestResult: CAHandler<ValidationRequestResultProps,
             }
         }))
 
-        if(!req) return {error: "No se encontró la solicitud."}
+        if (!req) return {error: "No se encontró la solicitud."}
 
         const {user, type} = req
 
@@ -252,8 +278,8 @@ export const setValidationRequestResult: CAHandler<ValidationRequestResultProps,
             }
         })
 
-        if(type == "Persona"){
-            if(!result.dni){
+        if (type == "Persona") {
+            if (!result.dni) {
                 return {error: "Falta el número de DNI."}
             }
             await ctx.db.user.update({
