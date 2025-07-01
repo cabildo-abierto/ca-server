@@ -8,8 +8,6 @@ export const getNotifications: CAHandler<{}, BskyNotification[]> = async (ctx, a
 
     agent.bsky.app.bsky.notification.updateSeen({seenAt: new Date().toISOString()})
 
-    console.log("notifications", data.notifications)
-
     return {data: data.notifications}
 }
 

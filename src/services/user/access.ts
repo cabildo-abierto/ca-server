@@ -6,6 +6,7 @@ import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {Record as CAProfileRecord} from "#/lex-server/types/ar/cabildoabierto/actor/caProfile"
 import {processBskyProfile, processCAProfile} from "#/services/sync/process-event";
 import {Record as BskyProfileRecord} from "#/lex-api/types/app/bsky/actor/profile"
+import {v4 as uuidv4} from "uuid";
 
 
 export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (ctx, agent, {handle, code}) => {
@@ -184,4 +185,20 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
     // revalidateTag("user:"+did)
 
     return {}
+}
+
+
+export const createAccessRequest: CAHandlerNoAuth<{email: string, comment: string}, {}> = async (ctx, agent, params) => {
+
+    try {
+        await ctx.kysely.insertInto("AccessRequest").values([{
+            email: params.email,
+            comment: params.comment,
+            id: uuidv4()
+        }]).execute()
+    } catch (err) {
+        return {error: "Ocurrió un error al crear la solicitud :("}
+    }
+
+    return {data: {}}
 }

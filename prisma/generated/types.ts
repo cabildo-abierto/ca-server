@@ -39,6 +39,14 @@ export const EditorStatus = {
     Administrator: "Administrator"
 } as const;
 export type EditorStatus = (typeof EditorStatus)[keyof typeof EditorStatus];
+export type AccessRequest = {
+    id: string;
+    created_at: Generated<Timestamp>;
+    email: string;
+    comment: string;
+    sentInviteAt: Timestamp | null;
+    inviteCodeId: string | null;
+};
 export type Article = {
     uri: string;
     title: string;
@@ -251,6 +259,7 @@ export type VoteReject = {
 };
 export type DB = {
     _ContentToDataset: ContentToDataset;
+    AccessRequest: AccessRequest;
     Article: Article;
     AuthSession: AuthSession;
     AuthState: AuthState;

@@ -6,7 +6,7 @@ import {searchTopics, searchUsers} from "#/services/search/search";
 import {createArticle} from "#/services/write/article";
 import {getIronSession} from "iron-session";
 import {env} from "#/lib/env";
-import {login} from "#/services/user/access";
+import {createAccessRequest, login} from "#/services/user/access";
 import {getFeedByKind} from "#/services/feed/feed";
 import {getProfileFeed} from "#/services/feed/profile/profile";
 import {
@@ -356,6 +356,8 @@ export const createRouter = (ctx: AppContext) => {
     router.post("/conversation/create/:did", makeHandler(ctx, createConversation))
 
     router.post("/conversation/read/:convoId", makeHandler(ctx, markConversationRead))
+
+    router.post("/access-request", makeHandlerNoAuth(ctx, createAccessRequest))
 
     router.use(adminRoutes(ctx))
 

@@ -105,6 +105,7 @@ model InviteCode {
   usedAt        DateTime?
   recommender   User?     @relation("invite-codes-available", fields: [recommenderId], references: [did])
   recommenderId String?   @unique
+  accessRequest AccessRequest?
 }
 
 model UserMonth {
@@ -397,6 +398,18 @@ model ChatMessage {
   text       String
   seen       Boolean  @default(false)
 }
+
+
+model AccessRequest {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now()) @map("created_at")
+  email      String
+  comment    String
+  sentInviteAt DateTime?
+  inviteCodeId String? @unique
+  inviteCode InviteCode? @relation(fields: [inviteCodeId], references: [code])
+}
+
 
 enum EditorStatus {
   Beginner
