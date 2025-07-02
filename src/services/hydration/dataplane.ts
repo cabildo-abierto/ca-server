@@ -23,24 +23,25 @@ import {
 import {fetchTextBlobs} from "#/services/blob";
 import {Prisma} from "@prisma/client";
 import {env} from "#/lib/env";
-import { AtpBaseClient } from "#/lex-api";
+import {AtpBaseClient} from "#/lex-api";
 import {RepostQueryResult} from "#/services/feed/inicio/following";
 import {isView as isEmbedRecordView} from "#/lex-api/types/app/bsky/embed/record"
 import {isView as isEmbedRecordWithMediaView} from "#/lex-api/types/app/bsky/embed/recordWithMedia"
 import {isViewNotFound, isViewRecord} from "#/lex-api/types/app/bsky/embed/record";
+import {NotificationQueryResult, NotificationsSkeleton} from "#/services/notifications/notifications";
 
 
 function getUriFromEmbed(embed: PostView["embed"]): string | null {
-    if(isEmbedRecordView(embed)) {
-        if(isViewRecord(embed.record)){
+    if (isEmbedRecordView(embed)) {
+        if (isViewRecord(embed.record)) {
             return embed.record.uri
-        } else if(isViewNotFound(embed.record)){
+        } else if (isViewNotFound(embed.record)) {
             return embed.record.uri
         }
-    } else if(isEmbedRecordWithMediaView(embed)){
-        if(isViewRecord(embed.record.record)){
+    } else if (isEmbedRecordWithMediaView(embed)) {
+        if (isViewRecord(embed.record.record)) {
             return embed.record.record.uri
-        } else if(isViewNotFound(embed.record.record)){
+        } else if (isViewNotFound(embed.record.record)) {
             return embed.record.record.uri
         }
     }
@@ -70,7 +71,7 @@ export type FeedElementQueryResult = {
             props: Prisma.JsonValue | null
             topicId: string
         } | null
-        datasetsUsed: {uri: string}[]
+        datasetsUsed: { uri: string }[]
         embeds: Prisma.JsonValue | null
     } | null
 }
@@ -152,6 +153,7 @@ export class Dataplane {
     topicsMentioned: Map<string, TopicMentionedProps[]> = new Map()
     sbFiles: Map<string, string> = new Map()
     requires: Map<string, string[]> = new Map() // mapea un uri a una lista de uris que sabemos que ese contenido requiere que fetcheemos
+    notifications: Map<string, NotificationQueryResult> = new Map()
 
     constructor(ctx: AppContext, agent?: Agent) {
         this.ctx = ctx
@@ -471,7 +473,7 @@ export class Dataplane {
     async fetchBskyPosts(uris: string[]) {
         uris = uris.filter(u => !this.bskyPosts?.has(u))
         const agent = this.agent
-        if(!agent.hasSession()) return
+        if (!agent.hasSession()) return
 
         const postsList = postUris(uris)
         if (postsList.length == 0) return
@@ -506,7 +508,7 @@ export class Dataplane {
 
     async fetchEngagement(uris: string[]) {
         const agent = this.agent
-        if(!agent.hasSession()) return
+        if (!agent.hasSession()) return
 
         const did = agent.did
         const reactions = await this.ctx.db.reaction.findMany({
@@ -530,10 +532,10 @@ export class Dataplane {
         reactions.forEach(l => {
             if (l.subjectId) {
                 if (getCollectionFromUri(l.uri) == "app.bsky.feed.like") {
-                    if(!this.likes.has(l.subjectId)) this.likes.set(l.subjectId, l.uri)
+                    if (!this.likes.has(l.subjectId)) this.likes.set(l.subjectId, l.uri)
                 }
                 if (getCollectionFromUri(l.uri) == "app.bsky.feed.repost") {
-                    if(!this.reposts.has(l.subjectId)) this.reposts.set(l.subjectId, {
+                    if (!this.reposts.has(l.subjectId)) this.reposts.set(l.subjectId, {
                         uri: l.uri,
                         createdAt: null,
                         reaction: null
@@ -570,14 +572,14 @@ export class Dataplane {
                     m.set(f.reply.root.uri, f.reply.root)
                 }
             }
-            if(f.post.embed){
+            if (f.post.embed) {
                 const embedUri = getUriFromEmbed(f.post.embed)
-                if(embedUri) {
+                if (embedUri) {
                     this.requires.set(f.post.uri, [...(this.requires.get(f.post.uri) ?? []), embedUri])
                 }
             }
-            if(f.reason){
-                if(isReasonRepost(f.reason)) {
+            if (f.reason) {
+                if (isReasonRepost(f.reason)) {
                     this.reposts.set(f.post.uri, {
                         createdAt: new Date(f.reason.indexedAt),
                         reaction: {
@@ -634,9 +636,9 @@ export class Dataplane {
 
         await this.fetchDatasetsHydrationData(uris)
 
-        const blobs: {blobRef: BlobRef, datasetUri: string}[] = []
+        const blobs: { blobRef: BlobRef, datasetUri: string }[] = []
 
-        for(let i = 0; i < uris.length; i ++) {
+        for (let i = 0; i < uris.length; i++) {
             const uri = uris[i]
             const d = this.datasets?.get(uri)
             if (!d || !d.dataset) return
@@ -654,10 +656,10 @@ export class Dataplane {
         const contents = (await fetchTextBlobs(this.ctx, blobs.map(b => b.blobRef))).filter(c => c != null)
 
         const datasetContents = new Map<string, string[]>()
-        for(let i = 0; i < blobs.length; i ++) {
+        for (let i = 0; i < blobs.length; i++) {
             const uri = blobs[i].datasetUri
             const content = contents[i]
-            if(!datasetContents.has(uri)) datasetContents.set(uri, [content])
+            if (!datasetContents.has(uri)) datasetContents.set(uri, [content])
             else datasetContents.set(uri, [...gett(datasetContents, uri), content])
         }
 
@@ -727,13 +729,13 @@ export class Dataplane {
 
     async fetchUsersHydrationDataFromBsky(dids: string[]) {
         const agent = this.agent
-        if(!agent.hasSession()) return
+        if (!agent.hasSession()) return
 
         dids = dids.filter(d => !this.bskyUsers.has(d))
         if (dids.length == 0) return
 
         const didBatches: string[][] = []
-        for(let i = 0; i < dids.length; i += 25) didBatches.push(dids.slice(i, i+25))
+        for (let i = 0; i < dids.length; i += 25) didBatches.push(dids.slice(i, i + 25))
         const data = await Promise.all(didBatches.map(b => agent.bsky.getProfiles({actors: b})))
         const profiles = data.flatMap(d => d.data.profiles)
 
@@ -756,13 +758,13 @@ export class Dataplane {
     }
 
     async fetchFilesFromStorage(filePaths: string[], bucket: string) {
-        for(let i = 0; i < filePaths.length; i ++) {
+        for (let i = 0; i < filePaths.length; i++) {
             const path = filePaths[i]
-            const { data } = await this.ctx.sb.storage
+            const {data} = await this.ctx.sb.storage
                 .from(bucket)
                 .download(path)
 
-            if(data){
+            if (data) {
                 const buffer = await data.arrayBuffer();
                 const base64 = Buffer.from(buffer).toString('base64');
                 const mimeType = data.type;
@@ -771,5 +773,40 @@ export class Dataplane {
                 this.sbFiles.set(bucket + ":" + path, fullBase64);
             }
         }
+    }
+
+
+    async fetchNotificationsHydrationData(skeleton: NotificationsSkeleton) {
+        if(!this.agent.hasSession() || skeleton.length == 0) return
+
+
+        const reqAuthors = skeleton.map(n => getDidFromUri(n.causedByRecordId))
+
+        const [caNotificationsData, _]: [NotificationQueryResult[], any] = await Promise.all([
+            this.ctx.kysely
+                .selectFrom("Notification")
+                .innerJoin("Record", "Notification.causedByRecordId", "Record.uri")
+                .select([
+                    "Notification.id",
+                    "Notification.userNotifiedId",
+                    "Notification.causedByRecordId",
+                    "Notification.message",
+                    "Notification.moreContext",
+                    "Notification.created_at",
+                    "Notification.type",
+                    "Notification.reasonSubject",
+                    "Record.cid",
+                    "Record.record"
+                ])
+                .where("userNotifiedId", "=", this.agent.did)
+                .orderBy("created_at", "desc")
+                .limit(20)
+                .execute(),
+            this.fetchUsersHydrationData(reqAuthors)
+        ])
+
+        caNotificationsData.forEach(n => {
+            this.notifications.set(n.id, n)
+        })
     }
 }

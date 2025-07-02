@@ -12,6 +12,7 @@ import {updateTopicContributions} from "#/services/wiki/contributions";
 import {createUserMonths} from "#/services/monetization/user-months";
 import {Queue} from "bullmq";
 import Redis from "ioredis";
+import {createNotificationJob, createNotificationsBatchJob} from "#/services/notifications/notifications";
 
 const mins = 60 * 1000
 
@@ -30,9 +31,17 @@ export class CAWorker {
     jobs: CAJobDefinition<any>[] = []
 
     constructor(ioredis: Redis) {
+        const env = process.env.NODE_ENV || "development"
+        const queueName = `${env}-queue`
+        const queuePrefix = undefined
+        console.log(`Starting worker on queue ${queueName} with prefix ${queuePrefix}`)
         this.ioredis = ioredis
-        this.queue = new Queue('bgJobs', {connection: ioredis})
-        this.worker = new Worker('bgJobs', async (job) => {
+        this.queue = new Queue(queueName, {
+            prefix: queuePrefix,
+            connection: ioredis
+        })
+        this.worker = new Worker(queueName, async (job) => {
+                console.log("got job!", job.name)
                 for (let i = 0; i < this.jobs.length; i++) {
                     if (job.name.startsWith(this.jobs[i].name)) {
                         console.log(`Running job: ${job.name}.`)
@@ -44,9 +53,21 @@ export class CAWorker {
             },
             {
                 connection: ioredis,
-                lockDuration: 60 * 1000 * 60 * 6
+                lockDuration: 60 * 1000 * 5
             }
         )
+        this.worker.on('failed', (job, err) => {
+            console.error(`Job ${job?.name} failed:`, err);
+        })
+        this.worker.on('error', (err) => {
+            console.error('Worker error:', err);
+        })
+        this.worker.on('active', (job) => {
+            console.log(`Job ${job.name} started`);
+        })
+        this.worker.on('completed', (job) => {
+            console.log(`Job ${job.name} completed`);
+        })
     }
 
     setupJob(jobName: string, handler: (data: any) => Promise<void>) {
@@ -78,7 +99,10 @@ export class CAWorker {
         this.setupJob("update-topics-categories", () => updateTopicsCategories(ctx))
         this.setupJob("update-topic-contributions", (data) => updateTopicContributions(ctx, data as string[]))
         this.setupJob("create-user-months", () => createUserMonths(ctx))
+        this.setupJob("create-notification", (data) => createNotificationJob(ctx, data))
+        this.setupJob("batch-create-notifications", (data) => createNotificationsBatchJob(ctx, data))
         this.setupJob("batch-jobs", () => this.batchJobs())
+        this.setupJob("test-job", async () => {console.log("Test job run!")})
 
         await this.removeAllRepeatingJobs()
         await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)

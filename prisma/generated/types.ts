@@ -39,6 +39,13 @@ export const EditorStatus = {
     Administrator: "Administrator"
 } as const;
 export type EditorStatus = (typeof EditorStatus)[keyof typeof EditorStatus];
+export const NotificationType = {
+    Reply: "Reply",
+    Mention: "Mention",
+    TopicEdit: "TopicEdit",
+    TopicVersionVote: "TopicVersionVote"
+} as const;
+export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 export type AccessRequest = {
     id: string;
     created_at: Generated<Timestamp>;
@@ -122,6 +129,16 @@ export type InviteCode = {
     usedByDid: string | null;
     usedAt: Timestamp | null;
     recommenderId: string | null;
+};
+export type Notification = {
+    id: string;
+    created_at: Generated<Timestamp>;
+    type: NotificationType;
+    userNotifiedId: string;
+    causedByRecordId: string;
+    message: string | null;
+    moreContext: string | null;
+    reasonSubject: string | null;
 };
 export type PaymentPromise = {
     id: string;
@@ -273,6 +290,7 @@ export type DB = {
     Follow: Follow;
     HasReacted: HasReacted;
     InviteCode: InviteCode;
+    Notification: Notification;
     PaymentPromise: PaymentPromise;
     Post: Post;
     Reaction: Reaction;

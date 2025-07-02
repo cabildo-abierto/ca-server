@@ -65,8 +65,12 @@ function makeAdminHandlerNoAuth<P, Q>(ctx: AppContext, handler: CAHandlerNoAuth<
 
 function startJobHandler(ctx: AppContext, job: string): express.Handler {
     return makeAdminHandler<{}, {}>(ctx, async () => {
-        await ctx.worker?.addJob(job, {})
-        console.log("added job", job)
+        if(ctx.worker){
+            await ctx.worker.addJob(job, {})
+            console.log("added job", job)
+        } else {
+            console.warn(`No worker for job ${job}`)
+        }
         return {data: {}}
     })
 }
@@ -162,6 +166,10 @@ export const adminRoutes = (ctx: AppContext) => {
     )
 
     router.get("/repo/:handleOrDid", makeAdminHandler(ctx, getRepoCounts))
+
+    router.post(
+        "/test-job", startJobHandler(ctx, "test-job")
+    )
 
     return router
 }

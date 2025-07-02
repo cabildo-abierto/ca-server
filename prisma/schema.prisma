@@ -66,6 +66,8 @@ model User {
 
   donations Donation[]
   months UserMonth[]
+
+  notifications Notification[]
 }
 
 enum ValidationType {
@@ -241,6 +243,8 @@ model Record {
   rootOf  Post[] @relation("root")
 
   CAProfileOf User? @relation("CAProfile")
+
+  notificationsGenerated Notification[]
 }
 
 model Content {
@@ -411,8 +415,34 @@ model AccessRequest {
 }
 
 
+model Notification {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now()) @map("created_at")
+  type       NotificationType
+
+  userNotifiedId String
+  userNotified User @relation(fields: [userNotifiedId], references: [did])
+
+  causedByRecordId String // replies, edits, votes, mentions
+  causedByRecord Record @relation(fields: [causedByRecordId], references: [uri])
+
+  message String?
+  moreContext String?
+
+  reasonSubject String?
+}
+
+
 enum EditorStatus {
   Beginner
   Editor
   Administrator
+}
+
+
+enum NotificationType {
+  Reply
+  Mention
+  TopicEdit
+  TopicVersionVote
 }

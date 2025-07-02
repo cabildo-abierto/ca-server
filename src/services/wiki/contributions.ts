@@ -33,10 +33,15 @@ function getMarkdown(v: {content: {textBlobId: string | null, format: string | n
         return decompress(currentContent)
     } else if(currentFormat != "markdown"){
         if(currentFormat == "lexical-compressed" || !currentFormat){
-            const lexical = decompress(currentContent)
-            if(lexical.length == 0){
-                return ""
-            } else {
+            try {
+                const lexical = decompress(currentContent)
+                if(lexical.length == 0){
+                    return ""
+                } else {
+                    return null
+                }
+            } catch (err) {
+                console.log("Failed to decompress lexical content", currentContent)
                 return null
             }
         }

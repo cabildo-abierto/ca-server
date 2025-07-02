@@ -10,6 +10,9 @@ import {
 } from '@atproto/xrpc-server'
 import { schemas } from './lexicons.js'
 import * as ArCabildoabiertoFeedGetFeed from './types/ar/cabildoabierto/feed/getFeed.js'
+import * as ArCabildoabiertoNotificationGetUnreadCount from './types/ar/cabildoabierto/notification/getUnreadCount.js'
+import * as ArCabildoabiertoNotificationListNotifications from './types/ar/cabildoabierto/notification/listNotifications.js'
+import * as ArCabildoabiertoNotificationUpdateSeen from './types/ar/cabildoabierto/notification/updateSeen.js'
 import * as ComAtprotoRepoApplyWrites from './types/com/atproto/repo/applyWrites.js'
 import * as ComAtprotoRepoCreateRecord from './types/com/atproto/repo/createRecord.js'
 import * as ComAtprotoRepoDeleteRecord from './types/com/atproto/repo/deleteRecord.js'
@@ -243,6 +246,7 @@ export class ArCabildoabiertoNS {
   embed: ArCabildoabiertoEmbedNS
   feed: ArCabildoabiertoFeedNS
   wiki: ArCabildoabiertoWikiNS
+  notification: ArCabildoabiertoNotificationNS
 
   constructor(server: Server) {
     this._server = server
@@ -251,6 +255,7 @@ export class ArCabildoabiertoNS {
     this.embed = new ArCabildoabiertoEmbedNS(server)
     this.feed = new ArCabildoabiertoFeedNS(server)
     this.wiki = new ArCabildoabiertoWikiNS(server)
+    this.notification = new ArCabildoabiertoNotificationNS(server)
   }
 }
 
@@ -302,6 +307,49 @@ export class ArCabildoabiertoWikiNS {
 
   constructor(server: Server) {
     this._server = server
+  }
+}
+
+export class ArCabildoabiertoNotificationNS {
+  _server: Server
+
+  constructor(server: Server) {
+    this._server = server
+  }
+
+  getUnreadCount<AV extends AuthVerifier>(
+    cfg: ConfigOf<
+      AV,
+      ArCabildoabiertoNotificationGetUnreadCount.Handler<ExtractAuth<AV>>,
+      ArCabildoabiertoNotificationGetUnreadCount.HandlerReqCtx<ExtractAuth<AV>>
+    >,
+  ) {
+    const nsid = 'ar.cabildoabierto.notification.getUnreadCount' // @ts-ignore
+    return this._server.xrpc.method(nsid, cfg)
+  }
+
+  listNotifications<AV extends AuthVerifier>(
+    cfg: ConfigOf<
+      AV,
+      ArCabildoabiertoNotificationListNotifications.Handler<ExtractAuth<AV>>,
+      ArCabildoabiertoNotificationListNotifications.HandlerReqCtx<
+        ExtractAuth<AV>
+      >
+    >,
+  ) {
+    const nsid = 'ar.cabildoabierto.notification.listNotifications' // @ts-ignore
+    return this._server.xrpc.method(nsid, cfg)
+  }
+
+  updateSeen<AV extends AuthVerifier>(
+    cfg: ConfigOf<
+      AV,
+      ArCabildoabiertoNotificationUpdateSeen.Handler<ExtractAuth<AV>>,
+      ArCabildoabiertoNotificationUpdateSeen.HandlerReqCtx<ExtractAuth<AV>>
+    >,
+  ) {
+    const nsid = 'ar.cabildoabierto.notification.updateSeen' // @ts-ignore
+    return this._server.xrpc.method(nsid, cfg)
   }
 }
 

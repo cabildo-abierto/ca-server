@@ -19,3 +19,8 @@ export const formatIsoDate = (isoDate: string | Date) => {
 export const yesterday = () => {
     return new Date(Date.now() - 24 * 60 * 60 * 1000)
 }
+
+
+export function sortDatesDescending(a: Date | string, b: Date | string) {
+    return new Date(b).getTime() - new Date(a).getTime()
+}

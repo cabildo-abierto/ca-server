@@ -1,5 +1,5 @@
 import {ATProtoStrongRef, UserRepoElement} from "#/lib/types";
-import {getCollectionFromUri, getDidFromUri, getRkeyFromUri, isTopicVersion, splitUri} from "#/utils/uri";
+import {getCollectionFromUri, getDidFromUri, getRkeyFromUri, isArticle, isTopicVersion, splitUri} from "#/utils/uri";
 import * as Post from "#/lex-api/types/app/bsky/feed/post"
 import * as Follow from "#/lex-api/types/app/bsky/graph/follow"
 import * as Like from "#/lex-api/types/app/bsky/feed/like"
@@ -17,7 +17,7 @@ import {
     isDatasetDataSource
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {ExpressionBuilder, OnConflictDatabase, OnConflictTables, Transaction} from "kysely";
-import {DB} from "../../../prisma/generated/types";
+import {DB, NotificationType} from "../../../prisma/generated/types";
 import {ValidationResult} from "@atproto/lexicon";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 import {
@@ -32,6 +32,7 @@ import {isTopicVote} from "#/services/wiki/votes";
 import {isRecord as isVoteReject} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject"
 import {deleteRecordsDB} from "#/services/delete";
 import {unique} from "#/utils/arrays";
+import {NotificationBatchData, NotificationJobData} from "#/services/notifications/notifications";
 
 
 export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: ATProtoStrongRef, record: any }[]) {
@@ -217,7 +218,7 @@ export const processContentsBatch = async (trx: Transaction<DB>, records: {
 
 
 export const processPostsBatch: BatchRecordProcessor<Post.Record> = async (ctx, records) => {
-    await ctx.kysely.transaction().execute(async (trx) => {
+    const insertedPosts = await ctx.kysely.transaction().execute(async (trx) => {
         await processRecordsBatch(trx, records)
         const referencedRefs: ATProtoStrongRef[] = records.reduce((acc, r) => {
             return [
@@ -258,6 +259,14 @@ export const processPostsBatch: BatchRecordProcessor<Post.Record> = async (ctx, 
             }
         })
 
+        const existing = await trx
+            .selectFrom("Post")
+            .select("uri")
+            .where("uri", "in", posts.map(p => p.uri))
+            .execute()
+
+        const existingSet = new Set(existing.map(p => p.uri))
+
         await trx
             .insertInto("Post")
             .values(posts)
@@ -269,7 +278,30 @@ export const processPostsBatch: BatchRecordProcessor<Post.Record> = async (ctx, 
                 })
             )
             .execute()
+
+        return posts.filter(p => !existingSet.has(p.uri))
     })
+
+    if(insertedPosts){
+        insertedPosts.forEach(p => {
+            if(p.replyToId){
+                const replyToDid = getDidFromUri(p.replyToId)
+                if(replyToDid != getDidFromUri(p.uri)){
+                    const c = getCollectionFromUri(p.replyToId)
+                    if(isArticle(c) || isTopicVersion(c)){
+                        const data: NotificationJobData = {
+                            userNotifiedId: getDidFromUri(p.replyToId),
+                            type: "Reply",
+                            causedByRecordId: p.uri,
+                            createdAt: new Date().toISOString(),
+                            reasonSubject: p.replyToId,
+                        }
+                        ctx.worker?.addJob("create-notification", data)
+                    }
+                }
+            }
+        })
+    }
 }
 
 
@@ -400,7 +432,7 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB>, topi
 
 
 export const processReactionsBatch: BatchRecordProcessor<ReactionRecord> = async (ctx, records) => {
-    const topicIdsList = await ctx.kysely.transaction().execute(async (trx) => {
+    const res = await ctx.kysely.transaction().execute(async (trx) => {
         const reactionType = getCollectionFromUri(records[0].ref.uri)
         if (!isReactionType(reactionType)) return
 
@@ -465,23 +497,31 @@ export const processReactionsBatch: BatchRecordProcessor<ReactionRecord> = async
                     .execute()
             }
 
-            let topicIdsList = (await trx
+            let topicVotes = (await trx
                 .selectFrom("TopicVersion")
                 .innerJoin("Reaction", "TopicVersion.uri", "Reaction.subjectId")
-                .select(["TopicVersion.topicId"])
+                .select(["TopicVersion.topicId", "TopicVersion.uri", "Reaction.uri as reactionUri"])
                 .where("Reaction.uri", "in", records.map(r => r.ref.uri))
-                .execute()).map(t => t.topicId)
+                .where("TopicVersion.uri", "in", inserted.map(r => r.recordId))
+                .execute())
 
-            topicIdsList = unique(topicIdsList)
+            const topicIdsList = unique(topicVotes.map(t => t.topicId))
 
             await updateTopicsCurrentVersionBatch(trx, topicIdsList)
 
-            return topicIdsList
+            return {topicIdsList, topicVotes}
         }
     })
 
-    if(topicIdsList){
-        await addUpdateContributionsJobForTopics(ctx, topicIdsList)
+    if(res){
+        const data: NotificationBatchData = {
+            type: "TopicVersionVote",
+            uris: res.topicVotes.map(t => t.reactionUri),
+            subjectUris: res.topicVotes.map(t => t.uri),
+            topics: res.topicVotes.map(t => t.topicId),
+        }
+        ctx.worker?.addJob("batch-create-notifications", data)
+        await addUpdateContributionsJobForTopics(ctx, res.topicIdsList)
     }
 }
 
@@ -574,7 +614,7 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
         authorship: r.record.claimsAuthorship ?? false
     }))
 
-    await ctx.kysely.transaction().execute(async (trx) => {
+    const inserted = await ctx.kysely.transaction().execute(async (trx) => {
         await processRecordsBatch(trx, records)
         await processContentsBatch(trx, contents)
 
@@ -600,14 +640,26 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
                     message: (eb) => eb.ref("excluded.message"),
                     props: (eb: ExpressionBuilder<OnConflictDatabase<DB, "TopicVersion">, OnConflictTables<"TopicVersion">>) => eb.ref("excluded.props")
                 }))
-                .returning(["topicId"])
+                .returning(["topicId", "TopicVersion.uri"])
                 .execute()
+
             await updateTopicsCurrentVersionBatch(trx, inserted.map(t => t.topicId))
+
+            return inserted
         } catch (err) {
             console.log("error inserting topic versions", err)
         }
 
     })
+
+    if(inserted){
+        const data: NotificationBatchData = {
+            uris: inserted.map(i => i.uri),
+            topics: inserted.map(i => i.topicId),
+            type: "TopicEdit"
+        }
+        ctx.worker?.addJob("batch-create-notifications", data)
+    }
 
     await addUpdateContributionsJobForTopics(ctx, topics.map(t => t.id))
 }

@@ -5,6 +5,7 @@
   ./lexicons/ar/cabildoabierto/feed/* \
   ./lexicons/ar/cabildoabierto/wiki/* \
   ./lexicons/ar/cabildoabierto/label/* \
+  ./lexicons/ar/cabildoabierto/notification/* \
   ./lexicons/com/atproto/repo/* \
   ./lexicons/com/atproto/identity/* \
   ./lexicons/com/atproto/label/* \

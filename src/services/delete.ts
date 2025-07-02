@@ -66,6 +66,13 @@ export async function deleteCollection(ctx: AppContext, collection: string){
 export function deleteRecordsDB(ctx: AppContext, uris: string[]){
     const su = new SyncUpdate(ctx.db)
     su.addUpdatesAsTransaction([
+        ctx.db.notification.deleteMany({
+            where: {
+                causedByRecordId: {
+                    in: uris
+                }
+            }
+        }),
         ctx.db.hasReacted.deleteMany({
             where: {
                 recordId: {
