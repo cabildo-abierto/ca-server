@@ -12,7 +12,6 @@ import {sortByKey, unique} from "#/utils/arrays";
 import {sortDatesDescending} from "#/utils/dates";
 import {SessionAgent} from "#/utils/session-agent";
 import {getDidFromUri} from "#/utils/uri";
-import {getDid} from "@atproto/identity";
 
 
 function bskyNotificationToCA(n: BskyNotification): Notification {
@@ -34,6 +33,7 @@ export type NotificationQueryResult = {
     created_at: Date
     type: NotificationType
     reasonSubject: string | null
+    topicId: string | null
 }
 
 
@@ -83,7 +83,8 @@ function hydrateCANotification(id: string, dataplane: Dataplane, lastReadTime: D
         record: data.record ? JSON.parse(data.record) : undefined,
         isRead: data.created_at < lastReadTime,
         indexedAt: data.created_at.toISOString(),
-        reasonSubject: data.reasonSubject ?? undefined
+        reasonSubject: data.reasonSubject ?? undefined,
+        reasonSubjectContext: data.topicId ?? undefined
     }
 }
 
@@ -91,43 +92,57 @@ function hydrateCANotification(id: string, dataplane: Dataplane, lastReadTime: D
 export type NotificationsSkeleton = {
     id: string
     causedByRecordId: string
+    reasonSubject: string | null
 }[]
+
 
 
 async function getCANotifications(ctx: AppContext, agent: SessionAgent): Promise<Notification[]> {
     const dataplane = new Dataplane(ctx, agent)
 
-    const skeleton: NotificationsSkeleton = await ctx.kysely
+    const [skeleton, lastSeen] = await Promise.all([
+        ctx.kysely
         .selectFrom("Notification")
         .innerJoin("Record", "Notification.causedByRecordId", "Record.uri")
         .select([
             "Notification.id",
-            "Notification.causedByRecordId"
+            "Notification.causedByRecordId",
+            "Notification.reasonSubject"
         ])
         .where("Notification.userNotifiedId", "=", agent.did)
         .orderBy("Notification.created_at", "desc")
         .limit(20)
-        .execute()
-
-    console.log("CA Notifications skeleton", skeleton)
+        .execute(),
+        ctx.kysely
+            .selectFrom("User")
+            .select("lastSeenNotifications")
+            .where("did", "=", agent.did)
+            .execute()
+    ])
 
     await dataplane.fetchNotificationsHydrationData(skeleton)
 
-    const lastReadTime = new Date()
-
     return skeleton
-        .map(n => hydrateCANotification(n.id, dataplane, lastReadTime))
+        .map(n => hydrateCANotification(n.id, dataplane, lastSeen[0].lastSeenNotifications))
         .filter(n => n != null)
 }
 
 
+async function updateSeenCANotifications(ctx: AppContext, agent: SessionAgent) {
+    await ctx.kysely
+        .updateTable("User")
+        .set("lastSeenNotifications", new Date())
+        .where("did", "=", agent.did)
+        .execute()
+}
+
+
 export const getNotifications: CAHandler<{}, Notification[]> = async (ctx, agent, {}) => {
-
-
-    const [{data}, _, caNotifications] = await Promise.all([
+    const [{data}, caNotifications, _, _2] = await Promise.all([
         agent.bsky.app.bsky.notification.listNotifications(),
+        getCANotifications(ctx, agent),
         agent.bsky.app.bsky.notification.updateSeen({seenAt: new Date().toISOString()}),
-        getCANotifications(ctx, agent)
+        updateSeenCANotifications(ctx, agent)
     ])
 
     // le tenemos que agregar a las notificaciones la lista de notificaciones propias de CA
@@ -140,8 +155,6 @@ export const getNotifications: CAHandler<{}, Notification[]> = async (ctx, agent
 
     const bskyNotifications = data.notifications.map(bskyNotificationToCA)
 
-    console.log("caNotifications", caNotifications)
-
     const notifications = sortByKey(
         [...bskyNotifications, ...caNotifications],
         a => a.indexedAt,
@@ -153,9 +166,33 @@ export const getNotifications: CAHandler<{}, Notification[]> = async (ctx, agent
 
 
 export const getUnreadNotificationsCount: CAHandler<{}, number> = async (ctx, agent, {}) => {
+    // queremos la cantidad de notificaciones no leídas entre CA y Bluesky
+    // el punto clave es la timestamp de última lectura
+    // va a haber dos timesamps:
+    //  - última lectura en Bluesky O Cabildo Abierto
+    //  - última lectura en Cabildo Abierto
+    // la primera la maneja Bluesky, y la actualizamos desde CA también
+    // la segunda es nuestra
+    // en consecuencia, al ver las notificaciones en CA puede ser que se intercalen notificaciones leídas con no leídas
+    // si la última lectura en Bluesky fue más reciente que la última lectura en CA
+
     const {data} = await agent.bsky.app.bsky.notification.getUnreadCount()
 
-    return {data: data.count}
+    const result = await ctx.kysely
+        .selectFrom('Notification')
+        .select(({ fn }) => [fn.count('id').as('count')])
+        .where('userNotifiedId', '=', agent.did)
+        .where('created_at', '>', (eb) =>
+            eb
+                .selectFrom('User')
+                .select('lastSeenNotifications')
+                .where('did', '=', agent.did)
+        )
+        .executeTakeFirst()
+
+    const caUnreadCount = Number(result?.count ?? 0)
+
+    return {data: data.count+caUnreadCount}
 }
 
 

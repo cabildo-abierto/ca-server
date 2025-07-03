@@ -238,6 +238,7 @@ export type User = {
     seenTutorial: Generated<boolean>;
     userValidationHash: string | null;
     orgValidation: string | null;
+    lastSeenNotifications: Generated<Timestamp>;
 };
 export type UserMonth = {
     id: string;

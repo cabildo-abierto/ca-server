@@ -779,6 +779,7 @@ export class Dataplane {
             this.ctx.kysely
                 .selectFrom("Notification")
                 .innerJoin("Record", "Notification.causedByRecordId", "Record.uri")
+                .leftJoin("TopicVersion", "Notification.reasonSubject", "TopicVersion.uri")
                 .select([
                     "Notification.id",
                     "Notification.userNotifiedId",
@@ -789,7 +790,8 @@ export class Dataplane {
                     "Notification.type",
                     "Notification.reasonSubject",
                     "Record.cid",
-                    "Record.record"
+                    "Record.record",
+                    "TopicVersion.topicId"
                 ])
                 .where("userNotifiedId", "=", this.agent.did)
                 .orderBy("created_at", "desc")

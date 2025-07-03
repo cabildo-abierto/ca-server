@@ -80,6 +80,7 @@ export interface Notification {
     | 'topic-version-vote'
     | (string & {})
   reasonSubject?: string
+  reasonSubjectContext?: string
   record: { [_ in string]: unknown }
   isRead: boolean
   indexedAt: string

@@ -74,7 +74,8 @@
             "topic-version-vote"
           ]
         },
-        "reasonSubject": { "type": "string", "format": "at-uri" },
+        "reasonSubject": { "type": "string" },
+        "reasonSubjectContext": { "type": "string"},
         "record": { "type": "unknown" },
         "isRead": { "type": "boolean" },
         "indexedAt": { "type": "string", "format": "datetime" },
