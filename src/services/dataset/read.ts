@@ -67,15 +67,15 @@ export async function getFilteredTopics(ctx: AppContext, filters: $Typed<ColumnF
         }
     })
 
-    return await ctx.kysely
+    const query = ctx.kysely
         .selectFrom('Topic')
         .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
         .select(includeProps ? ['id', 'TopicVersion.props'] : ['id'])
         .where((eb) =>
             eb.and(includesFilters.map(f => stringListIncludes(f.name, f.value)))
         )
-        .limit(limit ?? Infinity)
-        .execute()
+
+    return await (limit ? query.limit(limit) : query).execute()
 }
 
 
