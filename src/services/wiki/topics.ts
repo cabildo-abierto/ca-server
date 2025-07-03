@@ -31,9 +31,9 @@ export async function getTopicsSkeleton(ctx: AppContext, categories: string[], o
     const jsonbArray = JSON.stringify(categories)
     let orderByClause
     if (orderBy === 'popular') {
-        orderByClause = `t."popularityScore" DESC`
+        orderByClause = `t."popularityScore" DESC, t."lastEdit" DESC`
     } else {
-        orderByClause = `t."lastEdit" DESC`
+        orderByClause = `t."lastEdit" DESC, t."popularityScore" DESC`
     }
 
     let topics: {id: string}[]

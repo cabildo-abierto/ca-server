@@ -89,13 +89,15 @@ export async function processDelete(ctx: AppContext, uri: string) {
     const c = getCollectionFromUri(uri)
 
     if (isTopicVersion(c)) {
-        await processDeleteTopicVersion(ctx, uri)
+        return await processDeleteTopicVersion(ctx, uri)
 
     } else if (isReactionCollection(c)) {
         await processDeleteReaction(ctx, uri)
+        return {}
     } else {
         const su = deleteRecordsDB(ctx, [uri])
         await su.apply()
+        return {}
     }
 }
 

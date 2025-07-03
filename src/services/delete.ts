@@ -65,6 +65,7 @@ export async function deleteCollection(ctx: AppContext, collection: string){
 
 export function deleteRecordsDB(ctx: AppContext, uris: string[]){
     const su = new SyncUpdate(ctx.db)
+    console.log("Deleting from DB")
     su.addUpdatesAsTransaction([
         ctx.db.notification.deleteMany({
             where: {
@@ -223,11 +224,15 @@ export async function deleteUser(ctx: AppContext, did: string) {
 
 
 export async function deleteRecordAT(agent: SessionAgent, uri: string){
-    return agent.bsky.com.atproto.repo.deleteRecord({
-        repo: agent.did,
-        rkey: getRkeyFromUri(uri),
-        collection: getCollectionFromUri(uri)
-    })
+    try {
+        await agent.bsky.com.atproto.repo.deleteRecord({
+            repo: agent.did,
+            rkey: getRkeyFromUri(uri),
+            collection: getCollectionFromUri(uri)
+        })
+    } catch (err) {
+        console.warn("No se pudo borrar de ATProto", uri)
+    }
 }
 
 
@@ -235,6 +240,7 @@ export const deleteRecordHandler: CAHandler<{params: {rkey: string, collection: 
     const {rkey, collection} = params
     const uri = getUri(agent.did, collection, rkey)
     await deleteRecordAT(agent, uri)
-    await processDelete(ctx, uri)
+    const {error} = await processDelete(ctx, uri)
+    if(error) return {error}
     return {data: {}}
 }

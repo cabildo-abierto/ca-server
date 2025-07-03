@@ -39,7 +39,7 @@ export async function processDeleteTopicVersion(ctx: AppContext, uri: string) {
     if (!topicHistory) return {error: "Ocurrió un error al borrar la versión."}
 
     const currentVersion = getTopicCurrentVersion(topicHistory.versions)
-    if (!currentVersion) return {error: "Ocurrió un error al borrar la versión."}
+    if (currentVersion == null) return {error: "Ocurrió un error al borrar la versión."}
 
     const index = topicHistory.versions.findIndex(v => v.uri == uri)
 
@@ -72,9 +72,13 @@ export async function processDeleteTopicVersion(ctx: AppContext, uri: string) {
 
     const su = new SyncUpdate(ctx.db)
     su.addUpdatesAsTransaction(updates)
+    console.log("applying transaction")
     await su.apply()
 
+    console.log("udpating topic contr")
     await addUpdateContributionsJobForTopics(ctx, [id])
+
+    return {}
 }
 
 
