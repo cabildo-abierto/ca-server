@@ -738,7 +738,13 @@ export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOr
         getFollowxFromBsky(agent, did, data, kind)
     ])
 
+    console.log("caUsers", caUsers)
+
+    console.log("bskyUsers", bskyUsers)
+
     const userList = unique([...caUsers, ...bskyUsers])
+
+    console.log("userList", userList)
 
     await data.fetchUsersHydrationData(userList)
 
@@ -797,6 +803,19 @@ export const updateProfile: CAHandler<UpdateProfileProps, {}> = async (ctx, agen
             record: newRecord,
             rkey: "self"
         })
+    }
+
+    return {data: {}}
+}
+
+
+const bskyDid = "did:plc:z72i7hdynmk6r22z27h6tvur"
+
+export const clearFollows: CAHandler<{}, {}> = async (ctx, agent, {}) => {
+    const {data: follows} = await getFollows(ctx, agent, {params: {handleOrDid: agent.did}})
+
+    if(follows && follows.length == 1 && follows[0].did == bskyDid && follows[0].viewer?.following){
+        await unfollow(ctx, agent, {followUri: follows[0].viewer.following})
     }
 
     return {data: {}}

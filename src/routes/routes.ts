@@ -10,6 +10,7 @@ import {createAccessRequest, login} from "#/services/user/access";
 import {getFeedByKind} from "#/services/feed/feed";
 import {getProfileFeed} from "#/services/feed/profile/profile";
 import {
+    clearFollows,
     deleteSession,
     follow,
     getAccount,
@@ -358,6 +359,8 @@ export const createRouter = (ctx: AppContext) => {
     router.post("/conversation/read/:convoId", makeHandler(ctx, markConversationRead))
 
     router.post("/access-request", makeHandlerNoAuth(ctx, createAccessRequest))
+
+    router.post('/clear-follows', makeHandler(ctx, clearFollows))
 
     router.use(adminRoutes(ctx))
 

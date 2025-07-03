@@ -20,7 +20,7 @@ export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (c
             return {error: "Necesitás un código de invitación para crear un usuario nuevo."}
         }
     } else {
-        // tiene un cód
+        // tiene un código
         if(!caUsers.includes(handle)){
             const {error} = await checkValidCode(ctx, code)
             if(error){

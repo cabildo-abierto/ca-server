@@ -22,6 +22,7 @@ import {isMain as isImagesEmbed, View as ImagesEmbedView} from "#/lex-api/types/
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read"
 import {logTimes} from "#/utils/utils";
 import { JsonValue } from "@prisma/client/runtime/library";
+import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 
 
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
@@ -191,13 +192,16 @@ export function dbUserToProfileViewBasic(author: {
     handle: string | null,
     displayName: string | null,
     avatar: string | null
-} | null) {
+    CAProfileUri: string | null,
+} | null): CAProfileViewBasic | null {
     if (!author || !author.handle) return null
     return {
+        $type: "ar.cabildoabierto.actor.defs#profileViewBasic",
         did: author.did,
         handle: author.handle,
         displayName: author.displayName ?? undefined,
         avatar: author.avatar ?? undefined,
+        caProfile: author.CAProfileUri ?? undefined,
     }
 }
 
@@ -342,7 +346,8 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
                     did: true,
                     handle: true,
                     displayName: true,
-                    avatar: true
+                    avatar: true,
+                    CAProfileUri: true
                 }
             },
             record: true,
@@ -375,7 +380,7 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
             }
         },
         where: {
-            authorId: did, // cuando esté estable la collection pasamos a usar uri
+            authorId: did, // TO DO: cuando esté estable la collection pasamos a usar uri
             rkey: rkey
         }
     })
