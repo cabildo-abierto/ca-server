@@ -7,10 +7,12 @@ import {cleanText} from "#/utils/strings";
 import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import { Prisma } from "@prisma/client";
 import {AppContext} from "#/index";
-import { JsonObject } from "@prisma/client/runtime/library";
-import {hydrateTopicViewBasicFromTopicId} from "#/services/wiki/topics";
+import {JsonObject, JsonValue} from "@prisma/client/runtime/library";
+import {hydrateTopicViewBasicFromTopicId, topicQueryResultToTopicViewBasic} from "#/services/wiki/topics";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {SessionAgent} from "#/utils/session-agent";
+import {sql} from "kysely";
+import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
 
 
 export async function searchUsersInCA(ctx: AppContext, query: string, dataplane: Dataplane): Promise<string[]> {
@@ -81,26 +83,38 @@ export function isJsonObject(value: Prisma.JsonValue): value is Prisma.JsonObjec
 }
 
 
-export async function getSearchTopicsSkeleton(ctx: AppContext, query: string) {
-    let topics: {id: string}[]= await ctx.db.$queryRaw`
-        SELECT t."id"
-        FROM "Topic" t
-        WHERE unaccent(t."id") ILIKE unaccent('%' || ${query} || '%')
-            LIMIT 20
-    `;
-
-    return topics
-}
-
-
-export const searchTopics: CAHandler<{params: {q: string}}, TopicViewBasic[]> = async (ctx, agent, {params}) => {
+export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | string[] | undefined}}, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
     let {q} = params
-    const query = cleanText(q)
-    const skeleton = await getSearchTopicsSkeleton(ctx, query)
+    const categories = query.c == undefined ? undefined : (typeof query.c == "string" ? [query.c] : query.c)
+    const searchQuery = cleanText(q)
 
-    const data = new Dataplane(ctx, agent)
-    await data.fetchTopicsBasicByIds(skeleton.map(x => x.id))
+    const baseQuery = ctx.kysely
+        .selectFrom('Topic')
+        .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
+        .select(["id", "lastEdit", "popularityScore", "TopicVersion.props"])
 
-    return {data: skeleton.map(({id}) => hydrateTopicViewBasicFromTopicId(id, data)).filter(x => x != null)}
+    const queryInCategories = categories ? baseQuery
+        .where(categories.includes("Sin categoría") ?
+            stringListIsEmpty("Categorías") :
+            (eb) =>
+                eb.and(categories.map(c => stringListIncludes("Categorías", c))
+                )
+        ) : baseQuery
+
+    const topics = await queryInCategories
+        .where(sql`unaccent("Topic"."id")`, 'ilike', sql`unaccent('%' || ${searchQuery} || '%')`)
+        .limit(20)
+        .execute()
+
+    return {
+        data: topics.map(t => topicQueryResultToTopicViewBasic({
+            id: t.id,
+            popularityScore: t.popularityScore,
+            lastEdit: t.lastEdit,
+            currentVersion: {
+                props: t.props as JsonValue
+            }
+        }))
+    }
 }
 

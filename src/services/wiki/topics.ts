@@ -19,6 +19,10 @@ import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wi
 import {ArticleEmbed, ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {isMain as isImagesEmbed, View as ImagesEmbedView} from "#/lex-api/types/app/bsky/embed/images"
+import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read"
+import {logTimes} from "#/utils/utils";
+import { JsonValue } from "@prisma/client/runtime/library";
+
 
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
     return await getTopics(ctx, agent, [], "popular", 10)
@@ -27,88 +31,15 @@ export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx,
 type TopicOrder = "popular" | "recent"
 
 
-export async function getTopicsSkeleton(ctx: AppContext, categories: string[], orderBy: TopicOrder, limit: number) {
-    const jsonbArray = JSON.stringify(categories)
-    let orderByClause
-    if (orderBy === 'popular') {
-        orderByClause = `t."popularityScore" DESC, t."lastEdit" DESC`
-    } else {
-        orderByClause = `t."lastEdit" DESC, t."popularityScore" DESC`
-    }
-
-    let topics: {id: string}[]
-    if(categories.includes("Sin categoría")){
-        // Idea: get all topics where Categorías isn't present or has length 0
-
-        topics = await ctx.db.$queryRawUnsafe(`
-            SELECT t.id
-            FROM "Topic" t
-                     JOIN "TopicVersion" v ON t."currentVersionId" = v."uri"
-            WHERE t."popularityScore" IS NOT NULL
-              AND t."lastEdit" IS NOT NULL
-              AND (
-                v."props" IS NULL
-                    OR (
-                    jsonb_typeof(v."props") = 'array'
-                        AND (
-                        NOT EXISTS (
-                            SELECT 1
-                            FROM jsonb_array_elements(v."props") AS prop
-                            WHERE prop ->> 'name' = 'Categorías'
-                        )
-                            OR EXISTS (
-                            SELECT 1
-                            FROM jsonb_array_elements(v."props") AS prop
-                            WHERE prop ->> 'name' = 'Categorías'
-                              AND (
-                                  prop -> 'value' -> 'value' IS NULL
-                                  OR jsonb_array_length(prop -> 'value' -> 'value') = 0
-                              )
-                        )
-                        )
-                    )
-                )
-            ORDER BY ${orderByClause}
-                LIMIT $2
-        `, jsonbArray, limit);
-    } else {
-        topics = await ctx.db.$queryRawUnsafe(`
-        SELECT t.id
-        FROM "Topic" t
-                 JOIN "TopicVersion" v ON t."currentVersionId" = v."uri"
-        WHERE t."popularityScore" IS NOT NULL
-          AND t."lastEdit" IS NOT NULL
-          AND (
-            (
-                v."props" IS NOT NULL
-                    AND jsonb_typeof(v."props") = 'array'
-                    AND EXISTS (SELECT 1
-                                FROM jsonb_array_elements(v."props") AS prop
-                                WHERE (prop ->>'name' = 'Categorías'
-                    AND (prop->'value'->'value')::jsonb @> $1::jsonb))
-                )
-                OR
-            (
-                ${categories.length === 0 ? 'TRUE' : 'FALSE'}
-            )
-        )
-        ORDER BY ${orderByClause} LIMIT $2
-    `, jsonbArray, limit)
-    }
-
-    return topics as {id: string}[]
-}
+type TopicsSkeleton = {id: string}[]
 
 
 export type TopicQueryResultBasic = {
     id: string
     lastEdit: Date | null
     popularityScore: number | null
-    categories: {categoryId: string}[]
     currentVersion: {
         props: Prisma.JsonValue
-        categories: string | null
-        synonyms: string | null
     } | null
 }
 
@@ -135,33 +66,11 @@ export function topicQueryResultToTopicViewBasic(t: TopicQueryResultBasic): $Typ
     if(t.currentVersion && t.currentVersion.props){
         props = t.currentVersion.props as unknown as TopicProp[]
     } else {
-        if(t.categories.length > 0) props.push({
-            name: "Categorías",
-            value: {
-                $type: "ar.cabildoabierto.wiki.topicVersion#stringListProp",
-                value: t.categories.map(c => c.categoryId)
-            }
-        }); else if(t.currentVersion && t.currentVersion.categories) props.push({
-            name: "Categorías",
-            value: {
-                $type: "ar.cabildoabierto.wiki.topicVersion#stringListProp",
-                value: JSON.parse(t.currentVersion.categories)
-            }
-        })
-
         props.push({
             name: "Título",
             value: {
                 $type: "ar.cabildoabierto.wiki.topicVersion#stringProp",
                 value: t.id
-            }
-        })
-
-        if(t.currentVersion && t.currentVersion.synonyms) props.push({
-            name: "Sinónimos",
-            value: {
-                $type: "ar.cabildoabierto.wiki.topicVersion#stringListProp",
-                value: JSON.parse(t.currentVersion.synonyms)
             }
         })
     }
@@ -181,14 +90,39 @@ export async function getTopics(
     agent: SessionAgent,
     categories: string[],
     sortedBy: "popular" | "recent",
-    limit: number): CAHandlerOutput<TopicViewBasic[]> {
+    limit?: number): CAHandlerOutput<TopicViewBasic[]> {
 
-    const skeleton = await getTopicsSkeleton(ctx, categories, sortedBy, limit)
+    const t1 = Date.now()
+    const baseQuery = ctx.kysely
+        .selectFrom('Topic')
+        .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
+        .select(["id", "lastEdit", "popularityScore", "TopicVersion.props"])
+        .where(categories.includes("Sin categoría") ?
+            stringListIsEmpty("Categorías") :
+            (eb) =>
+                eb.and(categories.map(c => stringListIncludes("Categorías", c))
+                )
+        )
+        .where("Topic.popularityScore", "is not", null)
+        .where("Topic.lastEdit", "is not", null)
+        .orderBy(sortedBy == "popular" ? "Topic.popularityScore" : "Topic.lastEdit", 'desc')
+        .orderBy(sortedBy == "popular" ? "Topic.lastEdit" : "Topic.popularityScore", 'desc')
 
-    const data = new Dataplane(ctx, agent)
-    await data.fetchTopicsBasicByIds(skeleton.map(s => s.id))
+    const topics = await (limit ? baseQuery.limit(limit) : baseQuery).execute()
 
-    return {data: skeleton.map(s => hydrateTopicViewBasicFromTopicId(s.id, data)).filter(x => x != null)}
+    const t2 = Date.now()
+    logTimes("getTopics", [t1, t2])
+
+    return {
+        data: topics.map(t => topicQueryResultToTopicViewBasic({
+            id: t.id,
+            popularityScore: t.popularityScore,
+            lastEdit: t.lastEdit,
+            currentVersion: {
+                props: t.props as JsonValue
+            }
+        }))
+    }
 }
 
 
@@ -206,7 +140,19 @@ export const getTopicsHandler: CAHandler<{
 }
 
 
-export const getCategories: CAHandler<{}, { category: string, size: number }[]> = async (ctx, agent, {}) => {
+export const getCategories: CAHandler<{}, string[]> = async (ctx, agent, {}) => {
+    const categories = await ctx.db.topicCategory.findMany({
+        select: {
+            id: true
+        }
+    })
+    categories.push({id: "Sin categoría"})
+    return {data: categories.map(c => c.id)}
+}
+
+
+
+export const getCategoriesWithCounts: CAHandler<{}, { category: string, size: number }[]> = async (ctx, agent, {}) => {
 
     const categoriesP = ctx.db.topicCategory.findMany({
         select: {

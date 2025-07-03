@@ -35,7 +35,7 @@ export async function updateTopicsCategories(ctx: AppContext) {
         try {
             await trx
                 .insertInto('TopicCategory')
-                .values(allCategoryIds.map((id) => ({id})))
+                .values(allCategoryIds.map(id => ({id})))
                 .onConflict((oc) => oc.column('id').doNothing())
                 .execute();
         } catch (err) {
@@ -70,7 +70,6 @@ export async function updateTopicsCategories(ctx: AppContext) {
 
         for(let i = 0; i < topicCategoryValues.length; i += batchSize) {
             console.log(`Batch ${i}.`)
-            console.log(topicCategoryValues.slice(i, i + batchSize).slice(0, 5))
             try {
                 await trx
                     .insertInto('TopicToCategory')
@@ -108,6 +107,15 @@ export async function updateTopicsCategories(ctx: AppContext) {
         } catch (err) {
             console.log("Error deleting old relations", err)
         }
+
+        await trx
+            .deleteFrom("TopicCategory")
+            .where(
+                "id",
+                "not in",
+                trx.selectFrom("TopicToCategory").select("categoryId")
+            )
+            .execute();
     })
 
 

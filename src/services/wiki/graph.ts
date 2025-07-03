@@ -1,11 +1,11 @@
-import {getCategories} from "./topics";
+import {getCategoriesWithCounts} from "./topics";
 import {AppContext} from "#/index";
 import {TopicsGraph} from "#/lib/types";
 import {logTimes} from "#/utils/utils";
 import {CAHandler} from "#/utils/handler";
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {getTopicCategories} from "#/services/wiki/utils";
-
+import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
 
 
 export const updateCategoriesGraph = async (ctx: AppContext) => {
@@ -108,8 +108,8 @@ export const getCategoriesGraph: CAHandler<{}, TopicsGraph> = async (ctx, agent,
         }
     })
 
-    const {data: categories, error} = await getCategories(ctx, agent, {})
-    if(!categories){
+    const {data: categories, error} = await getCategoriesWithCounts(ctx, agent, {})
+    if (!categories) {
         return {error}
     }
 
@@ -130,101 +130,43 @@ export const getCategoriesGraph: CAHandler<{}, TopicsGraph> = async (ctx, agent,
 }
 
 
-export const getCategoryGraph: CAHandler<{params: {c: string}}, TopicsGraph> = async (ctx, agent, {params}) => {
-    // TO DO: Usar props en vez de categories (que ya no se actualiza)
+export const getCategoryGraph: CAHandler<{ query: { c: string[] | string } }, TopicsGraph> = async (ctx, agent, {query}) => {
+    const categories = typeof query.c == "string" ? [query.c] : query.c
+
+    const baseQuery = ctx.kysely
+            .with("Node", db => db
+                .selectFrom("Topic")
+                .innerJoin("TopicVersion", "TopicVersion.uri", "Topic.currentVersionId")
+                .select(["id", "currentVersionId"])
+                .where(categories.includes("Sin categoría") ?
+                    stringListIsEmpty("Categorías") :
+                    eb =>
+                        eb.and(
+                            categories.map(c => stringListIncludes("Categorías", c))
+                        )
+                )
+            )
+
     const t1 = Date.now()
-    const {c: cat} = params
+    const [nodeIds, edges] = await Promise.all([
+        baseQuery
+            .selectFrom("Node")
+            .select(["Node.id"])
+            .execute(),
+        baseQuery
+            .selectFrom('Node as Node1')
+            .innerJoin("Reference", "Reference.referencedTopicId", "Node1.id")
+            .innerJoin("Node as Node2", "Reference.referencingContentId", "Node2.currentVersionId")
+            .select(['Node1.id as x', "Node2.id as y"])
+            .execute()
+    ])
 
-    let topics: {
-        id: string
-        referencedBy: {
-            referencingContent: {
-                topicVersion: {
-                    topicId: string
-                } | null
-            }
-        }[]
-    }[]
+    logTimes(`get cateogory graph ${categories}`, [t1, Date.now()])
 
-    if(cat == "Sin categoría"){
-        topics = await ctx.db.topic.findMany({
-            select: {
-                id: true,
-                referencedBy: {
-                    select: {
-                        referencingContent: {
-                            select: {
-                                topicVersion: {
-                                    select: {
-                                        topicId: true
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            where: {
-                categories: {
-                    none: {}
-                }
-            }
-        })
-    } else {
-        topics = await ctx.db.topic.findMany({
-            select: {
-                id: true,
-                referencedBy: {
-                    select: {
-                        referencingContent: {
-                            select: {
-                                topicVersion: {
-                                    select: {
-                                        topicId: true
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            where: {
-                categories: {
-                    some: {categoryId: cat}
-                }
-            }
-        })
-    }
-    const t2 = Date.now()
-
-    const topicIdsSet = new Set(topics.map(t => t.id))
-
-    const edges = []
-    for (let i = 0; i < topics.length; i++) {
-        const yId = topics[i].id
-
-        for (let j = 0; j < topics[i].referencedBy.length; j++) {
-            if (topics[i].referencedBy[j].referencingContent.topicVersion) {
-                const v = topics[i].referencedBy[j].referencingContent.topicVersion
-                if (!v) continue
-                const xId = v.topicId
-                if (!topicIdsSet.has(xId)) continue
-                if(xId == yId) continue
-
-                edges.push({
-                    x: xId,
-                    y: yId,
-                })
-            }
-        }
-    }
-    const t3 = Date.now()
-
-    logTimes("get category " + cat, [t1, t2, t3])
     return {
         data: {
-            nodeIds: topics.map(t => t.id),
-                edges: edges.slice(0, 300)
+            nodeIds: nodeIds.map(t => t.id),
+            edges
         }
     }
 }

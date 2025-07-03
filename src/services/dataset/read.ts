@@ -1,15 +1,19 @@
 import {decompress} from "#/utils/compression";
-import {Column, DatasetView, DatasetViewBasic} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
+import {Column, DatasetView, DatasetViewBasic, TopicsDatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
 import {CAHandler} from "#/utils/handler";
 import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {getUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
-import {Main as Visualization, isColumnFilter} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
-import {TopicsDatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset"
+import {
+    ColumnFilter,
+    isColumnFilter,
+    Main as Visualization
+} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {sql} from "kysely";
 import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+import {$Typed} from "@atproto/api";
 
 
 export const getDataset: CAHandler<{
@@ -31,7 +35,23 @@ type TopicDatasetSpec = {
     filters: Visualization["filters"]
 }
 
-function stringListIncludes(name: string, value: string) {
+export function stringListIsEmpty(name: string) {
+    const type = `ar.cabildoabierto.wiki.topicVersion#stringListProp`
+    const wrongTypePath = `$[*] ? (@.name == "${name}" && @.value."$type" != "${type}")`
+    const emptyPath = `$[*] ? (@.name == "${name}" && @.value."$type" == "${type}" && @.value.value.size() == 0)`
+    const existsPath = `$[*] ? (@.name == "${name}")`
+
+    return sql<boolean>`
+        "TopicVersion"."props" IS NULL
+        OR (
+            NOT jsonb_path_exists("TopicVersion"."props", ${existsPath}::jsonpath)
+        OR jsonb_path_exists("TopicVersion"."props", ${wrongTypePath}::jsonpath)
+        OR jsonb_path_exists("TopicVersion"."props", ${emptyPath}::jsonpath)
+        )
+    `;
+}
+
+export function stringListIncludes(name: string, value: string) {
     const type = `ar.cabildoabierto.wiki.topicVersion#stringListProp`
     const path = `$[*] ? (@.name == "${name}" && @.value."$type" == "${type}" && exists(@.value.value[*] ? (@ == "${value}")))`;
     return sql<boolean>`
@@ -39,11 +59,7 @@ function stringListIncludes(name: string, value: string) {
     `;
 }
 
-
-export const getTopicsDataset: CAHandler<TopicDatasetSpec, TopicsDatasetView> = async (ctx, agent, params) => {
-    const filters = params.filters ? params.filters.filter(f => isColumnFilter(f)): []
-    if(filters.length == 0) return {error: "Aplicá al menos un filtro."}
-
+export async function getFilteredTopics(ctx: AppContext, filters: $Typed<ColumnFilter>[], includeProps: boolean = true, limit?: number){
     const includesFilters: {name: string, value: string}[] = []
     filters.forEach(f => {
         if(f.operator == "includes" && f.operands && f.operands.length > 0) {
@@ -51,14 +67,23 @@ export const getTopicsDataset: CAHandler<TopicDatasetSpec, TopicsDatasetView> = 
         }
     })
 
-    const topics = await ctx.kysely
+    return await ctx.kysely
         .selectFrom('Topic')
         .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
-        .select(['id', 'TopicVersion.props'])
+        .select(includeProps ? ['id', 'TopicVersion.props'] : ['id'])
         .where((eb) =>
             eb.and(includesFilters.map(f => stringListIncludes(f.name, f.value)))
         )
+        .limit(limit ?? Infinity)
         .execute()
+}
+
+
+export const getTopicsDatasetHandler: CAHandler<TopicDatasetSpec, TopicsDatasetView> = async (ctx, agent, params) => {
+    const filters = params.filters ? params.filters.filter(f => isColumnFilter(f)): []
+    if(filters.length == 0) return {error: "Aplicá al menos un filtro."}
+
+    const topics = await getFilteredTopics(ctx, filters)
 
     let data: string = ""
     let columns: Column[] = []

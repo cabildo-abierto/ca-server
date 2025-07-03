@@ -39,7 +39,7 @@ import path from "path";
 import {cancelEditVote, voteEdit} from "#/services/wiki/votes";
 import { adminRoutes } from './admin-routes';
 import { fetchURLMetadata } from '#/services/write/metadata';
-import {getDataset, getDatasets, getTopicsDataset } from '#/services/dataset/read';
+import {getDataset, getDatasets, getTopicsDatasetHandler } from '#/services/dataset/read';
 import { createDataset } from '#/services/dataset/write';
 import {searchContents} from "#/services/feed/search";
 import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion";
@@ -242,7 +242,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/category-graph/:c',
+        '/category-graph',
         makeHandler(ctx, getCategoryGraph)
     )
 
@@ -289,7 +289,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.post('/topics-dataset',
-        makeHandler(ctx, getTopicsDataset)
+        makeHandler(ctx, getTopicsDatasetHandler)
     )
 
     router.post('/dataset',

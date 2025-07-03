@@ -381,16 +381,9 @@ export class Dataplane {
                 id: true,
                 popularityScore: true,
                 lastEdit: true,
-                categories: {
-                    select: {
-                        categoryId: true,
-                    }
-                },
                 currentVersion: {
                     select: {
-                        props: true,
-                        synonyms: true,
-                        categories: true
+                        props: true
                     }
                 }
             },
