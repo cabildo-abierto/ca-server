@@ -129,6 +129,7 @@ export type InviteCode = {
     usedByDid: string | null;
     usedAt: Timestamp | null;
     recommenderId: string | null;
+    created_at: Generated<Timestamp | null>;
 };
 export type Notification = {
     id: string;

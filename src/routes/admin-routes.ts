@@ -4,7 +4,7 @@ import {CAHandler, CAHandlerNoAuth, makeHandler} from "#/utils/handler";
 import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user";
 import {updateReferencesHandler} from "#/services/wiki/references";
 import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete";
-import {createInviteCodes, getAvailableInviteCodes} from "#/services/user/access";
+import {createInviteCodes} from "#/services/user/access";
 import {updateEngagementCountsHandler} from "#/services/feed/getUserEngagement";
 import {updateTopicsPopularityHandler} from "#/services/wiki/popularity";
 import {getUsers} from "#/services/user/users";
@@ -12,7 +12,6 @@ import {getAllTopics} from "#/services/wiki/topics";
 import {sessionAgent} from "#/utils/session-agent";
 import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration";
 import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation";
-import {processPayment} from "#/services/monetization/donations";
 import {updateTopicContributionsHandler} from "#/services/wiki/contributions";
 import {getStatsDashboard} from "#/services/admin/stats";
 import {getRepoCounts} from "#/services/admin/repo";
@@ -90,11 +89,6 @@ export const adminRoutes = (ctx: AppContext) => {
     router.post(
         "/user/delete/:handleOrDid",
         makeAdminHandler(ctx, deleteUserHandler)
-    )
-
-    router.get(
-        "/invite-code/all",
-        makeAdminHandler(ctx, getAvailableInviteCodes)
     )
 
     router.post(

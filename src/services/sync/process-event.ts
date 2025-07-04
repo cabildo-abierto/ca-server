@@ -196,8 +196,8 @@ export const processBskyProfile: RecordProcessor<BskyProfile.Record> = async (ct
         ...processRecord(ctx, ref, r),
         ctx.db.user.update({
             data: {
-                description: r.description ? r.description : undefined,
-                displayName: r.displayName ? r.displayName : undefined,
+                description: r.description != null ? r.description : undefined,
+                displayName: r.displayName != null ? r.displayName : undefined,
                 avatar,
                 banner,
                 handle

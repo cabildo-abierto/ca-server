@@ -110,6 +110,7 @@ model InviteCode {
   recommender   User?     @relation("invite-codes-available", fields: [recommenderId], references: [did])
   recommenderId String?   @unique
   accessRequest AccessRequest?
+  createdAt     DateTime?  @default(now()) @map("created_at")
 }
 
 model UserMonth {

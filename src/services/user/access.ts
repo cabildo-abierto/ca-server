@@ -103,31 +103,25 @@ export async function createCAUser(ctx: AppContext, agent: SessionAgent, code: s
 }
 
 
-export const createInviteCodes: CAHandler<{query: {c: number}}, {}> = async (ctx, agent, {query}) => {
+export const createInviteCodes: CAHandler<{query: {c: number}}, { inviteCodes: string[] }> = async (ctx, agent, {query}) => {
     console.log(`Creating ${query.c} invite codes.`)
     try {
-        await ctx.db.inviteCode.createMany({
-            data: new Array(query.c).fill({})
+        const values = new Array(query.c).map(i => {
+            return {
+                code: uuidv4()
+            }
         })
+
+        await ctx.kysely
+            .insertInto("InviteCode")
+            .values(values)
+            .execute()
+
+        return {data: {inviteCodes: values.map(c => c.code)}}
     } catch (err) {
         console.error(`Error creating invite codes: ${err}`)
+        return {error: "Ocurrió un error al crear los códigos de invitación"}
     }
-    return {data: {}}
-}
-
-
-export const getAvailableInviteCodes: CAHandler = async (ctx, agent, {}) => {
-
-    const codes = await ctx.db.inviteCode.findMany({
-        select: {
-            code: true
-        },
-        where: {
-            usedByDid: null
-        }
-    })
-
-    return {data: codes.map((c) => c.code)}
 }
 
 

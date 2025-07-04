@@ -714,8 +714,6 @@ export class Dataplane {
             })
         })
 
-        console.log("got data", data)
-
         this.caUsers = joinMaps(
             this.caUsers,
             new Map(res.map(r => [r.did, r]))

@@ -14,7 +14,10 @@ import {createCAUser} from "#/services/user/access";
 import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {Record as FollowRecord} from "#/lex-api/types/app/bsky/graph/follow"
 import {processCreate, processFollow} from "#/services/sync/process-event";
-import {Record as BskyProfileRecord, validateRecord as validateBskyProfile} from "#/lex-api/types/app/bsky/actor/profile"
+import {
+    Record as BskyProfileRecord,
+    validateRecord as validateBskyProfile
+} from "#/lex-api/types/app/bsky/actor/profile"
 import {BlobRef} from "@atproto/lexicon";
 import {uploadBase64Blob} from "#/services/blob";
 
@@ -236,27 +239,30 @@ export const getSessionData = async (ctx: AppContext, agent: SessionAgent): Prom
 }
 
 
-export function getValidationState(user: {userValidationHash: string | null, orgValidation: string | null}): ValidationState {
+export function getValidationState(user: {
+    userValidationHash: string | null,
+    orgValidation: string | null
+}): ValidationState {
     return user.userValidationHash ? "persona" : (user.orgValidation ? "org" : null)
 }
 
 
-export const getSession: CAHandlerNoAuth<{ params?: {code?: string} }, Session> = async (ctx, agent, {params}) => {
+export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session> = async (ctx, agent, {params}) => {
     if (!agent.hasSession()) {
         return {error: "No session."}
     }
 
     const data = await getSessionData(ctx, agent)
-    if(data) return {data}
+    if (data) return {data}
 
     // el usuario no está en la db pero logró iniciar sesión, creamos un nuevo usuario de CA
     const code = params?.code
-    if(code) {
+    if (code) {
         const {error} = await createCAUser(ctx, agent, code)
-        if(error) return {error}
+        if (error) return {error}
 
         const newUserData = await getSessionData(ctx, agent)
-        if(newUserData) return {data: newUserData}
+        if (newUserData) return {data: newUserData}
     }
 
     await deleteSession(ctx, agent)
@@ -265,23 +271,42 @@ export const getSession: CAHandlerNoAuth<{ params?: {code?: string} }, Session> 
 
 
 export const getAccount: CAHandler<{}, Account> = async (ctx, agent) => {
-    const data = await ctx.db.user.findUnique({
-        select: {
-            email: true
-        },
-        where: {
-            did: agent.did
-        }
-    })
-    if (!data) return {error: "No se encontró el usuario."}
+
+    const [caData, bskySession] = await Promise.all([
+        ctx.db.user.findUnique({
+            select: {
+                email: true
+            },
+            where: {
+                did: agent.did
+            }
+        }),
+        agent.bsky.com.atproto.server.getSession()
+    ])
+
+    if(!caData){
+        return {error: "No se encontró el usuario"}
+    }
+
+    const bskyEmail = bskySession.data.email
+
+    if(bskyEmail && (!caData.email || caData.email != bskyEmail)){
+        await ctx.db.user.update({
+            data: {
+                email: bskyEmail
+            },
+            where: {
+                did: agent.did
+            }
+        })
+    }
+
     return {
         data: {
-            email: data.email ?? undefined
+            email: bskyEmail
         }
     }
 }
-
-
 
 
 /*export const getChatBetween = async (userId: string, anotherUserId: string) => {
@@ -662,7 +687,7 @@ export const setSeenTutorial: CAHandler = async (ctx, agent) => {
 }
 
 
-async function getFollowxFromCA(ctx: AppContext, did: string, data: Dataplane, kind: "follows" | "followers"){
+async function getFollowxFromCA(ctx: AppContext, did: string, data: Dataplane, kind: "follows" | "followers") {
     const users = kind == "follows" ?
         (await ctx.db.follow.findMany({
             select: {
@@ -710,7 +735,7 @@ async function getFollowxFromCA(ctx: AppContext, did: string, data: Dataplane, k
 }
 
 
-async function getFollowxFromBsky(agent: SessionAgent, did: string, data: Dataplane, kind: "follows" | "followers"){
+async function getFollowxFromBsky(agent: SessionAgent, did: string, data: Dataplane, kind: "follows" | "followers") {
     const users = kind == "follows" ?
         (await agent.bsky.getFollows({actor: did})).data.follows :
         (await agent.bsky.getFollowers({actor: did})).data.followers
@@ -727,7 +752,7 @@ async function getFollowxFromBsky(agent: SessionAgent, did: string, data: Datapl
 export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOrDid, kind}: {
     handleOrDid: string,
     kind: "follows" | "followers"
-}): Promise<{data?: CAProfileViewBasic[], error?: string}> => {
+}): Promise<{ data?: CAProfileViewBasic[], error?: string }> => {
     const did = await handleToDid(ctx, agent, handleOrDid)
     if (!did) return {error: "No se encontró el usuario."}
 
@@ -784,7 +809,7 @@ export const updateProfile: CAHandler<UpdateProfileProps, {}> = async (ctx, agen
     const val = validateBskyProfile(data.value)
 
 
-    if(val.success){
+    if (val.success) {
         const record = val.value
 
         const avatarBlob: BlobRef | undefined = params.profilePic ? (await uploadBase64Blob(agent, params.profilePic)).ref : record.avatar
@@ -814,7 +839,7 @@ const bskyDid = "did:plc:z72i7hdynmk6r22z27h6tvur"
 export const clearFollows: CAHandler<{}, {}> = async (ctx, agent, {}) => {
     const {data: follows} = await getFollows(ctx, agent, {params: {handleOrDid: agent.did}})
 
-    if(follows && follows.length == 1 && follows[0].did == bskyDid && follows[0].viewer?.following){
+    if (follows && follows.length == 1 && follows[0].did == bskyDid && follows[0].viewer?.following) {
         await unfollow(ctx, agent, {followUri: follows[0].viewer.following})
     }
 
