@@ -48,6 +48,13 @@
         "caProfile": {
           "type": "string",
           "format": "at-uri"
+        },
+        "verification": {
+          "type": "string",
+          "knownValues": [
+            "person",
+            "org"
+          ]
         }
       }
     }

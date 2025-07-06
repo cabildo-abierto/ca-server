@@ -45,7 +45,7 @@ import { createDataset } from '#/services/dataset/write';
 import {searchContents} from "#/services/feed/search";
 import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion";
 import {cancelValidationRequest, createValidationRequest, getValidationRequest } from '#/services/user/validation';
-import {createPreference, getDonationHistory, getMonthlyValueHandler, processPayment} from '#/services/monetization/donations';
+import {createPreference, getDonationHistory, getFundingStateHandler, getMonthlyValueHandler, processPayment} from '#/services/monetization/donations';
 import { storeReadSession } from '#/services/monetization/read-tracking';
 import { getTopicTitleHandler } from '#/services/wiki/current-version';
 import {getTopicHistoryHandler} from "#/services/wiki/history";
@@ -335,6 +335,8 @@ export const createRouter = (ctx: AppContext) => {
     router.get('/donation-history', makeHandler(ctx, getDonationHistory))
 
     router.get('/monthly-value', makeHandler(ctx, getMonthlyValueHandler))
+
+    router.get('/funding-state', makeHandler(ctx, getFundingStateHandler))
 
     router.post('/donate/create-preference', makeHandler(ctx, createPreference))
 

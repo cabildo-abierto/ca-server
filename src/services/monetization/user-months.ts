@@ -20,11 +20,13 @@ function countReadChunks(a: ReadChunks): number {
     return count(a, x => x.duration >= 25)
 }
 
-export function getChunksReadByContent(readSessions: {readContentId: string, readChunks: ReadChunks}[]){
+export function getChunksReadByContent(readSessions: {readContentId: string | null, readChunks: ReadChunks}[]){
     const chunksByContent = new Map<string, ReadChunks[]>()
     readSessions.forEach(readSession => {
         const k = readSession.readContentId
-        chunksByContent.set(k, [...chunksByContent.get(k) ?? [], readSession.readChunks])
+        if(k){
+            chunksByContent.set(k, [...chunksByContent.get(k) ?? [], readSession.readChunks])
+        }
     })
 
     function joinManyChunks(chunks: ReadChunks[]): ReadChunks {
@@ -39,7 +41,7 @@ export function getChunksReadByContent(readSessions: {readContentId: string, rea
 }
 
 
-function isActive(readSessions: {readContentId: string, readChunks: ReadChunks}[]){
+function isActive(readSessions: {readContentId: string | null, readChunks: ReadChunks}[]){
     const m = getChunksReadByContent(readSessions)
     const authors = new Set<string>
     m.entries().forEach(([uri, readCount]) => {
@@ -70,8 +72,8 @@ function validateReadChunks(readChunks: JsonValue): { success: true; readChunks:
 }
 
 
-export function getValidatedReadSessions(readSessions: {readChunks: JsonValue, readContentId: string, createdAt: Date}[]): {readChunks: ReadChunks, createdAt: Date, readContentId: string}[] {
-    const validatedReadSessions: {readChunks: ReadChunks, createdAt: Date, readContentId: string}[] = []
+export function getValidatedReadSessions(readSessions: {readChunks: JsonValue, readContentId: string | null, createdAt: Date}[]): {readChunks: ReadChunks, createdAt: Date, readContentId: string | null}[] {
+    const validatedReadSessions: {readChunks: ReadChunks, createdAt: Date, readContentId: string | null}[] = []
     readSessions.forEach(session => {
         const v = validateReadChunks(session.readChunks)
         if(v.success){
@@ -85,11 +87,23 @@ export function getValidatedReadSessions(readSessions: {readChunks: JsonValue, r
 }
 
 
-export async function createUserMonths(ctx: AppContext) {
-    // Se crean UserMonths para todos los usuarios cuyo último user month haya terminado o que tengan readSesions pero no user months
-    console.log("Creating user months...")
+type UserWithReadSessions = {
+    did: string
+    handle: string
+    months: {
+        monthStart: Date
+        monthEnd: Date
+    }[]
+    readSessions: {
+        readContentId: string | null,
+        readChunks: JsonValue
+        createdAt: Date
+    }[]
+}
 
-    let users = await ctx.db.user.findMany({
+
+export async function getUsersWithReadSessions(ctx: AppContext, after: Date = new Date(Date.now()-30*24*3600*1000)): Promise<UserWithReadSessions[]> {
+    const users = await ctx.db.user.findMany({
         select: {
             did: true,
             handle: true,
@@ -114,7 +128,7 @@ export async function createUserMonths(ctx: AppContext) {
                 },
                 where: {
                     createdAt: {
-                        gt: new Date(Date.now()-30*24*3600*1000)
+                        gt: after
                     }
                 }
             }
@@ -122,35 +136,68 @@ export async function createUserMonths(ctx: AppContext) {
         where: {
             inCA: true,
             hasAccess: true,
+            userValidationHash: {
+                not: null
+            }
         }
     })
-    console.log(`Got ${users.length} users.`)
 
-    function getNextMonthStart(user: {months: {monthStart: Date, monthEnd: Date}[], readSessions: {createdAt: Date}[]}){
-        if(user.months.length == 0){
-            if(user.readSessions.length > 0){
-                return user.readSessions[0].createdAt
-            } else {
-                return null
-            }
-        } else {
-            return user.months[0].monthEnd
+    const valid: UserWithReadSessions[] = []
+    users.forEach(u => {
+        if(u.handle != null){
+            valid.push({
+                ...u,
+                handle: u.handle
+            })
         }
-    }
+    })
+    return valid
+}
 
-    console.log("Getting monthly value")
+
+// el siguiente mes empieza en el momento en el que terminó el último
+export function getNextMonthStart(user: {months: {monthStart: Date, monthEnd: Date}[], readSessions: {createdAt: Date}[]}){
+    if(user.months.length == 0){
+        if(user.readSessions.length > 0){
+            return user.readSessions[0].createdAt
+        } else {
+            return null
+        }
+    } else {
+        return user.months[0].monthEnd
+    }
+}
+
+
+export async function createUserMonths(ctx: AppContext) {
+    // Se crean UserMonths para todos los usuarios cuyo último user month haya terminado o que tengan readSesions pero no user months
+    console.log("Creating user months...")
+
+    let users = await getUsersWithReadSessions(ctx)
+    console.log(`Got ${users.length} users.`)
 
     const value = getMonthlyValue()
 
     for(let user of users){
         console.log(`Evaluating user ${user.handle}`)
         const monthStart = getNextMonthStart(user)
-        if(!monthStart || monthStart > new Date()) {
-            console.log(`Skipping user ${user.handle}.`)
+
+        if(!monthStart) {
+            console.log(`${user.handle} todavía no empezó el primer mes.`)
+            continue
+        }
+
+        if(monthStart > new Date()){
+            console.log(`${user.handle} tiene un mes asignado que no terminó. Revisar, no debería pasar.`)
             continue
         }
 
         const monthEnd = new Date(monthStart.getTime() + 30*24*3600*1000)
+
+        if(monthEnd > new Date()){
+            console.log(`Skipeando a ${user.handle}, todavía no terminó el nuevo mes.`)
+            continue
+        }
 
         const readSessions = user.readSessions.filter(s => monthStart <= s.createdAt && monthEnd >= s.createdAt)
 

@@ -2,6 +2,8 @@ import {CAHandler} from "#/utils/handler";
 import MercadoPagoConfig, {Preference} from "mercadopago";
 import {SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
+import {getUsersWithReadSessions} from "#/services/monetization/user-months";
+import {count} from "#/utils/arrays";
 
 type Donation = {
     date: Date
@@ -31,6 +33,60 @@ export const getMonthlyValueHandler: CAHandler<{}, number> = async (ctx, agent, 
 
 export function getMonthlyValue() {
     return 1200
+}
+
+
+export function isWeeklyActiveUser(u: {handle: string, readSessions: {createdAt: Date, readContentId: string | null}[]}, at: Date = new Date()): boolean {
+    const lastWeekStart = new Date(at.getTime() - 1000*3600*24*7)
+    const recentSessions = u.readSessions
+        .filter(x => x.createdAt > lastWeekStart && x.createdAt < at)
+    if(recentSessions.length > 0){
+        console.log("user", u.handle, "is active at", at)
+    }
+    return recentSessions.length > 0
+}
+
+
+export async function getMonthlyActiveUsers(ctx: AppContext) {
+    // Se consideran usuarios activos todos los usuarios que:
+    //  - Sean cuenta de persona verificada
+    //  - Hayan tenido al menos una read session en la última semana
+    const users = await getUsersWithReadSessions(ctx)
+    return count(users, isWeeklyActiveUser)
+}
+
+export async function getGrossIncome(ctx: AppContext): Promise<number> {
+    const result = await ctx.kysely
+        .selectFrom("Donation")
+        .select((eb) => eb.fn.sum<number>("amount").as("total"))
+        .executeTakeFirstOrThrow()
+
+    return result.total
+}
+
+export async function getTotalSpending(ctx: AppContext): Promise<number> {
+    const result = await ctx.kysely
+        .selectFrom("UserMonth")
+        .select((eb) => eb.fn.sum<number>("value").as("total"))
+        .executeTakeFirstOrThrow()
+
+    return result.total
+}
+
+
+export const getFundingStateHandler: CAHandler<{}, number> = async (ctx, agent, {}) => {
+    const [mau, grossIncome, incomeSpent] = await Promise.all([
+        getMonthlyActiveUsers(ctx),
+        getGrossIncome(ctx),
+        getTotalSpending(ctx)
+    ])
+    const monthlyValue = getMonthlyValue()
+
+    const months = 6
+
+    const state = Math.min((grossIncome - incomeSpent) / (mau * monthlyValue * months), 1) * 100
+
+    return {data: state}
 }
 
 

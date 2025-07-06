@@ -7,13 +7,23 @@ import {
     BlobRef, ThreadSkeleton
 } from "#/services/hydration/hydrate";
 import {FeedSkeleton} from "#/services/feed/feed";
-import {gett, removeNullValues, unique} from "#/utils/arrays";
+import {getObjectKey, gett, removeNullValues, unique} from "#/utils/arrays";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
-import {articleUris, getCollectionFromUri, getDidFromUri, isArticle, postUris, topicVersionUris} from "#/utils/uri";
-import {AppBskyEmbedRecord} from "@atproto/api";
+import {
+    articleUris,
+    getCollectionFromUri,
+    getDidFromUri,
+    isArticle,
+    isPost,
+    postUris,
+    topicVersionUris
+} from "#/utils/uri";
+import {$Typed, AppBskyEmbedRecord} from "@atproto/api";
 import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
 import {TopicQueryResultBasic} from "#/services/wiki/topics";
 import {reactionsQuery, recordQuery} from "#/utils/utils";
+import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
+
 import {
     FeedViewPost,
     isPostView, isReasonRepost,
@@ -29,7 +39,16 @@ import {isView as isEmbedRecordView} from "#/lex-api/types/app/bsky/embed/record
 import {isView as isEmbedRecordWithMediaView} from "#/lex-api/types/app/bsky/embed/recordWithMedia"
 import {isViewNotFound, isViewRecord} from "#/lex-api/types/app/bsky/embed/record";
 import {NotificationQueryResult, NotificationsSkeleton} from "#/services/notifications/notifications";
+import {stringListIncludes} from "#/services/dataset/read";
+import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 
+import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+
+import {
+    ColumnFilter,
+    isColumnFilter,
+    Main as Visualization
+} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 
 function getUriFromEmbed(embed: PostView["embed"]): string | null {
     if (isEmbedRecordView(embed)) {
@@ -154,6 +173,7 @@ export class Dataplane {
     sbFiles: Map<string, string> = new Map()
     requires: Map<string, string[]> = new Map() // mapea un uri a una lista de uris que sabemos que ese contenido requiere que fetcheemos
     notifications: Map<string, NotificationQueryResult> = new Map()
+    topicsDatasets: Map<string, {id: string, props: TopicProp[]}[]> = new Map()
 
     constructor(ctx: AppContext, agent?: Agent) {
         this.ctx = ctx
@@ -170,11 +190,41 @@ export class Dataplane {
             return [...acc, ...cur.content?.datasetsUsed.map(d => d.uri) ?? []]
         }, [] as string[])
 
-        await this.fetchDatasetsHydrationData(datasets)
+        const filters = contents.reduce((acc, cur) => {
+            const filtersInContent: $Typed<ColumnFilter>[][] = []
+            const record = cur.record ? JSON.parse(cur.record) : null
+            if(!record) return acc
 
-        await this.fetchDatasetContents(datasets)
+            const collection = getCollectionFromUri(cur.uri)
 
-        await this.fetchTextBlobs(blobRefs)
+            if(isArticle(collection)){
+                const articleRecord = record as ArticleRecord
+                if(articleRecord.embeds){
+                    articleRecord.embeds.forEach(e => {
+                        if(isVisualizationEmbed(e.value)){
+                            if(e.value.filters){
+                                filtersInContent.push(e.value.filters.filter(isColumnFilter))
+                            }
+                        }
+                    })
+                }
+            } else if(isPost(collection)){
+                const postRecord = record as PostRecord
+                if(postRecord.embed && isVisualizationEmbed(postRecord.embed)){
+                    if(postRecord.embed.filters){
+                        filtersInContent.push(postRecord.embed.filters.filter(isColumnFilter))
+                    }
+                }
+            }
+            return [...acc, ...filtersInContent]
+        }, [] as $Typed<ColumnFilter>[][])
+
+        await Promise.all([
+            this.fetchDatasetsHydrationData(datasets),
+            this.fetchDatasetContents(datasets),
+            this.fetchTextBlobs(blobRefs),
+            this.fetchFilteredTopics(filters)
+        ])
     }
 
     async fetchCAContents(uris: string[]) {
@@ -802,6 +852,31 @@ export class Dataplane {
 
         caNotificationsData.forEach(n => {
             this.notifications.set(n.id, n)
+        })
+    }
+
+
+    async fetchFilteredTopics(manyFilters: $Typed<ColumnFilter>[][]){
+        const datasets = await Promise.all(manyFilters.map(async filters => {
+
+            const includesFilters: {name: string, value: string}[] = []
+            filters.forEach(f => {
+                if(f.operator == "includes" && f.operands && f.operands.length > 0) {
+                    includesFilters.push({name: f.column, value: f.operands[0]})
+                }
+            })
+            return await this.ctx.kysely
+                .selectFrom('Topic')
+                .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
+                .select(['id', 'TopicVersion.props'])
+                .where((eb) =>
+                    eb.and(includesFilters.map(f => stringListIncludes(f.name, f.value)))
+                )
+                .execute() as {id: string, props: TopicProp[]}[]
+        }))
+
+        datasets.forEach((d, index) => {
+            this.topicsDatasets.set(getObjectKey(manyFilters[index]), d)
         })
     }
 }

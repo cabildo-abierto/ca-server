@@ -7,7 +7,6 @@ import {
     PostView,
     ThreadViewContent
 } from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs"
 import {getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri";
 import {isNotFoundPost, isReasonRepost, NotFoundPost, SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {FeedSkeleton} from "#/services/feed/feed";
@@ -27,11 +26,12 @@ import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/
 import {getTopicTitle} from "#/services/wiki/utils";
 import {
     isDatasetDataSource,
+    isTopicsDataSource,
     isMain as isVisualizationEmbed,
     Main as VisualizationEmbed,
     View as VisualizationEmbedView
 } from "#/lex-server/types/ar/cabildoabierto/embed/visualization"
-import {hydrateDatasetView} from "#/services/dataset/read";
+import {hydrateDatasetView, hydrateTopicsDatasetView} from "#/services/dataset/read";
 import {ArticleEmbed, Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 import {isMain as isRecordEmbed, Main as RecordEmbed} from "#/lex-api/types/app/bsky/embed/record"
 import {
@@ -43,6 +43,11 @@ import {isSkeletonReasonRepost} from "@atproto/api/dist/client/types/app/bsky/fe
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import removeMarkdown from "remove-markdown";
 
+import {
+    ColumnFilter,
+    isColumnFilter,
+    Main as Visualization
+} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 
 
 export function hydrateViewer(uri: string, data: Dataplane): { repost?: string, like?: string } {
@@ -235,10 +240,17 @@ function hydrateVisualizationEmbedView(embed: VisualizationEmbed, data: Dataplan
         if(dataset){
             return {
                 ...embed,
-                dataset: {
-                    ...dataset,
-                    $type: "ar.cabildoabierto.data.dataset#datasetView"
-                },
+                dataset,
+                $type: "ar.cabildoabierto.embed.visualization#view",
+            }
+        }
+    } else if(isTopicsDataSource(embed.dataSource)){
+        const filters = embed.filters?.filter(isColumnFilter) ?? []
+        const dataset = hydrateTopicsDatasetView(filters, data)
+        if(dataset){
+            return {
+                ...embed,
+                dataset,
                 $type: "ar.cabildoabierto.embed.visualization#view",
             }
         }

@@ -5,15 +5,58 @@ import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {getUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {Dataplane} from "#/services/hydration/dataplane";
-import {listOrderDesc, sortByKey} from "#/utils/arrays";
+import {getObjectKey, listOrderDesc, sortByKey} from "#/utils/arrays";
 import {
     ColumnFilter,
     isColumnFilter,
     Main as Visualization
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {sql} from "kysely";
-import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {$Typed} from "@atproto/api";
+import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+
+
+export function hydrateTopicsDatasetView(filters: $Typed<ColumnFilter>[], dataplane: Dataplane): $Typed<TopicsDatasetView> | null {
+    const topics = dataplane.topicsDatasets.get(getObjectKey(filters))
+    if(!topics) {
+        console.log("stored topics datasets", Array.from(dataplane.topicsDatasets.keys()))
+        console.log("couldn't find", filters)
+        return null
+    }
+
+    let data: string = ""
+    let columns: Column[] = []
+    if(topics.length == 0){
+        data = JSON.stringify([])
+    } else {
+        const props = topics[0].props as TopicProp[]
+        columns = [{name: "Tema"}, ...props.map(p => ({
+            name: p.name
+        }))]
+        const rows = topics.map(t => {
+            const props = t.props as TopicProp[]
+
+            const row: Record<string, any> = {
+                "Tema": t.id
+            }
+            props.forEach(p => {
+                const valid = validateTopicProp(p)
+                if(valid.success && "value" in valid.value.value){
+                    row[p.name] = valid.value.value.value
+                }
+            })
+
+            return row
+        })
+        data = JSON.stringify(rows)
+    }
+
+    return {
+        $type: "ar.cabildoabierto.data.dataset#topicsDatasetView",
+        data,
+        columns
+    }
+}
 
 
 export const getDataset: CAHandler<{
@@ -59,66 +102,20 @@ export function stringListIncludes(name: string, value: string) {
     `;
 }
 
-export async function getFilteredTopics(ctx: AppContext, filters: $Typed<ColumnFilter>[], includeProps: boolean = true, limit?: number){
-    const includesFilters: {name: string, value: string}[] = []
-    filters.forEach(f => {
-        if(f.operator == "includes" && f.operands && f.operands.length > 0) {
-            includesFilters.push({name: f.column, value: f.operands[0]})
-        }
-    })
-
-    const query = ctx.kysely
-        .selectFrom('Topic')
-        .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
-        .select(includeProps ? ['id', 'TopicVersion.props'] : ['id'])
-        .where((eb) =>
-            eb.and(includesFilters.map(f => stringListIncludes(f.name, f.value)))
-        )
-
-    return await (limit ? query.limit(limit) : query).execute()
-}
-
 
 export const getTopicsDatasetHandler: CAHandler<TopicDatasetSpec, TopicsDatasetView> = async (ctx, agent, params) => {
     const filters = params.filters ? params.filters.filter(f => isColumnFilter(f)): []
     if(filters.length == 0) return {error: "Aplicá al menos un filtro."}
 
-    const topics = await getFilteredTopics(ctx, filters)
+    const dataplane = new Dataplane(ctx, agent)
 
-    let data: string = ""
-    let columns: Column[] = []
-    if(topics.length == 0){
-        data = JSON.stringify([])
-    } else {
-        const props = topics[0].props as TopicProp[]
-        columns = [{name: "Tema"}, ...props.map(p => ({
-            name: p.name
-        }))]
-        const rows = topics.map(t => {
-            const props = t.props as TopicProp[]
+    await dataplane.fetchFilteredTopics([filters])
 
-            const row: Record<string, any> = {
-                "Tema": t.id
-            }
-            props.forEach(p => {
-                const valid = validateTopicProp(p)
-                if(valid.success && "value" in valid.value.value){
-                    row[p.name] = valid.value.value.value
-                }
-            })
+    const dataset = hydrateTopicsDatasetView(filters, dataplane)
 
-            return row
-        })
-        data = JSON.stringify(rows)
-    }
-
-    const dataset: TopicsDatasetView = {
-        $type: "ar.cabildoabierto.data.dataset#topicsDatasetView",
-        data,
-        columns
-    }
-
-    return {data: dataset}
+    return dataset ? {
+        data: dataset
+    } : {error: "Ocurrió un error al obtener el dataset."}
 }
 
 
@@ -136,7 +133,7 @@ export async function getDatasetList(ctx: AppContext) {
 }
 
 
-export const hydrateDatasetView = (uri: string, data: Dataplane): DatasetView | null => {
+export const hydrateDatasetView = (uri: string, data: Dataplane): $Typed<DatasetView> | null => {
     const d = data.datasets.get(uri)
     if(!d || !d.dataset) return null
 

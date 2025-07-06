@@ -176,34 +176,11 @@
     },
     "view": {
       "type": "object",
-      "required": ["dataSource", "spec", "dataset"],
+      "required": ["visualization", "dataset"],
       "properties": {
-        "dataSource": {
-          "type": "union",
-          "refs": [
-            "#datasetDataSource",
-            "#topicsDataSource"
-          ]
-        },
-        "spec": {
-          "type": "union",
-          "refs": [
-            "#hemicycle",
-            "#barplot",
-            "#scatterplot",
-            "#histogram",
-            "#lines",
-            "#table"
-          ]
-        },
-        "title": {
-          "type": "string"
-        },
-        "caption": {
-          "type": "string"
-        },
-        "aspectRatio": {
-          "type": "string"
+        "visualization": {
+          "type": "ref",
+          "ref": "ar.cabildoabierto.embed.visualization"
         },
         "dataset": {
           "type": "union",
