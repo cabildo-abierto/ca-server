@@ -11,6 +11,9 @@ export const getNewVersionDiff: CAHandler<{currentText: string, currentFormat: s
     const nodes1 = anyEditorStateToNodesForDiff(params.currentText, params.currentFormat)
     const nodes2 = anyEditorStateToNodesForDiff(params.markdown, "markdown")
 
+    console.log("nodes 1", nodes1)
+    console.log("nodes 2", nodes2)
+
     if(!nodes1 || !nodes2){
         return {error: "No se pudo procesar una de las versiones."}
     }

@@ -2,11 +2,8 @@ import express from 'express'
 import type {AppContext} from '#/index'
 import {CAHandler, CAHandlerNoAuth, makeHandler} from "#/utils/handler";
 import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user";
-import {updateReferencesHandler} from "#/services/wiki/references";
 import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete";
 import {createInviteCodes} from "#/services/user/access";
-import {updateEngagementCountsHandler} from "#/services/feed/getUserEngagement";
-import {updateTopicsPopularityHandler} from "#/services/wiki/popularity";
 import {getUsers} from "#/services/user/users";
 import {getAllTopics} from "#/services/wiki/topics";
 import {sessionAgent} from "#/utils/session-agent";
@@ -15,6 +12,7 @@ import {getPendingValidationRequests, setValidationRequestResult} from "#/servic
 import {updateTopicContributionsHandler} from "#/services/wiki/contributions";
 import {getStatsDashboard} from "#/services/admin/stats";
 import {getRepoCounts} from "#/services/admin/repo";
+import {startJob} from "#/jobs/worker";
 
 
 function isAdmin(did: string) {
@@ -62,25 +60,9 @@ function makeAdminHandlerNoAuth<P, Q>(ctx: AppContext, handler: CAHandlerNoAuth<
 }
 
 
-function startJobHandler(ctx: AppContext, job: string): express.Handler {
-    return makeAdminHandler<{}, {}>(ctx, async () => {
-        if(ctx.worker){
-            await ctx.worker.addJob(job, {})
-            console.log("added job", job)
-        } else {
-            console.warn(`No worker for job ${job}`)
-        }
-        return {data: {}}
-    })
-}
-
-
 export const adminRoutes = (ctx: AppContext) => {
     const router = express.Router()
 
-    router.post("/update-categories-graph", startJobHandler(ctx, "update-categories-graph"))
-
-    router.post("/update-references", makeAdminHandler(ctx, updateReferencesHandler))
 
     router.post(
         "/sync-user/:handleOrDid",
@@ -97,18 +79,8 @@ export const adminRoutes = (ctx: AppContext) => {
     )
 
     router.post(
-        "/update-engagement-counts",
-        makeAdminHandler(ctx, updateEngagementCountsHandler)
-    )
-
-    router.post(
         "/delete-collection/:collection",
         makeAdminHandler(ctx, deleteCollectionHandler)
-    )
-
-    router.post(
-        "/update-topics-popularity",
-        makeAdminHandler(ctx, updateTopicsPopularityHandler)
     )
 
     router.get(
@@ -141,10 +113,6 @@ export const adminRoutes = (ctx: AppContext) => {
         makeAdminHandler(ctx, createAccountInCabildoPDS)
     )
 
-    router.post(
-        "/update-topics-categories", startJobHandler(ctx, "update-topics-categories")
-    )
-
     router.get("/pending-validation-requests", makeAdminHandler(ctx, getPendingValidationRequests))
 
     router.post(
@@ -155,14 +123,10 @@ export const adminRoutes = (ctx: AppContext) => {
 
     router.get("/stats-dashboard", makeAdminHandler(ctx, getStatsDashboard))
 
-    router.post(
-        "/create-user-months", startJobHandler(ctx, "create-user-months")
-    )
-
     router.get("/repo/:handleOrDid", makeAdminHandler(ctx, getRepoCounts))
 
     router.post(
-        "/test-job", startJobHandler(ctx, "test-job")
+        "/job/:id", makeAdminHandler(ctx, startJob)
     )
 
     return router

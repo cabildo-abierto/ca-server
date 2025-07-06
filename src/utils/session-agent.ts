@@ -20,6 +20,15 @@ export class Agent {
 }
 
 
+export class NoSessionAgent extends Agent {
+    bsky: AtpBaseClient
+    constructor(CAAgent: AtpBaseClient, bsky: AtpBaseClient) {
+        super(CAAgent)
+        this.bsky = bsky
+    }
+}
+
+
 export class SessionAgent extends Agent {
     bsky: BskyAgent
     did: string
@@ -62,7 +71,7 @@ export async function sessionAgent(
             await session.destroy()
         }
     }
-    return new Agent(CAAgent)
+    return new NoSessionAgent(CAAgent, new AtpBaseClient("https://bsky.social"))
 }
 
 

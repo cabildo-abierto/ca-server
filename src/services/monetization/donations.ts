@@ -84,7 +84,7 @@ export const getFundingStateHandler: CAHandler<{}, number> = async (ctx, agent, 
 
     const months = 6
 
-    const state = Math.min((grossIncome - incomeSpent) / (mau * monthlyValue * months), 1) * 100
+    const state = Math.max(Math.min((grossIncome - incomeSpent) / (mau * monthlyValue * months), 1), 0) * 100
 
     return {data: state}
 }
@@ -99,7 +99,7 @@ export const createPreference: CAHandler<{amount: number}, {id: string}> = async
     const frontendUrl = "https://cabildoabierto.ar"
 
     let items = [{
-        picture_url: "https://cabildoabierto.ar/logo.png",
+        picture_url: `${frontendUrl}/logo.png`,
         id: "0",
         title: title,
         quantity: 1,

@@ -81,33 +81,6 @@ export const repost: CAHandler<ATProtoStrongRef, { uri: string }> = async (ctx, 
 }
 
 
-export async function incrementReactionCounter(db: PrismaTransactionClient, type: ReactionType, subjectId: string) {
-    if (type == "app.bsky.feed.like") {
-        return db.record.update({
-            data: {uniqueLikesCount: {increment: 1}},
-            where: {uri: subjectId}
-        })
-    } else if (type == "app.bsky.feed.repost") {
-        return db.record.update({
-            data: {uniqueRepostsCount: {increment: 1}},
-            where: {uri: subjectId}
-        })
-    } else if (type == "ar.cabildoabierto.wiki.voteAccept") {
-        return db.record.update({
-            data: {uniqueAcceptsCount: {increment: 1}},
-            where: {uri: subjectId}
-        })
-    } else if (type == "ar.cabildoabierto.wiki.voteReject") {
-        return db.record.update({
-            data: {uniqueRejectsCount: {increment: 1}},
-            where: {uri: subjectId}
-        })
-    } else {
-        throw Error("Reacción desconocida: " + type)
-    }
-}
-
-
 export async function decrementReactionCounter(db: PrismaTransactionClient, type: ReactionType, subjectId: string) {
     if (type == "app.bsky.feed.like") {
         return db.record.update({

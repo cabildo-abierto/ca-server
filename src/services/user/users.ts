@@ -1,7 +1,11 @@
 import {AppContext} from "#/index";
-import {ProfileView} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+import {
+    isProfileViewDetailed,
+    ProfileView,
+    ProfileViewDetailed
+} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {Account, MentionProps, Profile, Session, UserStats, ValidationState} from "#/lib/types";
-import {cookieOptions, SessionAgent} from "#/utils/session-agent";
+import {Agent, cookieOptions, NoSessionAgent, SessionAgent} from "#/utils/session-agent";
 import {deleteRecords} from "#/services/delete";
 import {cleanText} from "#/utils/strings";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
@@ -20,6 +24,7 @@ import {
 } from "#/lex-api/types/app/bsky/actor/profile"
 import {BlobRef} from "@atproto/lexicon";
 import {uploadBase64Blob} from "#/services/blob";
+import {AtpBaseClient} from "@atproto/api";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -142,6 +147,15 @@ export const unfollow: CAHandler<{ followUri: string }> = async (ctx, agent, {fo
         console.error(err)
         return {error: "Error al dejar de seguir al usuario."}
     }
+}
+
+
+function hydrateProfileView(did: string, dataplane: Dataplane): ProfileViewDetailed | null {
+    const data = dataplane.bskyUsers.get(did)
+    if(isProfileViewDetailed(data)){
+        return data
+    }
+    return null
 }
 
 

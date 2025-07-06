@@ -13,6 +13,7 @@ import {createUserMonths} from "#/services/monetization/user-months";
 import {Queue} from "bullmq";
 import Redis from "ioredis";
 import {createNotificationJob, createNotificationsBatchJob} from "#/services/notifications/notifications";
+import {CAHandler} from "#/utils/handler";
 
 const mins = 60 * 1000
 
@@ -70,13 +71,13 @@ export class CAWorker {
         })
     }
 
-    setupJob(jobName: string, handler: (data: any) => Promise<void>) {
+    registerJob(jobName: string, handler: (data: any) => Promise<void>) {
         this.jobs.push({name: jobName, handler})
     }
 
     async setup(ctx: AppContext) {
-        this.setupJob( "update-categories-graph", () => updateCategoriesGraph(ctx))
-        this.setupJob( "sync-user", async (data: any) => {
+        this.registerJob( "update-categories-graph", () => updateCategoriesGraph(ctx))
+        this.registerJob( "sync-user", async (data: any) => {
             const {handleOrDid, collectionsMustUpdate} = data as {
                 handleOrDid: string,
                 collectionsMustUpdate?: string[]
@@ -88,21 +89,21 @@ export class CAWorker {
                 console.log("User not found in DB: ", handleOrDid)
             }
         })
-        this.setupJob("update-references", () => updateReferences(ctx))
-        this.setupJob( "update-engagement-counts", () => updateEngagementCounts(ctx))
-        this.setupJob( "delete-collection", async (data) => {
+        this.registerJob("update-references", () => updateReferences(ctx))
+        this.registerJob( "update-engagement-counts", () => updateEngagementCounts(ctx))
+        this.registerJob( "delete-collection", async (data) => {
             await deleteCollection(ctx, (data as { collection: string }).collection)
         })
-        this.setupJob("update-topics-popularity", () => updateTopicPopularityScores(ctx))
-        this.setupJob("sync-all-users", (data) => syncAllUsers(ctx, (data as { mustUpdateCollections: string[] }).mustUpdateCollections))
-        this.setupJob("delete-collection", (data) => deleteCollection(ctx, (data as { collection: string }).collection))
-        this.setupJob("update-topics-categories", () => updateTopicsCategories(ctx))
-        this.setupJob("update-topic-contributions", (data) => updateTopicContributions(ctx, data as string[]))
-        this.setupJob("create-user-months", () => createUserMonths(ctx))
-        this.setupJob("create-notification", (data) => createNotificationJob(ctx, data))
-        this.setupJob("batch-create-notifications", (data) => createNotificationsBatchJob(ctx, data))
-        this.setupJob("batch-jobs", () => this.batchJobs())
-        this.setupJob("test-job", async () => {console.log("Test job run!")})
+        this.registerJob("update-topics-popularity", () => updateTopicPopularityScores(ctx))
+        this.registerJob("sync-all-users", (data) => syncAllUsers(ctx, (data as { mustUpdateCollections: string[] }).mustUpdateCollections))
+        this.registerJob("delete-collection", (data) => deleteCollection(ctx, (data as { collection: string }).collection))
+        this.registerJob("update-topics-categories", () => updateTopicsCategories(ctx))
+        this.registerJob("update-topic-contributions", (data) => updateTopicContributions(ctx, data as string[]))
+        this.registerJob("create-user-months", () => createUserMonths(ctx))
+        this.registerJob("create-notification", (data) => createNotificationJob(ctx, data))
+        this.registerJob("batch-create-notifications", (data) => createNotificationsBatchJob(ctx, data))
+        this.registerJob("batch-jobs", () => this.batchJobs())
+        this.registerJob("test-job", async () => {console.log("Test job run!")})
 
         await this.removeAllRepeatingJobs()
         await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)
@@ -203,5 +204,13 @@ export class CAWorker {
             console.log("Error batching jobs:", err)
         }
     }
+}
 
+
+export const startJob: CAHandler<{params: {id: string}}, {}> = async (ctx, app, {params}) => {
+    const {id} = params
+
+    await ctx.worker?.addJob(id, {})
+
+    return {data: {}}
 }

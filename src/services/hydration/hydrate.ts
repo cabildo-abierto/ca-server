@@ -39,14 +39,11 @@ import {
     Main as CARecordEmbed,
     View as CARecordEmbedView
 } from "#/lex-api/types/ar/cabildoabierto/embed/record"
-import {isSkeletonReasonRepost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
-import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import removeMarkdown from "remove-markdown";
-
+import {isSkeletonReasonRepost} from "@atproto/api/dist/client/types/app/bsky/feed/defs"
+import {hydrateProfileViewBasic} from "#/services/hydration/profile"
+import removeMarkdown from "remove-markdown"
 import {
-    ColumnFilter,
     isColumnFilter,
-    Main as Visualization
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 
 
@@ -239,7 +236,7 @@ function hydrateVisualizationEmbedView(embed: VisualizationEmbed, data: Dataplan
         const dataset = hydrateDatasetView(datasetUri, data)
         if(dataset){
             return {
-                ...embed,
+                visualization: embed,
                 dataset,
                 $type: "ar.cabildoabierto.embed.visualization#view",
             }
@@ -249,7 +246,7 @@ function hydrateVisualizationEmbedView(embed: VisualizationEmbed, data: Dataplan
         const dataset = hydrateTopicsDatasetView(filters, data)
         if(dataset){
             return {
-                ...embed,
+                visualization: embed,
                 dataset,
                 $type: "ar.cabildoabierto.embed.visualization#view",
             }

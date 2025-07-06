@@ -1,4 +1,4 @@
-import {FeedPipelineProps, GetSkeletonProps} from "#/services/feed/feed";
+import {FeedPipelineProps, FeedSortKey, GetSkeletonProps} from "#/services/feed/feed";
 import {rootCreationDateSortKey} from "#/services/feed/utils";
 import {CAHandler} from "#/utils/handler";
 import {Record as PostRecord, validateRecord as validatePostRecord, isRecord as isPostRecord} from "#/lex-api/types/app/bsky/feed/post";
@@ -6,30 +6,154 @@ import {Record as ArticleRecord, validateRecord as validateArticleRecord, isReco
 import {processArticle, processPost} from "#/services/sync/process-event";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 import {$Typed} from "@atproto/api";
+import {isPostView, isArticleView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {listOrderDesc, sortByKey} from "#/utils/arrays";
 
 
-
-export const getEnDiscusionSkeleton: GetSkeletonProps = async (ctx, agent, data, cursor) => {
-    const skeleton = await ctx.db.record.findMany({
-        select: {
-            uri: true
-        },
-        where: {
-            content: {
-                selfLabels: {
-                    has: "ca:en discusión"
-                }
-            }
-        }
-    }).then(x => x.map(r => ({post: r.uri})))
-
-    return {skeleton, cursor}
+function getEnDiscusionStartDate(time: EnDiscusionTime){
+    const oneDay = 3600*24*1000
+    if(time == "Último día"){
+        return new Date(Date.now()-oneDay)
+    } else if(time == "Última semana"){
+        return new Date(Date.now()-7*oneDay)
+    } else if(time == "Último mes"){
+        return new Date(Date.now()-30*oneDay)
+    } else {
+        throw Error(`Período de tiempo inválido: ${time}`)
+    }
 }
 
 
-export const enDiscusionFeedPipeline: FeedPipelineProps = {
-    getSkeleton: getEnDiscusionSkeleton,
-    sortKey: rootCreationDateSortKey
+export type EnDiscusionMetric = "Me gustas" | "Interacciones" | "Popularidad relativa" | "Recientes"
+export type EnDiscusionTime = "Último día" | "Última semana" | "Último mes"
+
+
+export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusionTime) => GetSkeletonProps = (metric, time) => async (ctx, agent, data, cursor) => {
+    const startDate = getEnDiscusionStartDate(time)
+    // Me gustas: usamos uniqueLikesCount.
+    // Interacciones: usamos uniqueLikesCount + uniqueRepliesCount + uniqueRepostsCount
+    // Popularidad relativa: usamos Interacciones / Cantidad de seguidores del autor en Bsky
+
+    if(metric == "Me gustas"){
+        let skeleton = await ctx.db.record.findMany({
+            select: {
+                uri: true,
+                uniqueLikesCount: true,
+                createdAt: true
+            },
+            where: {
+                content: {
+                    selfLabels: {
+                        has: "ca:en discusión"
+                    }
+                }
+            }
+        })
+        skeleton = sortByKey(skeleton, e => {
+            return [
+                e.createdAt > startDate ? 1 : 0,
+                e.uniqueLikesCount ?? 0,
+                e.createdAt.getTime()
+            ]
+        }, listOrderDesc)
+        return {
+            skeleton: skeleton
+                .map(e => ({post: e.uri})),
+            cursor: undefined
+        }
+    } else if(metric == "Interacciones"){
+        let skeleton = await ctx.db.record.findMany({
+            select: {
+                uri: true,
+                uniqueLikesCount: true,
+                uniqueRepostsCount: true,
+                _count: {
+                    select: {
+                        replies: true
+                    }
+                },
+                createdAt: true
+            },
+            where: {
+                content: {
+                    selfLabels: {
+                        has: "ca:en discusión"
+                    }
+                }
+            }
+        })
+        skeleton = sortByKey(skeleton, e => {
+            return [
+                e.createdAt > startDate ? 1 : 0,
+                (e.uniqueLikesCount ?? 0) + (e.uniqueRepostsCount ?? 0) + e._count.replies,
+                e.createdAt.getTime()
+            ]
+        }, listOrderDesc)
+        return {
+            skeleton: skeleton
+                .map(e => ({post: e.uri})),
+            cursor: undefined
+        }
+    } else {
+        let skeleton = await ctx.db.record.findMany({
+            select: {
+                uri: true,
+                uniqueLikesCount: true,
+                uniqueRepostsCount: true,
+                _count: {
+                    select: {
+                        replies: true
+                    }
+                },
+                author: {
+                    select: {
+                        _count: {
+                            select: {
+                                followers: true
+                            }
+                        }
+                    }
+                },
+                createdAt: true
+            },
+            where: {
+                content: {
+                    selfLabels: {
+                        has: "ca:en discusión"
+                    }
+                }
+            }
+        })
+        skeleton = sortByKey(skeleton, e => {
+            return [
+                e.createdAt > startDate ? 1 : 0,
+                ((e.uniqueLikesCount ?? 0) + (e.uniqueRepostsCount ?? 0) + e._count.replies) / (e.author._count.followers + 1),
+                e.createdAt.getTime()
+            ]
+        }, listOrderDesc)
+        return {
+            skeleton: skeleton
+                .map(e => ({post: e.uri})),
+            cursor: undefined
+        }
+    }
+}
+
+
+const enDiscusionSortKey = (metric: EnDiscusionMetric): FeedSortKey => {
+    if(metric == "Recientes"){
+        return rootCreationDateSortKey
+    } else {
+        return null
+    }
+}
+
+
+export const getEnDiscusionFeedPipeline = (metric: EnDiscusionMetric = "Me gustas", time: EnDiscusionTime = "Último día"): FeedPipelineProps => {
+    return {
+        getSkeleton: getEnDiscusionSkeleton(metric, time),
+        sortKey: enDiscusionSortKey(metric),
+    }
 }
 
 

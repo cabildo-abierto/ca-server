@@ -1,7 +1,7 @@
 import {AppContext} from "#/index";
-import {Agent} from "#/utils/session-agent";
+import {Agent, NoSessionAgent, SessionAgent} from "#/utils/session-agent";
 import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs";
-import {ProfileViewBasic} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+import {ProfileViewBasic, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
 import {
     BlobRef, ThreadSkeleton
@@ -49,6 +49,7 @@ import {
     isColumnFilter,
     Main as Visualization
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
+import {$Type} from "@atproto/api/dist/client/util";
 
 function getUriFromEmbed(embed: PostView["embed"]): string | null {
     if (isEmbedRecordView(embed)) {
@@ -157,12 +158,12 @@ export function blobRefsFromContents(contents: {
 
 export class Dataplane {
     ctx: AppContext
-    agent: Agent
+    agent: SessionAgent | NoSessionAgent
     caContents: Map<string, FeedElementQueryResult> = new Map()
     bskyPosts: Map<string, BskyPostView> = new Map()
     likes: Map<string, string | null> = new Map()
     reposts: Map<string, RepostQueryResult | null> = new Map() // mapea uri del post a información del repost asociado
-    bskyUsers: Map<string, ProfileViewBasic> = new Map()
+    bskyUsers: Map<string, $Typed<ProfileViewBasic> | $Typed<ProfileViewDetailed>> = new Map()
     caUsers: Map<string, CAProfileViewBasic> = new Map()
     topicsByUri: Map<string, TopicQueryResultBasic> = new Map()
     topicsById: Map<string, TopicQueryResultBasic> = new Map()
@@ -175,9 +176,12 @@ export class Dataplane {
     notifications: Map<string, NotificationQueryResult> = new Map()
     topicsDatasets: Map<string, {id: string, props: TopicProp[]}[]> = new Map()
 
-    constructor(ctx: AppContext, agent?: Agent) {
+    constructor(ctx: AppContext, agent?: SessionAgent | NoSessionAgent) {
         this.ctx = ctx
-        this.agent = agent ?? new Agent(new AtpBaseClient(`${env.HOST}:${env.PORT}`))
+        this.agent = agent ?? new NoSessionAgent(
+            new AtpBaseClient(`${env.HOST}:${env.PORT}`),
+            new AtpBaseClient("https://bsky.social")
+        )
     }
 
     async fetchCAContentsAndBlobs(uris: string[]) {
@@ -782,14 +786,9 @@ export class Dataplane {
         const data = await Promise.all(didBatches.map(b => agent.bsky.getProfiles({actors: b})))
         const profiles = data.flatMap(d => d.data.profiles)
 
-        const views: ProfileViewBasic[] = profiles.map(p => ({
-            ...p,
-            $type: "app.bsky.actor.defs#profileViewBasic"
-        }))
-
         this.bskyUsers = joinMaps(
             this.bskyUsers,
-            new Map(views.map(v => [v.did, v]))
+            new Map(profiles.map(v => [v.did, {$type: "app.bsky.actor.defs#profileViewDetailed", ...v}]))
         )
     }
 

@@ -152,34 +152,46 @@ export const getCategories: CAHandler<{}, string[]> = async (ctx, agent, {}) => 
 }
 
 
+async function countTopicsNoCategories(ctx: AppContext) {
+
+    return ctx.kysely
+        .selectFrom("Topic")
+        .leftJoin("TopicToCategory", "Topic.id", "TopicToCategory.topicId")
+        .select(({ fn }) => [fn.count<number>("Topic.id").as("count")])
+        .where("TopicToCategory.categoryId", "is", null)
+        .where("Topic.currentVersionId", "is not", null)
+        .where("Topic.lastEdit", "is not", null)
+        .where("Topic.popularityScore", "is not", null)
+        .execute()
+}
+
+
+async function countTopicsInEachCategory(ctx: AppContext) {
+    return ctx.kysely
+        .selectFrom("TopicToCategory")
+        .innerJoin("Topic", "TopicToCategory.topicId", "Topic.id")
+        .select(({ fn }) => [
+            "TopicToCategory.categoryId",
+            fn.count<number>("TopicToCategory.topicId").as("count")
+        ])
+        .where("Topic.currentVersionId", "is not", null)
+        .where("Topic.lastEdit", "is not", null)
+        .where("Topic.popularityScore", "is not", null)
+        .groupBy("TopicToCategory.categoryId")
+        .execute()
+}
+
 
 export const getCategoriesWithCounts: CAHandler<{}, { category: string, size: number }[]> = async (ctx, agent, {}) => {
+    let [categories, noCategoryCount] = await Promise.all([
+        countTopicsInEachCategory(ctx),
+        countTopicsNoCategories(ctx)
+    ])
 
-    const categoriesP = ctx.db.topicCategory.findMany({
-        select: {
-            id: true,
-            _count: {
-                select: {
-                    topics: true
-                }
-            }
-        }
-    })
+    categories = categories.filter(c => (c.count > 0))
 
-    const noCategoryCountP = ctx.db.topic.count({
-        where: {
-            categories: {
-                none: {}
-            }
-        }
-    })
-
-    let [categories, noCategoryCount] = await Promise.all([categoriesP, noCategoryCountP])
-
-    categories = categories.filter(c => (c._count.topics > 0))
-
-    const res = categories.map(({id, _count}) => ({category: id, size: _count.topics}))
-    res.push({category: "Sin categoría", size: noCategoryCount})
+    const res = categories.map(({categoryId, count}) => ({category: categoryId, size: count}))
+    res.push({category: "Sin categoría", size: noCategoryCount[0].count})
     return {data: res}
 }
 

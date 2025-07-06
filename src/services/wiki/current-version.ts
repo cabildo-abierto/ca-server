@@ -33,6 +33,8 @@ export async function getTopicIdFromTopicVersionUri(db: PrismaTransactionClient,
 
 
 export async function processDeleteTopicVersion(ctx: AppContext, uri: string) {
+    // TO DO: Esto debería ser atómico (leer la versión actual y actualizarla)
+
     const id = await getTopicIdFromTopicVersionUri(ctx.db, getDidFromUri(uri), getRkeyFromUri(uri))
     if (!id) return {error: "Ocurrió un error al borrar la versión."}
     const topicHistory = await getTopicHistory(ctx.db, id)
