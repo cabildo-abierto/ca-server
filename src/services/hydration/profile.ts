@@ -7,14 +7,26 @@ export function hydrateProfileViewBasic(did: string, data: Dataplane): CAProfile
 
     if(!bsky) return null
 
-    if(ca) {
+    if(bsky) {
+        if(ca){
+            return {
+                ...bsky,
+                caProfile: ca.caProfile,
+                verification: ca.verification,
+                viewer: bsky.viewer,
+                $type: "ar.cabildoabierto.actor.defs#profileViewBasic"
+            }
+        } else {
+            return {
+                ...bsky,
+                verification: undefined,
+                viewer: bsky.viewer,
+                $type: "ar.cabildoabierto.actor.defs#profileViewBasic"
+            }
+        }
+    } else if(ca) {
         return {
             ...ca,
-            viewer: bsky.viewer
-        }
-    } else if(bsky) {
-        return {
-            ...bsky,
             $type: "ar.cabildoabierto.actor.defs#profileViewBasic",
         }
     } else {

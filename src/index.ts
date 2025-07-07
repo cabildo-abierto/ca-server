@@ -123,7 +123,10 @@ export class Server {
             'https://ca-withered-wind.fly.dev',
             'https://api.cabildoabierto.ar',
             'https://dev0.cabildoabierto.ar',
-            'https://fly-ca-withered-wind-redis.upstash.io'
+            'https://fly-ca-withered-wind-redis.upstash.io',
+            'http://192.168.0.10:3000',
+            'http://192.168.0.11:3000',
+            'http://0.0.0.0:3000'
         ]
 
         app.use(cors({
@@ -150,7 +153,7 @@ export class Server {
 
         const server = app.listen(env.PORT, HOST)
         await events.once(server, 'listening')
-        logger.info(`Server (${NODE_ENV}) running on port http://${HOST}:${PORT}`)
+        console.log(`Server (${NODE_ENV}) running on port http://${HOST}:${PORT}`)
 
         return new Server(app, server, ctx)
     }

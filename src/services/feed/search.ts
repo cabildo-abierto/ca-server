@@ -1,30 +1,7 @@
 import {cleanText} from "#/utils/strings";
-import {FeedViewContent} from "#/lex-server/types/ar/cabildoabierto/feed/defs";
 import {AppContext} from "#/index";
 import {CAHandler} from "#/utils/handler";
 import {FeedPipelineProps, getFeed, GetFeedOutput, GetSkeletonProps} from "#/services/feed/feed";
-
-
-export async function getFullTopicList(ctx: AppContext){
-    const topics: {}[] = await ctx.db.topic.findMany({
-        select: {
-            id: true,
-            popularityScore: true,
-            categories: {
-                select: {
-                    categoryId: true
-                }
-            },
-            lastEdit: true
-        },
-        where: {
-            versions: {
-                some: {}
-            }
-        }
-    })
-    return topics
-}
 
 
 const getSearchContentsSkeleton: (q: string) => GetSkeletonProps = (q) => async (ctx, agent, data, cursor) => {
@@ -43,10 +20,6 @@ const getSearchContentsSkeleton: (q: string) => GetSkeletonProps = (q) => async 
       ORDER BY ts_rank(to_tsvector('simple', immutable_unaccent("title")), plainto_tsquery('simple', immutable_unaccent(${q}))) DESC
       LIMIT 10
     `;
-
-    articleUris.forEach(a => {
-        console.log(a.uri)
-    })
 
     const res: string[] = []
     let i = 0

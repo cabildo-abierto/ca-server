@@ -267,16 +267,22 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
     }
 
     const data = await getSessionData(ctx, agent)
-    if (data) return {data}
+    if (data) {
+        return {data}
+    }
 
     // el usuario no está en la db pero logró iniciar sesión, creamos un nuevo usuario de CA
     const code = params?.code
     if (code) {
         const {error} = await createCAUser(ctx, agent, code)
-        if (error) return {error}
+        if (error) {
+            return {error}
+        }
 
         const newUserData = await getSessionData(ctx, agent)
-        if (newUserData) return {data: newUserData}
+        if (newUserData) {
+            return {data: newUserData}
+        }
     }
 
     await deleteSession(ctx, agent)

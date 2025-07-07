@@ -1,7 +1,7 @@
 import express from 'express'
 import type {AppContext} from '#/index'
 import {cookieOptions, handler, Session, sessionAgent} from "#/utils/session-agent";
-import {makeHandler, makeHandlerNoAuth} from "#/utils/handler";
+import {CAHandler, CAHandlerNoAuth, makeHandler, makeHandlerNoAuth} from "#/utils/handler";
 import {searchTopics, searchUsers} from "#/services/search/search";
 import {createArticle} from "#/services/write/article";
 import {getIronSession} from "iron-session";
@@ -58,6 +58,11 @@ import {
     markConversationRead,
     sendMessage
 } from "#/services/messaging/conversations";
+
+
+const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
+    return {data: "live"}
+}
 
 
 export const createRouter = (ctx: AppContext) => {
@@ -161,6 +166,8 @@ export const createRouter = (ctx: AppContext) => {
         '/profile/:handleOrDid',
         handler(makeHandler(ctx, getProfile))
     )
+
+    router.get("/test", makeHandlerNoAuth(ctx, serverStatusRouteHandler))
 
     router.get(
         '/session',
