@@ -5,7 +5,7 @@ import {
     ProfileViewDetailed
 } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {Account, MentionProps, Profile, Session, UserStats, ValidationState} from "#/lib/types";
-import {Agent, cookieOptions, NoSessionAgent, SessionAgent} from "#/utils/session-agent";
+import {BaseAgent, cookieOptions, NoSessionAgent, SessionAgent} from "#/utils/session-agent";
 import {deleteRecords} from "#/services/delete";
 import {cleanText} from "#/utils/strings";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";

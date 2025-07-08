@@ -5,7 +5,7 @@ import {CAHandler, CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
 import {TopicProp, TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion";
 import {getTopicCurrentVersion, getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
-import {SessionAgent} from "#/utils/session-agent";
+import {Agent, SessionAgent} from "#/utils/session-agent";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import {Prisma} from "@prisma/client";
 import {Dataplane} from "#/services/hydration/dataplane";
@@ -14,7 +14,7 @@ import {getTopicTitle} from "#/services/wiki/utils";
 import {getSynonymsToTopicsMap, getTopicsReferencedInText} from "#/services/wiki/references";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
 import {gett} from "#/utils/arrays";
-import {getTopicHistoryHandler} from "#/services/wiki/history";
+import {getTopicHistory} from "#/services/wiki/history";
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {ArticleEmbed, ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
@@ -28,11 +28,6 @@ import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildo
 export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
     return await getTopics(ctx, agent, [], "popular", 10)
 }
-
-type TopicOrder = "popular" | "recent"
-
-
-type TopicsSkeleton = {id: string}[]
 
 
 export type TopicQueryResultBasic = {
@@ -141,7 +136,7 @@ export const getTopicsHandler: CAHandler<{
 }
 
 
-export const getCategories: CAHandler<{}, string[]> = async (ctx, agent, {}) => {
+export const getCategories: CAHandler<{}, string[]> = async (ctx, _, {}) => {
     const categories = await ctx.db.topicCategory.findMany({
         select: {
             id: true
@@ -182,7 +177,7 @@ async function countTopicsInEachCategory(ctx: AppContext) {
 }
 
 
-export const getCategoriesWithCounts: CAHandler<{}, { category: string, size: number }[]> = async (ctx, agent, {}) => {
+export const getCategoriesWithCounts: CAHandler<{}, { category: string, size: number }[]> = async (ctx, _, {}) => {
     let [categories, noCategoryCount] = await Promise.all([
         countTopicsInEachCategory(ctx),
         countTopicsNoCategories(ctx)
@@ -238,7 +233,7 @@ async function cached<T>(ctx: AppContext, key: string[], fn: () => Promise<{ dat
 }
 
 
-export const getTopicCurrentVersionFromDB = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{
+export const getTopicCurrentVersionFromDB = async (ctx: AppContext, id: string): Promise<{
     data?: string | null,
     error?: string
 }> => {
@@ -258,7 +253,7 @@ export const getTopicCurrentVersionFromDB = async (ctx: AppContext, agent: Sessi
 }
 
 
-export const getTopic = async (ctx: AppContext, agent: SessionAgent, id?: string, did?: string, rkey?: string): Promise<{
+export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?: string, rkey?: string): Promise<{
     data?: TopicView,
     error?: string
 }> => {
@@ -273,11 +268,14 @@ export const getTopic = async (ctx: AppContext, agent: SessionAgent, id?: string
         }
     }
 
-    const {data: currentVersionId} = await cached(ctx, ["currentVersion", id], async () => getTopicCurrentVersionFromDB(ctx, agent, id))
+    const {data: currentVersionId} = await cached(ctx, ["currentVersion", id], async () => getTopicCurrentVersionFromDB(ctx, id))
     let uri: string
     if (!currentVersionId) {
+        if(!agent.hasSession()){
+
+        }
         console.log(`Warning: Current version not set for topic ${id}.`)
-        const {data: history} = await getTopicHistoryHandler(ctx, agent, {params: {id}})
+        const history = await getTopicHistory(ctx.db, id, agent.hasSession() ? agent : undefined)
 
         if (!history) {
             return {error: "No se encontró el tema " + id + "."}
@@ -292,18 +290,18 @@ export const getTopic = async (ctx: AppContext, agent: SessionAgent, id?: string
         uri = currentVersionId
     }
 
-    return await getCachedTopicVersion(ctx, agent, uri)
+    return await getCachedTopicVersion(ctx, uri)
 }
 
 
-export const getTopicHandler: CAHandler<{ query: { i?: string, did?: string, rkey?: string } }, TopicView> = async (ctx, agent, params) => {
+export const getTopicHandler: CAHandlerNoAuth<{ query: { i?: string, did?: string, rkey?: string } }, TopicView> = async (ctx, agent, params) => {
     const {i, did, rkey} = params.query
     return getTopic(ctx, agent, i, did, rkey)
 }
 
 
-export const getCachedTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri: string) => {
-    return cached(ctx, ["topicVersion", uri], async () => getTopicVersion(ctx, agent, uri))
+export const getCachedTopicVersion = async (ctx: AppContext, uri: string) => {
+    return cached(ctx, ["topicVersion", uri], async () => getTopicVersion(ctx, uri))
 }
 
 
@@ -344,7 +342,7 @@ export function hydrateEmbedViews(authorId: string, embeds: ArticleEmbed[]): Art
 }
 
 
-export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri: string): Promise<{
+export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
     data?: TopicView,
     error?: string
 }> => {
@@ -450,9 +448,9 @@ export const getTopicVersion = async (ctx: AppContext, agent: SessionAgent, uri:
 
 export const getTopicVersionHandler: CAHandler<{
     params: { did: string, rkey: string }
-}, TopicView> = async (ctx, agent, {params}) => {
+}, TopicView> = async (ctx, _, {params}) => {
     const {did, rkey} = params
-    return getCachedTopicVersion(ctx, agent, getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey))
+    return getCachedTopicVersion(ctx, getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey))
 }
 
 
@@ -489,7 +487,7 @@ export const getTopicsMentioned: CAHandler<{title: string, text: string}, TopicM
 }
 
 
-export const getAllTopics: CAHandlerNoAuth<{}, {topicId: string, uri: string}[]> = async (ctx, agent, {}) => {
+export const getAllTopics: CAHandlerNoAuth<{}, {topicId: string, uri: string}[]> = async (ctx, _, {}) => {
     const topicVersions = await ctx.db.topicVersion.findMany({
         select: {
             topicId: true,

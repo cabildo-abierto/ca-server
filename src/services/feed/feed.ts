@@ -1,6 +1,6 @@
 import {FeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {followingFeedPipeline} from "#/services/feed/inicio/following";
-import {SessionAgent} from "#/utils/session-agent";
+import {Agent, SessionAgent} from "#/utils/session-agent";
 import {hydrateFeed} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {AppContext} from "#/index";
@@ -32,7 +32,7 @@ export type FeedSkeleton = SkeletonFeedPost[]
 
 
 export type GetSkeletonOutput = {skeleton: FeedSkeleton, cursor: string | undefined}
-export type GetSkeletonProps = (ctx: AppContext, agent: SessionAgent, data: Dataplane, cursor?: string) => Promise<GetSkeletonOutput>
+export type GetSkeletonProps = (ctx: AppContext, agent: Agent, data: Dataplane, cursor?: string) => Promise<GetSkeletonOutput>
 export type FeedSortKey = ((a: FeedViewContent) => number[]) | null
 
 export type FeedPipelineProps = {
@@ -44,7 +44,7 @@ export type FeedPipelineProps = {
 
 export type GetFeedProps = {
     pipeline: FeedPipelineProps
-    agent: SessionAgent
+    agent: Agent
     ctx: AppContext
     cursor?: string
     params?: {metric?: string, time?: string}

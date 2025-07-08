@@ -1,7 +1,7 @@
 import express from 'express'
 import type {AppContext} from '#/index'
 import {cookieOptions, handler, Session, sessionAgent} from "#/utils/session-agent";
-import {CAHandler, CAHandlerNoAuth, makeHandler, makeHandlerNoAuth} from "#/utils/handler";
+import {CAHandlerNoAuth, makeHandler, makeHandlerNoAuth} from "#/utils/handler";
 import {searchTopics, searchUsers} from "#/services/search/search";
 import {createArticle} from "#/services/write/article";
 import {getIronSession} from "iron-session";
@@ -201,7 +201,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get(
         '/topic',
-        makeHandler(ctx, getTopicHandler)
+        makeHandlerNoAuth(ctx, getTopicHandler)
     )
 
     router.post(
@@ -216,7 +216,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get(
         '/topic-feed',
-        makeHandler(ctx, getTopicFeed)
+        makeHandlerNoAuth(ctx, getTopicFeed)
     )
 
     router.get(

@@ -9,7 +9,10 @@ import {env} from "#/lib/env";
 export type Session = { did: string }
 
 
-export class Agent {
+export type Agent = SessionAgent | NoSessionAgent
+
+
+export class BaseAgent {
     ca: AtpBaseClient
     constructor(CAAgent: AtpBaseClient) {
         this.ca = CAAgent
@@ -20,7 +23,7 @@ export class Agent {
 }
 
 
-export class NoSessionAgent extends Agent {
+export class NoSessionAgent extends BaseAgent {
     bsky: AtpBaseClient
     constructor(CAAgent: AtpBaseClient, bsky: AtpBaseClient) {
         super(CAAgent)
@@ -29,7 +32,7 @@ export class NoSessionAgent extends Agent {
 }
 
 
-export class SessionAgent extends Agent {
+export class SessionAgent extends BaseAgent {
     bsky: BskyAgent
     did: string
     req?: IncomingMessage

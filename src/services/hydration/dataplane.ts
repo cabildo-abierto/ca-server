@@ -1,5 +1,5 @@
 import {AppContext} from "#/index";
-import {Agent, NoSessionAgent, SessionAgent} from "#/utils/session-agent";
+import {BaseAgent, NoSessionAgent, SessionAgent} from "#/utils/session-agent";
 import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs";
 import {ProfileViewBasic, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs";

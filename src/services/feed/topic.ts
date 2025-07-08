@@ -1,8 +1,8 @@
 import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {CAHandler} from "#/utils/handler";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {FeedSkeleton, getFeed} from "#/services/feed/feed";
 import {AppContext} from "#/index";
-import {SessionAgent} from "#/utils/session-agent";
+import {Agent, SessionAgent} from "#/utils/session-agent";
 import {creationDateSortKey} from "#/services/feed/utils";
 import {hydrateFeedViewContent} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
@@ -11,7 +11,7 @@ import {Dataplane} from "#/services/hydration/dataplane";
 import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
 
 
-const getTopicRepliesSkeleton = async (ctx: AppContext, agent: SessionAgent, id: string) => {
+const getTopicRepliesSkeleton = async (ctx: AppContext, id: string) => {
     const replies = await ctx.db.record.findMany({
         select: {uri: true},
         where: {
@@ -42,7 +42,7 @@ const getTopicRepliesSkeleton = async (ctx: AppContext, agent: SessionAgent, id:
 }
 
 
-const getTopicMentionsSkeleton = async (ctx: AppContext, agent: SessionAgent, data: Dataplane, id: string): Promise<FeedSkeleton> => {
+const getTopicMentionsSkeleton = async (ctx: AppContext, agent: Agent, data: Dataplane, id: string): Promise<FeedSkeleton> => {
     const mentions = await ctx.db.record.findMany({
         select: {
             uri: true
@@ -95,8 +95,8 @@ export async function getTopicMentionsInTopics(ctx: AppContext, id: string){
 }
 
 
-export const getTopicVersionReplies = async (ctx: AppContext, agent: SessionAgent, id: string): Promise<{data?: FeedViewContent[], error?: string}> => {
-    const skeleton = await getTopicRepliesSkeleton(ctx, agent, id)
+export const getTopicVersionReplies = async (ctx: AppContext, agent: Agent, id: string): Promise<{data?: FeedViewContent[], error?: string}> => {
+    const skeleton = await getTopicRepliesSkeleton(ctx, id)
 
     const data = new Dataplane(ctx, agent)
     await data.fetchFeedHydrationData(skeleton)
@@ -117,7 +117,7 @@ export const getTopicVersionReplies = async (ctx: AppContext, agent: SessionAgen
 }
 
 
-export const getTopicFeed: CAHandler<{ query: { i?: string, did?: string, rkey?: string } }, {
+export const getTopicFeed: CAHandlerNoAuth<{ query: { i?: string, did?: string, rkey?: string } }, {
     mentions: FeedViewContent[],
     replies: FeedViewContent[],
     topics: string[]
@@ -135,10 +135,13 @@ export const getTopicFeed: CAHandler<{ query: { i?: string, did?: string, rkey?:
     }
 
     try {
+        console.log("fetching topic feed", id)
         const [replies, mentions, topicMentions] = await Promise.all([
             getTopicVersionReplies(ctx, agent, id),
             getFeed({
-                ctx, agent, pipeline: {
+                ctx,
+                agent,
+                pipeline: {
                     getSkeleton: async (ctx, agent, data, cursor) => ({skeleton: await getTopicMentionsSkeleton(ctx, agent, data, id), cursor: undefined}),
                     sortKey: creationDateSortKey
                 }
