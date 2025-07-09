@@ -13,14 +13,6 @@ export function isTopicVote(collection: string): collection is TopicVoteType {
     return collection == "ar.cabildoabierto.wiki.voteAccept" || collection == "ar.cabildoabierto.wiki.voteReject"
 }
 
-function opVote(type: TopicVoteType): TopicVoteType {
-    if (type == "ar.cabildoabierto.wiki.voteAccept") {
-        return "ar.cabildoabierto.wiki.voteReject"
-    } else {
-        return "ar.cabildoabierto.wiki.voteAccept"
-    }
-}
-
 
 export const createVoteAcceptAT = async (agent: SessionAgent, ref: ATProtoStrongRef): Promise<ATProtoStrongRef> => {
     const record: VoteAcceptRecord = {

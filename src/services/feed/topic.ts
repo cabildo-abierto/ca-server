@@ -1,8 +1,8 @@
 import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
+import {CAHandlerNoAuth} from "#/utils/handler";
 import {FeedSkeleton, getFeed} from "#/services/feed/feed";
 import {AppContext} from "#/index";
-import {Agent, SessionAgent} from "#/utils/session-agent";
+import {Agent} from "#/utils/session-agent";
 import {creationDateSortKey} from "#/services/feed/utils";
 import {hydrateFeedViewContent} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";

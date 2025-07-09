@@ -24,7 +24,7 @@ async function getThreadRepliesSkeletonForPostFromBsky(ctx: AppContext, agent: S
             .filter(x => x != null) : []
 
         return unique(bskySkeleton, (x => x.post))
-    } catch (err) {
+    } catch {
         return []
     }
 }

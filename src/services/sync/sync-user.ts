@@ -1,7 +1,6 @@
 import {
     processCreateBatch, processDeleteBatch
 } from "./process-batch";
-import {deleteRecords} from "../delete";
 import {getDirtyUsers, setMirrorStatus} from "./mirror-status";
 import {AppContext} from "#/index";
 import {getCAUsersDids} from "#/services/user/users";
@@ -10,7 +9,6 @@ import {iterateAtpRepo} from "@atcute/car"
 import {getServiceEndpointForDid} from "#/services/blob";
 import {getCollectionFromUri, shortCollectionToCollection} from "#/utils/uri";
 import {CAHandler} from "#/utils/handler";
-import {processDelete} from "#/services/sync/process-event";
 
 
 export async function restartSync(ctx: AppContext): Promise<void> {
@@ -68,7 +66,7 @@ export async function syncUser(ctx: AppContext, did: string, collectionsMustUpda
 
     if(collectionsMustUpdate.length > 0) console.log("Must update", collectionsMustUpdate)
 
-    const [_, doc] = await Promise.all([
+    const doc = (await Promise.all([
         ctx.db.user.update({
             data: {
                 mirrorStatus: "InProcess"
@@ -78,7 +76,7 @@ export async function syncUser(ctx: AppContext, did: string, collectionsMustUpda
             }
         }),
         getServiceEndpointForDid(did)
-    ])
+    ]))[1]
     // revalidateTag("mirrorStatus:"+did)
 
     let repo = await getUserRepo(did, doc)

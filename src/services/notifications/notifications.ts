@@ -138,20 +138,12 @@ async function updateSeenCANotifications(ctx: AppContext, agent: SessionAgent) {
 
 
 export const getNotifications: CAHandler<{}, Notification[]> = async (ctx, agent, {}) => {
-    const [{data}, caNotifications, _, _2] = await Promise.all([
+    const [{data}, caNotifications] = await Promise.all([
         agent.bsky.app.bsky.notification.listNotifications(),
         getCANotifications(ctx, agent),
         agent.bsky.app.bsky.notification.updateSeen({seenAt: new Date().toISOString()}),
         updateSeenCANotifications(ctx, agent)
     ])
-
-    // le tenemos que agregar a las notificaciones la lista de notificaciones propias de CA
-    // - alguien editó un tema que editaste
-    // - alguien votó una edición de un tema
-    // - se verificó tu cuenta
-    // - alguien te mencionó en un artículo o tema
-    // - alguien respondió a un artículo tuyo
-    // - alguien respondió a un tema que editaste
 
     const bskyNotifications = data.notifications.map(bskyNotificationToCA)
 

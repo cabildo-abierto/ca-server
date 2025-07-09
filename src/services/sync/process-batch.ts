@@ -17,7 +17,7 @@ import {
     isDatasetDataSource
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {ExpressionBuilder, OnConflictDatabase, OnConflictTables, Transaction} from "kysely";
-import {DB, NotificationType} from "../../../prisma/generated/types";
+import {DB} from "../../../prisma/generated/types";
 import {ValidationResult} from "@atproto/lexicon";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 import {

@@ -1,4 +1,4 @@
-import {Agent, BaseAgent, sessionAgent, SessionAgent} from "#/utils/session-agent";
+import {Agent, sessionAgent, SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
 import express from "express";
 

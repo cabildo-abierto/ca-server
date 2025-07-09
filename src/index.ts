@@ -100,7 +100,7 @@ export class Server {
     static async create(worker: boolean) {
         const {NODE_ENV, HOST, PORT} = env
 
-        const {ctx, logger} = await setupAppContext(worker)
+        const {ctx} = await setupAppContext(worker)
 
         const ingester = new MirrorMachine(ctx)
         ingester.run()

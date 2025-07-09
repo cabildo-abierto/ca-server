@@ -1,6 +1,3 @@
-import {handleToDid} from "#/services/user/users";
-import {SessionAgent} from "#/utils/session-agent";
-
 
 export function getUri(did: string, collection: string, rkey: string) {
     return "at://" + did + "/" + collection + "/" + rkey

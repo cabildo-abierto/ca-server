@@ -1,4 +1,4 @@
-import {getCollectionFromUri, getRkeyFromUri, getUri, isTopicVersion, splitUri} from "#/utils/uri";
+import {getCollectionFromUri, getRkeyFromUri, getUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
 import {CAHandler} from "#/utils/handler";
@@ -230,7 +230,7 @@ export async function deleteRecordAT(agent: SessionAgent, uri: string){
             rkey: getRkeyFromUri(uri),
             collection: getCollectionFromUri(uri)
         })
-    } catch (err) {
+    } catch {
         console.warn("No se pudo borrar de ATProto", uri)
     }
 }

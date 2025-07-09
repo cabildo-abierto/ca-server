@@ -4,15 +4,16 @@ import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildo
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {unique} from "#/utils/arrays";
 import {cleanText} from "#/utils/strings";
-import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import { Prisma } from "@prisma/client";
 import {AppContext} from "#/index";
-import {JsonObject, JsonValue} from "@prisma/client/runtime/library";
-import {hydrateTopicViewBasicFromTopicId, topicQueryResultToTopicViewBasic} from "#/services/wiki/topics";
+import {JsonValue} from "@prisma/client/runtime/library";
+import {topicQueryResultToTopicViewBasic} from "#/services/wiki/topics";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {SessionAgent} from "#/utils/session-agent";
 import {sql} from "kysely";
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
+import {$Typed} from "@atproto/api";
 
 
 export async function searchUsersInCA(ctx: AppContext, query: string, dataplane: Dataplane): Promise<string[]> {
@@ -47,7 +48,9 @@ export async function searchUsersInBsky(agent: SessionAgent, query: string, data
 
     dataplane.bskyUsers = joinMaps(
         dataplane.bskyUsers,
-        new Map<string, ProfileViewBasic>(data.actors.map(a => [a.did, a]))
+        new Map<string, $Typed<ProfileViewBasic>>(data.actors.map(a => [a.did, {
+            $type: "app.bsky.actor.defs#profileViewBasic", ...a
+        }]))
     )
 
     return data.actors.map(a => a.did)

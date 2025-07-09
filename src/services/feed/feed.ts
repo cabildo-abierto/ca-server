@@ -1,6 +1,6 @@
 import {FeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {followingFeedPipeline} from "#/services/feed/inicio/following";
-import {Agent, SessionAgent} from "#/utils/session-agent";
+import {Agent} from "#/utils/session-agent";
 import {hydrateFeed} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {AppContext} from "#/index";

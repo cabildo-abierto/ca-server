@@ -4,9 +4,6 @@ import {Dataplane, getBlobKey} from "#/services/hydration/dataplane";
 import {BlobRef} from "#/services/hydration/hydrate";
 import {nodesCharDiff} from "#/services/wiki/diff";
 import {decompress} from "#/utils/compression";
-import {isVersionAccepted, isVersionMonetized} from "#/services/wiki/current-version";
-import {getTopicHistory} from "#/services/wiki/history";
-
 
 
 export const updateTopicContributionsHandler: CAHandler<{params: {id: string}}, {}> = async (ctx, agent, {params}) => {
@@ -40,7 +37,7 @@ function getMarkdown(v: {content: {textBlobId: string | null, format: string | n
                 } else {
                     return null
                 }
-            } catch (err) {
+            } catch {
                 console.log("Failed to decompress lexical content", currentContent)
                 return null
             }

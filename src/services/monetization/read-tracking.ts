@@ -11,11 +11,11 @@ export const storeReadSession: CAHandler<{
     chunks: ReadChunks
     totalChunks: number
     params: { did: string, collection: string, rkey: string }
-}, {}> = async (ctx, agent, params) => {
+}> = async (ctx, agent, params) => {
     const {did, collection, rkey} = params.params;
     const uri = getUri(did, collection, rkey);
 
-    let topicId: string | undefined
+    let topicId: string | null = null
     if(isTopicVersion(collection)){
         topicId = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey)
     }
@@ -30,10 +30,10 @@ export const storeReadSession: CAHandler<{
                     totalChunks: params.totalChunks
                 },
                 contentAuthorId: getDidFromUri(uri),
-                topicId
+                topicId: topicId ?? undefined
             }
         })
-    } catch (err) {
+    } catch {
         return {error: "Ocurrió un error al actualizar la base de datos."}
     }
     return {data: {}}

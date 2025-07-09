@@ -64,7 +64,7 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
         ref = res.ref
         record = res.record
         mentions = data
-    } catch (err) {
+    } catch {
         return {error: "Ocurrió un error al publicar el artículo."}
     }
 

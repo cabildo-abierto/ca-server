@@ -1,13 +1,14 @@
-import {FeedSkeleton, GetSkeletonOutput, GetSkeletonProps} from "#/services/feed/feed";
+import {GetSkeletonOutput, GetSkeletonProps} from "#/services/feed/feed";
 import {AppContext} from "#/index";
-import {SessionAgent} from "#/utils/session-agent";
+import {Agent} from "#/utils/session-agent";
 import {getSkeletonFromTimeline} from "#/services/feed/inicio/following";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {concat} from "#/utils/arrays";
 import {SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
 
 
-const getMainProfileFeedSkeletonBsky = async (agent: SessionAgent, data: Dataplane, did: string, cursor?: string): Promise<GetSkeletonOutput> => {
+const getMainProfileFeedSkeletonBsky = async (agent: Agent, data: Dataplane, did: string, cursor?: string): Promise<GetSkeletonOutput> => {
+    if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
     const res = await agent.bsky.getAuthorFeed({actor: did, filter: "posts_and_author_threads", cursor})
     const feed = res.data.feed
     data.storeFeedViewPosts(feed)

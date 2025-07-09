@@ -1,5 +1,5 @@
 import {AppContext} from "#/index";
-import {BaseAgent, NoSessionAgent, SessionAgent} from "#/utils/session-agent";
+import {NoSessionAgent, SessionAgent} from "#/utils/session-agent";
 import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs";
 import {ProfileViewBasic, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
@@ -23,7 +23,6 @@ import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
 import {TopicQueryResultBasic} from "#/services/wiki/topics";
 import {reactionsQuery, recordQuery} from "#/utils/utils";
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
-
 import {
     FeedViewPost,
     isPostView, isReasonRepost,
@@ -46,10 +45,8 @@ import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 
 import {
     ColumnFilter,
-    isColumnFilter,
-    Main as Visualization
+    isColumnFilter
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
-import {$Type} from "@atproto/api/dist/client/util";
 
 function getUriFromEmbed(embed: PostView["embed"]): string | null {
     if (isEmbedRecordView(embed)) {
@@ -427,33 +424,8 @@ export class Dataplane {
         this.topicsById = joinMaps(this.topicsById, mapById)
     }
 
-    async fetchTopicsBasicByIds(ids: string[]) {
-        ids = ids.filter(u => !this.topicsById?.has(u))
-
-        const data: TopicQueryResultBasic[] = await this.ctx.db.topic.findMany({
-            select: {
-                id: true,
-                popularityScore: true,
-                lastEdit: true,
-                currentVersion: {
-                    select: {
-                        props: true
-                    }
-                }
-            },
-            where: {
-                id: {
-                    in: ids
-                }
-            }
-        })
-
-        const mapById = new Map(data.map(item => [item.id, item]))
-        this.topicsById = joinMaps(this.topicsById, mapById)
-    }
-
     async expandUrisWithReplies(uris: string[]): Promise<string[]> {
-        const [_, caPosts] = await Promise.all([
+        const caPosts = (await Promise.all([
             this.fetchBskyPosts(postUris(uris)),
             this.ctx.db.post.findMany({
                 select: {
@@ -467,7 +439,7 @@ export class Dataplane {
                     }
                 }
             })
-        ])
+        ]))[1]
 
         const bskyPosts = uris.map(u => this.bskyPosts?.get(u)).filter(x => x != null)
 
@@ -824,7 +796,7 @@ export class Dataplane {
 
         const reqAuthors = skeleton.map(n => getDidFromUri(n.causedByRecordId))
 
-        const [caNotificationsData, _]: [NotificationQueryResult[], any] = await Promise.all([
+        const caNotificationsData: NotificationQueryResult[] = (await Promise.all([
             this.ctx.kysely
                 .selectFrom("Notification")
                 .innerJoin("Record", "Notification.causedByRecordId", "Record.uri")
@@ -847,7 +819,7 @@ export class Dataplane {
                 .limit(20)
                 .execute(),
             this.fetchUsersHydrationData(reqAuthors)
-        ])
+        ]))[0]
 
         caNotificationsData.forEach(n => {
             this.notifications.set(n.id, n)

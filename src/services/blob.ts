@@ -6,7 +6,6 @@ import {BlobRef} from "#/services/hydration/hydrate";
 import {getBlobKey} from "#/services/hydration/dataplane";
 import {redisCacheTTL} from "#/services/wiki/topics";
 import {imageSize} from "image-size";
-import {range} from "#/utils/arrays";
 
 
 export async function getServiceEndpointForDid(did: string){
@@ -40,7 +39,7 @@ export async function fetchBlob(blob: {cid: string, authorId: string}) {
         const url = serviceEndpoint + "/xrpc/com.atproto.sync.getBlob?did=" + blob.authorId + "&cid=" + blob.cid
         try {
             return await fetch(url)
-        } catch (e) {
+        } catch {
             console.error("Couldn't fetch blob", blob.cid, blob.authorId)
             return null
         }
@@ -95,7 +94,6 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
         if(b) pipeline.set(k, b, 'EX', redisCacheTTL)
     }
     await pipeline.exec()
-    const t4 = Date.now()
 
     return blobContents
 }

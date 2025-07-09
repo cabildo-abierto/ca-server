@@ -164,7 +164,7 @@ export async function createDonation(ctx: AppContext, agent: SessionAgent, amoun
                 amount
             }
         })
-    } catch (e) {
+    } catch {
         return {error: "error on buy subscriptions"}
     }
 
@@ -173,15 +173,10 @@ export async function createDonation(ctx: AppContext, agent: SessionAgent, amoun
 
 
 export const processPayment: CAHandler<{data: any}, {}> = async (ctx, agent, params) => {
-    const secret = process.env.MP_WEBHOOK_KEY!
-
     const data = params.data
     const paymentId = data.id
 
     const paymentDetails = await getPaymentDetails(paymentId)
-
-    console.log("params", params)
-    console.log("paymentDetails", paymentDetails)
 
     if(paymentDetails.status != "approved"){
         return {error: "El pago no fue aprobado."}

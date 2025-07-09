@@ -1,18 +1,5 @@
 import {AppContext} from "#/index";
-import {CAHandler} from "#/utils/handler";
-import {unique} from "#/utils/arrays";
 import {getCollectionFromUri, getDidFromUri, getRkeyFromUri} from "#/utils/uri";
-import {isLike} from "@atproto/api/dist/client/types/app/bsky/feed/getLikes";
-import {isRecord as isRepost} from "@atproto/api/dist/client/types/app/bsky/feed/repost";
-import {ReactionType} from "#/services/reactions/reactions";
-
-
-export const updateEngagementCountsHandler: CAHandler = async (ctx, agent, params) => {
-    console.log("Added update engagement counts to queue.")
-    await ctx.worker?.addJob("update-engagement-counts", {})
-
-    return {data: {}}
-}
 
 
 export async function updateEngagementCounts(ctx: AppContext) {

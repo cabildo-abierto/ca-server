@@ -113,7 +113,6 @@ export async function computeTopicsPopularityScore(ctx: AppContext): Promise<{
 
     const topicScores = new Map<string, number>()
     for(let i = 0; i < topics.length; i++){
-        const t1 = Date.now()
         const score = countTopicInteractions(topics[i], contentInteractionsMap, humanUsers)
         topicScores.set(topics[i].id, score)
     }

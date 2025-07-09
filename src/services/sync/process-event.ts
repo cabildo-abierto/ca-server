@@ -324,7 +324,7 @@ export async function processDeleteReaction(ctx: AppContext, uri: string) {
             }
         }
     })
-    if(id) {
+    if (id) {
         await addUpdateContributionsJobForTopics(ctx, [id])
     }
 }
@@ -368,43 +368,37 @@ export const processCreate: RecordProcessor<any> = async (ctx, ref, record) => {
             if (res.success) {
                 await processBskyProfile(ctx, ref, res.value)
                 return
-            }
-            else console.log(res.error)
+            } else console.log(res.error)
         } else if (collection == "app.bsky.feed.post") {
             const res = Post.validateRecord<Post.Record>(parsedRecord)
             if (res.success) {
                 await processPost(ctx, ref, res.value)
                 return
-            }
-            else console.log(res.error)
+            } else console.log(res.error)
         } else if (collection == "app.bsky.feed.like") {
             const res = Like.validateRecord<Like.Record>(parsedRecord)
             if (res.success) {
                 await processReaction(ctx, ref, res.value)
                 return
-            }
-            else console.log(res.error)
+            } else console.log(res.error)
         } else if (collection == "app.bsky.feed.repost") {
             const res = Repost.validateRecord<Repost.Record>(parsedRecord)
             if (res.success) {
                 await processReaction(ctx, ref, res.value)
                 return
-            }
-            else console.log(res.error)
+            } else console.log(res.error)
         } else if (collection == "app.bsky.graph.follow") {
             const res = Follow.validateRecord<Follow.Record>(parsedRecord)
             if (res.success) {
                 await processFollow(ctx, ref, res.value)
                 return
-            }
-            else console.log(res.error)
+            } else console.log(res.error)
         } else if (collection == "ar.cabildoabierto.actor.caProfile") {
             const res = CAProfile.validateRecord<CAProfile.Record>(parsedRecord)
             if (res.success) {
                 await processCAProfile(ctx, ref, res.value)
                 return
-            }
-            else console.log(res.error)
+            } else console.log(res.error)
         } else if (collection == "ar.com.cabildoabierto.profile") {
             await processCAProfile(ctx, ref, parsedRecord)
             return
@@ -413,36 +407,31 @@ export const processCreate: RecordProcessor<any> = async (ctx, ref, record) => {
             if (res.success) {
                 await processArticle(ctx, ref, res.value)
                 return
-            }
-            else console.log(res.error)
+            } else console.log(res.error)
         } else if (collection == "ar.cabildoabierto.wiki.topicVersion") {
             const res = TopicVersion.validateRecord<TopicVersion.Record>(parsedRecord)
             if (res.success) {
                 await processTopicVersion(ctx, ref, res.value)
                 return
-            }
-            else console.log(res.error)
+            } else console.log(res.error)
         } else if (collection == "ar.cabildoabierto.wiki.voteAccept") {
             const res = VoteAccept.validateRecord<VoteAccept.Record>(parsedRecord)
             if (res.success) {
                 await processReaction(ctx, ref, res.value)
                 return
-            }
-            else console.log(res.error)
+            } else console.log(res.error)
         } else if (collection == "ar.cabildoabierto.wiki.voteReject") {
             const res = VoteReject.validateRecord<VoteReject.Record>(parsedRecord)
             if (res.success) {
                 await processReaction(ctx, ref, res.value)
                 return
-            }
-            else console.log(res.error)
+            } else console.log(res.error)
         } else if (collection == "ar.cabildoabierto.data.dataset") {
             const res = Dataset.validateRecord<Dataset.Record>(parsedRecord)
             if (res.success) {
                 await processDataset(ctx, ref, res.value)
                 return
-            }
-            else console.log(res.error)
+            } else console.log(res.error)
         } else {
             console.log("Unknown collection", collection)
             return

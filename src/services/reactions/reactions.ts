@@ -10,8 +10,7 @@ import {Record as RepostRecord} from "#/lex-api/types/app/bsky/feed/repost";
 import {Record as VoteAcceptRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept";
 import {Record as VoteRejectRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject";
 import {
-    PrismaTransactionClient,
-    SyncUpdate
+    PrismaTransactionClient
 } from "#/services/sync/sync-update";
 import {SessionAgent} from "#/utils/session-agent";
 import {$Typed} from "@atproto/api";

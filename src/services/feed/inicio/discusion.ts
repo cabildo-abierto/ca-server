@@ -6,7 +6,6 @@ import {Record as ArticleRecord, validateRecord as validateArticleRecord, isReco
 import {processArticle, processPost} from "#/services/sync/process-event";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 import {$Typed} from "@atproto/api";
-import {isPostView, isArticleView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 
 

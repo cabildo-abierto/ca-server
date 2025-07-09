@@ -6,8 +6,6 @@ import {
     MessageView
 } from "@atproto/api/dist/client/types/chat/bsky/convo/defs";
 import {$Typed} from "@atproto/api";
-import {ProfileViewBasic} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import {ProfileViewBasic as ChatProfileViewBasic} from "@atproto/api/dist/client/types/chat/bsky/actor/defs"
 
 
 export const getConversations: CAHandler<{}, ConvoView[]> = async (ctx, agent, params) => {
@@ -23,7 +21,7 @@ type SendMessageParams = { message: MessageInput, convoId: string }
 export const sendMessage: CAHandler<SendMessageParams, {}> = async (ctx, agent, params) => {
     const chatAgent = agent.bsky.withProxy("bsky_chat", "did:web:api.bsky.chat")
 
-    const {data} = await chatAgent.chat.bsky.convo.sendMessage(params)
+    await chatAgent.chat.bsky.convo.sendMessage(params)
 
     return {data: {}}
 }

@@ -116,8 +116,7 @@ export async function getArticlesForFollowingFeed(ctx: AppContext, following: st
     createdAt: Date,
     uri: string
 }[]> {
-    const t1 = Date.now()
-    const res = await ctx.db.record.findMany({
+    return ctx.db.record.findMany({
         select: {
             createdAt: true,
             uri: true
@@ -131,10 +130,7 @@ export async function getArticlesForFollowingFeed(ctx: AppContext, following: st
             }
         },
         take: 10
-    })
-    const t2 = Date.now()
-    // logTimes("getArticlesForFollowingFeed", [t1, t2])
-    return res
+    });
 }
 
 
@@ -213,6 +209,7 @@ export async function getBskyTimeline(agent: SessionAgent, limit: number, data: 
 
 
 export const getFollowingFeedSkeleton: GetSkeletonProps = async (ctx, agent, data, cursor) => {
+    if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
     const following = [agent.did, ...(await getFollowing(ctx, agent.did))]
 
     const timelineQuery = getBskyTimeline(agent, 25, data, cursor)

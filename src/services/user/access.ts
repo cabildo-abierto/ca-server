@@ -190,7 +190,7 @@ export const createAccessRequest: CAHandlerNoAuth<{email: string, comment: strin
             comment: params.comment,
             id: uuidv4()
         }]).execute()
-    } catch (err) {
+    } catch {
         return {error: "Ocurrió un error al crear la solicitud :("}
     }
 
