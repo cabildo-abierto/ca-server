@@ -11,7 +11,6 @@ import {
 } from '../../../../util'
 import type * as ArCabildoabiertoFeedArticle from '../feed/article.js'
 import type * as ArCabildoabiertoActorDefs from '../actor/defs.js'
-import type * as AppBskyActorDefs from '../../../app/bsky/actor/defs.js'
 
 const is$typed = _is$typed,
   validate = _validate
@@ -87,7 +86,7 @@ export interface VersionInHistory {
   uri: string
   cid: string
   createdAt: string
-  author: AppBskyActorDefs.ProfileViewBasic
+  author: ArCabildoabiertoActorDefs.ProfileViewBasic
   message?: string
   viewer?: TopicVersionViewerState
   status?: TopicVersionStatus

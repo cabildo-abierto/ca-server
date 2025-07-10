@@ -54,12 +54,13 @@ export const getConversation: CAHandler<{
 export const createConversation: CAHandler<{params: {did: string}}, {convoId: string}> = async (ctx, agent, {params}) => {
     const {did} = params
     const chatAgent = agent.bsky.withProxy("bsky_chat", "did:web:api.bsky.chat")
-
     try {
         const convo = await chatAgent.chat.bsky.convo.getConvoForMembers({members: [did]})
         return {data: {convoId: convo.data.convo.id}}
-    } catch (e) {
-        return {error: e instanceof Error ? e.message : "No se pudo iniciar la conversación."}
+    } catch (err) {
+        console.log("No se pudo iniciar la conversación")
+        console.log(err)
+        return {error: "No se pudo iniciar la conversación."}
     }
 }
 

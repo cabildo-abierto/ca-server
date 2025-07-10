@@ -105,6 +105,8 @@ export type DatasetQueryResult = {
         displayName: string | null
         avatar: string | null
         CAProfileUri: string | null
+        userValidationHash: string | null
+        orgValidation: string | null
     }
     dataset: {
         title: string

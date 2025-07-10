@@ -9,7 +9,9 @@ export const authorQuery = {
             handle: true,
             displayName: true,
             avatar: true,
-            CAProfileUri: true
+            CAProfileUri: true,
+            userValidationHash: true,
+            orgValidation: true
         }
     }
 }

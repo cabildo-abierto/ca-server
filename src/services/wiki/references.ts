@@ -272,6 +272,11 @@ export async function updateReferencesForNewTopics(ctx: AppContext) {
 }
 
 
+export async function restartReferenceLastUpdate(ctx: AppContext) {
+    await setLastReferencesUpdate(ctx, new Date(0))
+}
+
+
 export async function updateReferences(ctx: AppContext){
     console.log("Updating references")
     const updateTime = new Date()

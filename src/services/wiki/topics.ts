@@ -200,6 +200,8 @@ export function dbUserToProfileViewBasic(author: {
     displayName: string | null,
     avatar: string | null
     CAProfileUri: string | null,
+    userValidationHash: string | null,
+    orgValidation: string | null
 } | null): CAProfileViewBasic | null {
     if (!author || !author.handle) return null
     return {
@@ -209,6 +211,7 @@ export function dbUserToProfileViewBasic(author: {
         displayName: author.displayName ?? undefined,
         avatar: author.avatar ?? undefined,
         caProfile: author.CAProfileUri ?? undefined,
+        verification: author.orgValidation ? "org" : (author.userValidationHash ? "person" : undefined)
     }
 }
 
@@ -357,7 +360,9 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
                     handle: true,
                     displayName: true,
                     avatar: true,
-                    CAProfileUri: true
+                    CAProfileUri: true,
+                    userValidationHash: true,
+                    orgValidation: true
                 }
             },
             record: true,

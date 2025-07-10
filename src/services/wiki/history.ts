@@ -40,7 +40,9 @@ export async function getTopicHistory(db: PrismaTransactionClient, id: string, a
                     handle: true,
                     displayName: true,
                     avatar: true,
-                    CAProfileUri: true
+                    CAProfileUri: true,
+                    userValidationHash: true,
+                    orgValidation: true
                 }
             },
             content: {
@@ -130,7 +132,7 @@ export async function getTopicHistory(db: PrismaTransactionClient, id: string, a
                 cid: v.cid,
                 author: {
                     ...author,
-                    $type: "app.bsky.actor.defs#profileViewBasic"
+                    $type: "ar.cabildoabierto.actor.defs#profileViewBasic"
                 },
                 message: v.content.topicVersion.message,
                 viewer,

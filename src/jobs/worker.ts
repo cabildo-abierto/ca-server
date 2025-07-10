@@ -3,7 +3,7 @@ import {Worker} from 'bullmq';
 import {AppContext} from "#/index";
 import {syncAllUsers, syncUser} from "#/services/sync/sync-user";
 import {dbHandleToDid} from "#/services/user/users";
-import {updateReferences} from "#/services/wiki/references";
+import {restartReferenceLastUpdate, updateReferences} from "#/services/wiki/references";
 import {updateEngagementCounts} from "#/services/feed/getUserEngagement";
 import {deleteCollection} from "#/services/delete";
 import {updateTopicPopularityScores} from "#/services/wiki/popularity";
@@ -104,6 +104,7 @@ export class CAWorker {
         this.registerJob("batch-create-notifications", (data) => createNotificationsBatchJob(ctx, data))
         this.registerJob("batch-jobs", () => this.batchJobs())
         this.registerJob("test-job", async () => {console.log("Test job run!")})
+        this.registerJob("restart-references-last-update", () => restartReferenceLastUpdate(ctx))
 
         await this.removeAllRepeatingJobs()
         await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)
