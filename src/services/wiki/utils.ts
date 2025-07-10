@@ -97,7 +97,7 @@ export function getTopicTitle(topic: {id: string, props?: TopicProp[]}): string 
 }
 
 
-export function getTopicSynonyms(topic: {id: string, synonyms?: string[], props?: TopicProp[]}): string[] {
+export function getTopicSynonyms(topic: {id: string, props?: TopicProp[]}): string[] {
     const s = getTopicProp("Sinónimos", topic.props)
     const t = getTopicProp("Título", topic.props)
 
@@ -108,8 +108,6 @@ export function getTopicSynonyms(topic: {id: string, synonyms?: string[], props?
     if(t && isStringProp(t.value)) {
         synonyms.push(t.value.value)
     }
-
-    if(topic.synonyms) synonyms = [...synonyms, ...topic.synonyms]
 
     return unique(synonyms, cleanText)
 }

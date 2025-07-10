@@ -25,13 +25,6 @@ function countSynonymInText(regex: RegExp, textCleaned: string): number {
 }
 
 
-export const updateReferencesHandler: CAHandler = async (ctx, agent, {}) => {
-    await ctx.worker?.addJob("update-references", {})
-
-    return {data: {}}
-}
-
-
 export async function getContentsForReferenceUpdate(ctx: AppContext, since: Date){
     return ctx.db.record.findMany({
         select: {
@@ -79,6 +72,7 @@ export async function setLastReferencesUpdate(ctx: AppContext, date: Date){
 
 export async function updateReferencesForNewContents(ctx: AppContext) {
     const lastUpdate = await getLastReferencesUpdate(ctx)
+    console.log("Last references update", lastUpdate)
 
     const contents = await getContentsForReferenceUpdate(ctx, lastUpdate)
     if(contents.length == 0) {
@@ -191,7 +185,7 @@ function isCompressed(format: string | null){
 
 
 export async function getContentsText(ctx: AppContext, contents: ContentProps[], retries: number = 10){
-    const texts: string[] = contents.map(_ => "")
+    const texts: (string | null)[] = contents.map(_ => "")
 
     const blobRefs: {i: number, blob: BlobRef}[] = []
     for(let i = 0; i < contents.length; i++){
@@ -206,32 +200,23 @@ export async function getContentsText(ctx: AppContext, contents: ContentProps[],
     const blobTexts = await fetchTextBlobs(ctx, blobRefs.map(x => x.blob), retries)
 
     for(let i = 0; i < blobRefs.length; i++){
-        const t = blobTexts[i]
-        if(t != null){
-            texts[blobRefs[i].i] = t
-        } else {
-            throw Error("Couldn't fetch blob for content: " + contents[blobRefs[i].i].uri)
-        }
+        texts[blobRefs[i].i] = blobTexts[i]
     }
 
     for(let i = 0; i < texts.length; i++){
-        if(texts[i] != null && texts[i].length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(contents[i].content?.format ?? null)){
-            texts[i] = decompress(texts[i])
+        const text = texts[i]
+        if(text != null && text.length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(contents[i].content?.format ?? null)){
+            texts[i] = decompress(text)
         }
     }
 
-    for(let i = 0; i < texts.length; i++){
-        if(texts[i] == null){
-            console.error(contents[i])
-            throw Error(`Failed to process content ${contents[i].uri}`)
-        }
-    }
-    return texts
+    return texts.map(t => t != null ? t : "")
 }
 
 
 export async function updateReferencesForNewTopics(ctx: AppContext) {
     const lastUpdate = await getLastReferencesUpdate(ctx)
+    console.log("Last reference update", lastUpdate)
 
     const topicsList = (await ctx.db.topic.findMany({
         select: {
@@ -329,7 +314,7 @@ export async function getSynonymsToTopicsMap(ctx: AppContext, topicsList?: strin
 
     topics.forEach((t) => {
         const synonyms = unique(getTopicSynonyms({
-            id: t.id, synonyms: t.synonyms, props: t.currentVersion?.props as (TopicProp[] | undefined)
+            id: t.id, props: t.currentVersion?.props as (TopicProp[] | undefined)
         }).map(cleanText))
 
         synonyms.forEach(s => {

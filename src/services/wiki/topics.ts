@@ -475,12 +475,18 @@ export async function getTopicsTitles(ctx: AppContext, ids: string[]) {
 
 
 export const getTopicsMentioned: CAHandler<{title: string, text: string}, TopicMention[]> = async (ctx, agent, {title, text}) => {
+    const t1 = Date.now()
     const m = await getSynonymsToTopicsMap(ctx)
+    const t2 = Date.now()
     const refs = getTopicsReferencedInText(text + " " + title, m)
+    const t3 = Date.now()
     const titles = await getTopicsTitles(ctx, refs.map(r => r.topicId))
+    const t4 = Date.now()
     const data = refs
         .map(r => ({id: r.topicId, count: r.count, title: gett(titles, r.topicId)}))
         .sort((a, b) => (b.count - a.count))
+    const t5 = Date.now()
+    logTimes("topics mentioned", [t1, t2, t3, t4, t5])
     return {
         data
     }

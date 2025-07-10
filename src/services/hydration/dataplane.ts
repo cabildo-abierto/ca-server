@@ -719,7 +719,9 @@ export class Dataplane {
                 CAProfileUri: true,
                 displayName: true,
                 handle: true,
-                avatar: true
+                avatar: true,
+                userValidationHash: true,
+                orgValidation: true
             },
             where: {
                 did: {
@@ -736,7 +738,8 @@ export class Dataplane {
                 handle: u.handle,
                 displayName: u.displayName ?? undefined,
                 avatar: u.avatar ?? undefined,
-                caProfile: u.CAProfileUri ?? undefined
+                caProfile: u.CAProfileUri ?? undefined,
+                verification: u.orgValidation ? "org" : (u.userValidationHash ? "person" : undefined)
             })
         })
 

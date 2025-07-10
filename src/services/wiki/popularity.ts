@@ -103,9 +103,10 @@ export async function computeTopicsPopularityScore(ctx: AppContext): Promise<{
             handle: true
         },
         where: {
-            userValidationHash: {
+            /*userValidationHash: { // Cuando la validación empiece a ser obligatoria
                 not: null
-            }
+            }*/
+            orgValidation: null
         }
     }))
     const humanUsers = new Set(res.map(u => u.did))
@@ -122,12 +123,6 @@ export async function computeTopicsPopularityScore(ctx: AppContext): Promise<{
     return Array.from(topicScores.entries()).map(([id, score]) => {
         return {id, score}
     })
-}
-
-
-export const updateTopicsPopularityHandler: CAHandler<{}, {}> = async (ctx, agent, {}) => {
-    await ctx.worker?.addJob("update-topics-popularity", {})
-    return {data: {}}
 }
 
 

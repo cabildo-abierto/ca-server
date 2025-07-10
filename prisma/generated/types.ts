@@ -11,6 +11,11 @@ export const MirrorStatus = {
     Failed: "Failed"
 } as const;
 export type MirrorStatus = (typeof MirrorStatus)[keyof typeof MirrorStatus];
+export const ModerationState = {
+    Ok: "Ok",
+    ShadowBan: "ShadowBan"
+} as const;
+export type ModerationState = (typeof ModerationState)[keyof typeof ModerationState];
 export const ValidationType = {
     Persona: "Persona",
     Organizacion: "Organizacion"
@@ -240,6 +245,7 @@ export type User = {
     userValidationHash: string | null;
     orgValidation: string | null;
     lastSeenNotifications: Generated<Timestamp>;
+    moderationState: Generated<ModerationState>;
 };
 export type UserMonth = {
     id: string;

@@ -6,59 +6,198 @@ import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
 import {getUsersWithReadSessions} from "#/services/monetization/user-months";
 import {isWeeklyActiveUser} from "#/services/monetization/donations";
-import {count} from "#/utils/arrays";
+import {count, listOrderDesc, sortByKey} from "#/utils/arrays";
+
 
 export type StatsDashboard = {
-    lastUsers: ProfileViewBasicCA[]
-    WAUPlot: {date: Date, count: number}[]
+    lastUsers: (ProfileViewBasicCA & { lastReadSession: Date | null })[]
+    counts: {
+        registered: number
+        active: number
+        verified: number
+        verifiedActive: number
+    }
+    WAUPlot: { date: Date, count: number }[]
+    WAUPlotVerified: { date: Date, count: number }[]
+    articlesPlot: {date: Date, count: number}[]
+    topicVersionsPlot: {date: Date, count: number}[]
+    caCommentsPlot: {date: Date, count: number}[]
 }
 
 
-async function lastUsersRegistered(ctx: AppContext, agent: SessionAgent) {
+const testUsers = [
+    "usuariodepruebas.bsky.social",
+    "usuariodepruebas2.bsky.social",
+    "usuariodepruebas3.bsky.social",
+    "usuariodepruebas4.bsky.social",
+    "usuariodepruebas5.bsky.social",
+    "carlitos-tester.bsky.social",
+]
+
+
+async function getRegisteredUsers(ctx: AppContext, agent: SessionAgent): Promise<StatsDashboard["lastUsers"]> {
     const users = await ctx.db.user.findMany({
         select: {
             did: true,
-            createdAt: true
-        },
-        orderBy: {
-            createdAt: "desc"
+            createdAt: true,
+            userValidationHash: true,
+            orgValidation: true,
+            readSessions: {
+                select: {
+                    createdAt: true
+                },
+                orderBy: {
+                    createdAt: "desc"
+                }
+            }
         },
         where: {
-            inCA: true
-        },
-        take: 50
+            inCA: true,
+            hasAccess: true,
+            handle: {
+                notIn: testUsers
+            }
+        }
     })
 
     const dataplane = new Dataplane(ctx, agent)
     await dataplane.fetchUsersHydrationData(users.map(u => u.did))
 
     const profiles: ProfileViewBasicCA[] = users.map(u => hydrateProfileViewBasic(u.did, dataplane)).filter(u => u != null)
-    return profiles.map(p => ({...p, createdAt: users.find(u => u.did == p.did)?.createdAt.toString()}))
+    return sortByKey(profiles.map(p => {
+        const user = users.find(u => u.did == p.did)
+        if (user) {
+            return {
+                ...p,
+                lastReadSession: user.readSessions.length > 0 ? user?.readSessions[0].createdAt : null,
+                createdAt: user.createdAt.toString(),
+            }
+        }
+        return null
+    }).filter(u => u != null), e => {
+        return e?.lastReadSession ? [e.lastReadSession.getTime()] : [0]
+    }, listOrderDesc)
 }
 
 
-async function getWAUPlot(ctx: AppContext) {
-    const after = new Date(0)
-    const users = await getUsersWithReadSessions(ctx, after)
+function dailyPlotData<T>(data: T[], condition: (x: T, d: Date) => boolean): {date: Date, count: number}[] {
     const startDate = new Date(2025, 5, 15) // new Date(2025, 6, 8)
-    const endDate = new Date()
-    const oneDay = 1000*3600*24
-    const data: {date: Date, count: number}[] = []
-    for(let d = new Date(startDate); d < endDate; d = new Date(d.getTime()+oneDay)){
-        const c = count(users, u => isWeeklyActiveUser(u, d))
-        data.push({date: d, count: c})
+    const oneDay = 1000 * 3600 * 24
+    const endDate = new Date(Date.now() + oneDay)
+    const res: { date: Date, count: number }[] = []
+    for (let d = new Date(startDate); d < endDate; d = new Date(d.getTime() + oneDay)) {
+        const c = count(data, u => condition(u, d))
+        res.push({date: d, count: c})
     }
-    return data
+    return res
+}
+
+
+async function getWAUPlot(ctx: AppContext, verified: boolean) {
+    const after = new Date(0)
+    const users = await getUsersWithReadSessions(ctx, after, verified)
+    const data = dailyPlotData(
+        users,
+        (u, d) => isWeeklyActiveUser(u, d)
+    )
+    return {
+        WAUPlot: data,
+        active: data[data.length-1].count
+    }
+}
+
+
+async function getTopicVersionsPlot(ctx: AppContext) {
+    const tv = await ctx.db.record.findMany({
+        select: {
+            createdAt: true
+        },
+        where: {
+            collection: "ar.cabildoabierto.wiki.topicVersion",
+            authorId: {
+                notIn: [
+                    "cabildoabierto.ar"
+                ]
+            }
+        }
+    })
+
+    return dailyPlotData(
+        tv,
+        (x, d) => x.createdAt.toDateString() == d.toDateString()
+    )
+}
+
+
+async function getArticlesPlot(ctx: AppContext) {
+    const tv = await ctx.db.record.findMany({
+        select: {
+            createdAt: true
+        },
+        where: {
+            collection: "ar.cabildoabierto.feed.article"
+        }
+    })
+
+    return dailyPlotData(
+        tv,
+        (x, d) => x.createdAt.toDateString() == d.toDateString()
+    )
+}
+
+
+async function getCACommentsPlot(ctx: AppContext) {
+    const tv = await ctx.db.record.findMany({
+        select: {
+            createdAt: true
+        },
+        where: {
+            content: {
+                post: {
+                    replyTo: {
+                        collection: {
+                            in: ["ar.cabildoabierto.feed.article", "ar.cabildoabierto.wiki.topicVersion"]
+                        }
+                    }
+                }
+            },
+            collection: "app.bsky.feed.post"
+        }
+    })
+
+    return dailyPlotData(
+        tv,
+        (x, d) => x.createdAt.toDateString() == d.toDateString()
+    )
 }
 
 
 export const getStatsDashboard: CAHandler<{}, StatsDashboard> = async (ctx, agent, {}) => {
-    const lastUsers = await lastUsersRegistered(ctx, agent)
+    const lastUsers = await getRegisteredUsers(ctx, agent)
 
-    const WAUPlot = await getWAUPlot(ctx)
-    console.log("returning wau plot", WAUPlot)
+    const {WAUPlot, active} = await getWAUPlot(ctx, false)
+    const {WAUPlot: WAUPlotVerified, active: verifiedActive} = await getWAUPlot(ctx, true)
 
-    return {data: {lastUsers, WAUPlot}}
+    const topicVersionsPlot = await getTopicVersionsPlot(ctx)
+    const caCommentsPlot = await getCACommentsPlot(ctx)
+    const articlesPlot = await getArticlesPlot(ctx)
+
+    return {
+        data: {
+            lastUsers,
+            WAUPlot,
+            WAUPlotVerified,
+            counts: {
+                active,
+                verified: count(lastUsers, u => u.verification != null),
+                verifiedActive,
+                registered: lastUsers.length
+            },
+            topicVersionsPlot,
+            caCommentsPlot,
+            articlesPlot,
+        }
+    }
 }
 
 

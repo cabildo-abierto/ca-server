@@ -70,6 +70,13 @@ model User {
   notifications Notification[]
 
   lastSeenNotifications DateTime @default(dbgenerated("'1970-01-01 00:00:00'::timestamp"))
+
+  moderationState ModerationState @default(Ok)
+}
+
+enum ModerationState {
+  Ok
+  ShadowBan
 }
 
 enum ValidationType {

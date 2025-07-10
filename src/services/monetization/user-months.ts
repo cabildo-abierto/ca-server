@@ -102,11 +102,16 @@ type UserWithReadSessions = {
 }
 
 
-export async function getUsersWithReadSessions(ctx: AppContext, after: Date = new Date(Date.now()-30*24*3600*1000)): Promise<UserWithReadSessions[]> {
+export async function getUsersWithReadSessions(
+    ctx: AppContext,
+    after: Date = new Date(Date.now()-30*24*3600*1000),
+    verified: boolean = true
+): Promise<UserWithReadSessions[]> {
     const users = await ctx.db.user.findMany({
         select: {
             did: true,
             handle: true,
+            userValidationHash: true,
             months: {
                 select: {
                     monthStart: true,
@@ -136,9 +141,9 @@ export async function getUsersWithReadSessions(ctx: AppContext, after: Date = ne
         where: {
             inCA: true,
             hasAccess: true,
-            userValidationHash: {
+            userValidationHash: verified ? {
                 not: null
-            }
+            } : undefined
         }
     })
 

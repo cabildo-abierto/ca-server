@@ -7,6 +7,7 @@ import {Record as CAProfileRecord} from "#/lex-server/types/ar/cabildoabierto/ac
 import {processBskyProfile, processCAProfile} from "#/services/sync/process-event";
 import {Record as BskyProfileRecord} from "#/lex-api/types/app/bsky/actor/profile"
 import {v4 as uuidv4} from "uuid";
+import {range} from "#/utils/arrays";
 
 
 export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (ctx, agent, {handle, code}) => {
@@ -106,7 +107,7 @@ export async function createCAUser(ctx: AppContext, agent: SessionAgent, code: s
 export const createInviteCodes: CAHandler<{query: {c: number}}, { inviteCodes: string[] }> = async (ctx, agent, {query}) => {
     console.log(`Creating ${query.c} invite codes.`)
     try {
-        const values = new Array(query.c).map(i => {
+        const values = range(query.c).map(i => {
             return {
                 code: uuidv4()
             }

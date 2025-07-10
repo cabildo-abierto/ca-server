@@ -40,9 +40,6 @@ export function isWeeklyActiveUser(u: {handle: string, readSessions: {createdAt:
     const lastWeekStart = new Date(at.getTime() - 1000*3600*24*7)
     const recentSessions = u.readSessions
         .filter(x => x.createdAt > lastWeekStart && x.createdAt < at)
-    if(recentSessions.length > 0){
-        console.log("user", u.handle, "is active at", at)
-    }
     return recentSessions.length > 0
 }
 
