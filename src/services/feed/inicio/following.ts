@@ -220,7 +220,7 @@ export const getFollowingFeedSkeleton: GetSkeletonProps = async (ctx, agent, dat
 
     let [timeline, articles, articleReposts] = await Promise.all([timelineQuery, articlesQuery, articleRepostsQuery])
 
-    // borramos todos los artículos y reposts de artículos posteriores al último post de la timeline
+    // borramos todos los artículos y reposts de artículos anteriores en fecha al último post de la timeline
     const lastInTimeline = timeline.feed.length > 0 ? timeline.feed[timeline.feed.length - 1].post.indexedAt : null
     if (lastInTimeline) {
         const lastInTimelineDate = new Date(lastInTimeline)

@@ -197,3 +197,39 @@ export const createAccessRequest: CAHandlerNoAuth<{email: string, comment: strin
 
     return {data: {}}
 }
+
+type AccessRequest = {
+    id: string
+    email: string
+    comment: string
+    createdAt: Date
+    sentInviteAt: Date | null
+}
+
+export const getAccessRequests: CAHandler<{}, AccessRequest[]> = async (ctx, agent, {}) => {
+    const requests = await ctx.db.accessRequest.findMany({
+        select: {
+            email: true,
+            comment: true,
+            createdAt: true,
+            sentInviteAt: true,
+            id: true
+        }
+    })
+
+    return {data: requests}
+}
+
+
+export const markAccessRequestSent: CAHandler<{params: {id: string}}, {}> = async (ctx, agent, {params} ) => {
+    await ctx.db.accessRequest.update({
+        data: {
+            sentInviteAt: new Date()
+        },
+        where: {
+            id: params.id
+        }
+    })
+
+    return {data: {}}
+}

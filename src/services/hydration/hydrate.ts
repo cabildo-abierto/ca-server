@@ -143,7 +143,10 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
     error?: string
 } {
     const e = data.caContents?.get(uri)
-    if (!e) return {error: "Ocurrió un error al cargar el contenido."}
+    if (!e) {
+        console.log(`No se encontraron los datos para hidratar el artículo: ${uri}`)
+        return {error: "Ocurrió un error al cargar el contenido."}
+    }
 
     const viewer = hydrateViewer(e.uri, data)
     const authorId = getDidFromUri(e.uri)
@@ -157,7 +160,10 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
         text = e.content.text
     }
 
-    if (!text || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el artículo."}
+    if (!text || !e.content || !e.content.article || !e.content.article.title) {
+        console.log(`No se encontraron los datos para hidratar el artículo (contenidos): ${uri}`, !text || !e.content || !e.content.article || !e.content.article.title)
+        return {error: "Ocurrió un error al cargar el artículo."}
+    }
 
     const {summary, summaryFormat} = getArticleSummary(text, e.content?.format ?? undefined)
 

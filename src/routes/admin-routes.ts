@@ -3,7 +3,7 @@ import type {AppContext} from '#/index'
 import {CAHandler, CAHandlerNoAuth, makeHandler} from "#/utils/handler";
 import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user";
 import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete";
-import {createInviteCodes} from "#/services/user/access";
+import {createInviteCodes, getAccessRequests, markAccessRequestSent} from "#/services/user/access";
 import {getUsers} from "#/services/user/users";
 import {getAllTopics} from "#/services/wiki/topics";
 import {sessionAgent} from "#/utils/session-agent";
@@ -128,6 +128,10 @@ export const adminRoutes = (ctx: AppContext) => {
     router.post(
         "/job/:id", makeAdminHandler(ctx, startJob)
     )
+
+    router.get("/access-requests", makeAdminHandler(ctx, getAccessRequests))
+
+    router.post("/access-request-sent/:id", makeAdminHandler(ctx, markAccessRequestSent))
 
     return router
 }

@@ -36,7 +36,5 @@ export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: stri
         return {error: "Feed inválido."}
     }
 
-    const res = await getFeed({ctx, agent, pipeline, cursor})
-
-    return res
+    return await getFeed({ctx, agent, pipeline, cursor})
 }

@@ -206,7 +206,12 @@ export async function getContentsText(ctx: AppContext, contents: ContentProps[],
     for(let i = 0; i < texts.length; i++){
         const text = texts[i]
         if(text != null && text.length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(contents[i].content?.format ?? null)){
-            texts[i] = decompress(text)
+            try {
+                texts[i] = decompress(text)
+            } catch {
+                console.log(`Error decompressing text ${contents[i].uri}`)
+                texts[i] = null
+            }
         }
     }
 

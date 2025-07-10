@@ -123,7 +123,7 @@ export function sortByKey<T, V>(a: T[], keyFn: (x: T) => V, keyCmp: (a: V, b: V)
 
 
 export function concat<T>(a: T[][]): T[] {
-    return a.reduce((acc: T[], cur) => ([...acc, ...cur]))
+    return a.reduce((acc: T[], cur: T[]) => ([...acc, ...cur]), [])
 }
 
 
