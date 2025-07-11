@@ -1,6 +1,5 @@
 import {AppContext} from "#/index";
-import {ProfileView} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import {Account, Profile, Session, UserStats, ValidationState} from "#/lib/types";
+import {Account, Profile, Session, ValidationState} from "#/lib/types";
 import {cookieOptions, SessionAgent} from "#/utils/session-agent";
 import {deleteRecords} from "#/services/delete";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
@@ -337,7 +336,9 @@ async function getFollowxFromCA(ctx: AppContext, did: string, data: Dataplane, k
                         handle: true,
                         displayName: true,
                         CAProfileUri: true,
-                        avatar: true
+                        avatar: true,
+                        userValidationHash: true,
+                        orgValidation: true
                     }
                 }
             },
@@ -357,7 +358,9 @@ async function getFollowxFromCA(ctx: AppContext, did: string, data: Dataplane, k
                                 handle: true,
                                 displayName: true,
                                 CAProfileUri: true,
-                                avatar: true
+                                avatar: true,
+                                userValidationHash: true,
+                                orgValidation: true
                             }
                         }
                     }

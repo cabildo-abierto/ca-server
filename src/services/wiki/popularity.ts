@@ -135,7 +135,7 @@ async function updateTopicPopularities(ctx: AppContext) {
         }
     })).map(d => d.did))
 
-    let batchSize = 500
+    let batchSize = 2000
     for(let i = 0; i < topics.length; i+=batchSize){
         console.log("Updating batch", i)
         const batchIds = topics.slice(i, i+batchSize).map(i => i.id)

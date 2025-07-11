@@ -1,6 +1,6 @@
-import {CAHandler} from "#/utils/handler";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import MercadoPagoConfig, {Preference} from "mercadopago";
-import {SessionAgent} from "#/utils/session-agent";
+import {NoSessionAgent, SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
 import {getUsersWithReadSessions} from "#/services/monetization/user-months";
 import {count} from "#/utils/arrays";
@@ -153,16 +153,17 @@ const getPaymentDetails = async (paymentId: string) => {
 };
 
 
-export async function createDonation(ctx: AppContext, agent: SessionAgent, amount: number, paymentId: string) {
+export async function createDonation(ctx: AppContext, amount: number, paymentId: string, userId: string) {
     try {
         await ctx.db.donation.create({
             data: {
-                userById: agent.did,
+                userById: userId ?? undefined,
                 transactionId: paymentId,
                 amount
             }
         })
-    } catch {
+    } catch (err) {
+        console.log("error creating donation", err)
         return {error: "error on buy subscriptions"}
     }
 
@@ -170,20 +171,25 @@ export async function createDonation(ctx: AppContext, agent: SessionAgent, amoun
 }
 
 
-export const processPayment: CAHandler<{data: any}, {}> = async (ctx, agent, params) => {
+export const processPayment: CAHandlerNoAuth<{data: any}, {}> = async (ctx, agent, params) => {
     const data = params.data
     const paymentId = data.id
+    console.log("processing payment with data", data)
 
     const paymentDetails = await getPaymentDetails(paymentId)
+    console.log("got payment details", paymentDetails)
 
     if(paymentDetails.status != "approved"){
+        console.log("status was", paymentDetails.status)
         return {error: "El pago no fue aprobado."}
     }
 
     const donationAmount = paymentDetails.metadata.amount
     const userId = paymentDetails.metadata.user_id
 
-    const {error} = await createDonation(ctx, agent, donationAmount, paymentId)
+    console.log("metadata", paymentDetails.metadata)
+
+    const {error} = await createDonation(ctx, donationAmount, paymentId, paymentDetails.metadata.user_id)
 
     if(error) {
         console.log("error", error)

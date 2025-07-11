@@ -94,7 +94,7 @@ export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | s
     const baseQuery = ctx.kysely
         .selectFrom('Topic')
         .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
-        .select(["id", "lastEdit", "popularityScore", "TopicVersion.props"])
+        .select(["id", "lastEdit", "popularityScoreLastDay", "popularityScoreLastWeek", "popularityScoreLastMonth", "TopicVersion.props"])
 
     const queryInCategories = categories ? baseQuery
         .where(categories.includes("Sin categoría") ?
@@ -112,7 +112,9 @@ export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | s
     return {
         data: topics.map(t => topicQueryResultToTopicViewBasic({
             id: t.id,
-            popularityScore: t.popularityScore,
+            popularityScoreLastDay: t.popularityScoreLastDay,
+            popularityScoreLastWeek: t.popularityScoreLastWeek,
+            popularityScoreLastMonth: t.popularityScoreLastMonth,
             lastEdit: t.lastEdit,
             currentVersion: {
                 props: t.props as JsonValue
