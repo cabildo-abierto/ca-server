@@ -65,9 +65,10 @@ export async function getTotalSpending(ctx: AppContext): Promise<number> {
     const result = await ctx.kysely
         .selectFrom("UserMonth")
         .select((eb) => eb.fn.sum<number>("value").as("total"))
+        .where("UserMonth.wasActive", "=", true)
         .executeTakeFirstOrThrow()
 
-    return result.total
+    return result.total ?? 0
 }
 
 
