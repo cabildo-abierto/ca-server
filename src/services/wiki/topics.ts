@@ -5,7 +5,7 @@ import {CAHandler, CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
 import {TopicProp, TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion";
 import {getTopicCurrentVersion, getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
-import {Agent, SessionAgent} from "#/utils/session-agent";
+import {Agent} from "#/utils/session-agent";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import {Prisma} from "@prisma/client";
 import {Dataplane} from "#/services/hydration/dataplane";
@@ -24,16 +24,19 @@ import {logTimes} from "#/utils/utils";
 import { JsonValue } from "@prisma/client/runtime/library";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 
+export type TimePeriod = "day" | "week" | "month" | "all"
 
-export const getTopTrendingTopics: CAHandler<{}, TopicViewBasic[]> = async (ctx, agent) => {
-    return await getTopics(ctx, agent, [], "popular", 10)
+export const getTrendingTopics: CAHandler<{params: {time: TimePeriod}}, TopicViewBasic[]> = async (ctx, agent, {params}) => {
+    return await getTopics(ctx, [], "popular", params.time, 10)
 }
 
 
 export type TopicQueryResultBasic = {
     id: string
     lastEdit: Date | null
-    popularityScore: number | null
+    popularityScoreLastDay: number
+    popularityScoreLastWeek: number
+    popularityScoreLastMonth: number
     currentVersion: {
         props: Prisma.JsonValue
     } | null
@@ -45,14 +48,6 @@ export function hydrateTopicViewBasicFromUri(uri: string, data: Dataplane): {dat
     if(!q) return {error: "No se pudo encontrar el tema."}
 
     return {data: topicQueryResultToTopicViewBasic(q)}
-}
-
-
-export function hydrateTopicViewBasicFromTopicId(id: string, data: Dataplane) {
-    const q = data.topicsById.get(id)
-    if(!q) return null
-
-    return topicQueryResultToTopicViewBasic(q)
 }
 
 
@@ -75,7 +70,11 @@ export function topicQueryResultToTopicViewBasic(t: TopicQueryResultBasic): $Typ
         $type: "ar.cabildoabierto.wiki.topicVersion#topicViewBasic",
         id: t.id,
         lastEdit: t.lastEdit?.toISOString() ?? undefined,
-        popularity: t.popularityScore != null ? [t.popularityScore] : undefined,
+        popularity: {
+            lastDay: [t.popularityScoreLastDay],
+            lastWeek: [t.popularityScoreLastWeek],
+            lastMonth: [t.popularityScoreLastMonth]
+        },
         props
     }
 }
@@ -83,26 +82,48 @@ export function topicQueryResultToTopicViewBasic(t: TopicQueryResultBasic): $Typ
 
 export async function getTopics(
     ctx: AppContext,
-    agent: SessionAgent,
     categories: string[],
     sortedBy: "popular" | "recent",
+    time: TimePeriod,
     limit?: number): CAHandlerOutput<TopicViewBasic[]> {
 
     const t1 = Date.now()
-    const baseQuery = ctx.kysely
+    let baseQuery = ctx.kysely
         .selectFrom('Topic')
         .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
-        .select(["id", "lastEdit", "popularityScore", "TopicVersion.props"])
+        .select([
+            "id",
+            "lastEdit",
+            "Topic.popularityScoreLastDay",
+            "Topic.popularityScoreLastWeek",
+            "Topic.popularityScoreLastMonth",
+            "TopicVersion.props"
+        ])
         .where(categories.includes("Sin categoría") ?
             stringListIsEmpty("Categorías") :
             (eb) =>
                 eb.and(categories.map(c => stringListIncludes("Categorías", c))
                 )
         )
-        .where("Topic.popularityScore", "is not", null)
         .where("Topic.lastEdit", "is not", null)
-        .orderBy(sortedBy == "popular" ? "Topic.popularityScore" : "Topic.lastEdit", 'desc')
-        .orderBy(sortedBy == "popular" ? "Topic.lastEdit" : "Topic.popularityScore", 'desc')
+
+    if(sortedBy === "popular"){
+        if(time == "all" || time == "month"){
+            baseQuery = baseQuery
+                .orderBy("popularityScoreLastMonth desc")
+                .orderBy("lastEdit desc")
+        } else if(time == "week"){
+            baseQuery = baseQuery
+                .orderBy("popularityScoreLastWeek desc")
+                .orderBy("lastEdit desc")
+        } else if(time == "day"){
+            baseQuery = baseQuery
+                .orderBy("popularityScoreLastDay desc")
+                .orderBy("lastEdit desc")
+        }
+    } else if(sortedBy == "recent"){
+        baseQuery = baseQuery.orderBy("lastEdit desc")
+    }
 
     const topics = await (limit ? baseQuery.limit(limit) : baseQuery).execute()
 
@@ -112,7 +133,9 @@ export async function getTopics(
     return {
         data: topics.map(t => topicQueryResultToTopicViewBasic({
             id: t.id,
-            popularityScore: t.popularityScore,
+            popularityScoreLastMonth: t.popularityScoreLastMonth,
+            popularityScoreLastWeek: t.popularityScoreLastWeek,
+            popularityScoreLastDay: t.popularityScoreLastDay,
             lastEdit: t.lastEdit,
             currentVersion: {
                 props: t.props as JsonValue
@@ -123,16 +146,20 @@ export async function getTopics(
 
 
 export const getTopicsHandler: CAHandler<{
-    params: { sort: string },
+    params: { sort: string, time: string },
     query: { c: string[] | string }
 }, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
-    const {sort} = params
+    let {sort, time} = params
     const {c} = query
     const categories = Array.isArray(c) ? c : c ? [c] : []
 
     if (sort != "popular" && sort != "recent") return {error: `Criterio de ordenamiento inválido: ${sort}`}
+    if (time != "day" && time != "week" && time != "month" && time != "all") {
+        console.log(`Período de tiempo inválido: ${time}`)
+        return {error: `Período de tiempo inválido: ${time}`}
+    }
 
-    return await getTopics(ctx, agent, categories, sort, 50)
+    return await getTopics(ctx, categories, sort, time as TimePeriod, 50)
 }
 
 
@@ -156,7 +183,6 @@ async function countTopicsNoCategories(ctx: AppContext) {
         .where("TopicToCategory.categoryId", "is", null)
         .where("Topic.currentVersionId", "is not", null)
         .where("Topic.lastEdit", "is not", null)
-        .where("Topic.popularityScore", "is not", null)
         .execute()
 }
 
@@ -171,7 +197,6 @@ async function countTopicsInEachCategory(ctx: AppContext) {
         ])
         .where("Topic.currentVersionId", "is not", null)
         .where("Topic.lastEdit", "is not", null)
-        .where("Topic.popularityScore", "is not", null)
         .groupBy("TopicToCategory.categoryId")
         .execute()
 }

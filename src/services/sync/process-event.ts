@@ -309,6 +309,7 @@ export async function processDeleteReaction(ctx: AppContext, uri: string) {
         })).map(r => r.uri)
 
         if (type == "ar.cabildoabierto.wiki.voteReject") await db.voteReject.deleteMany({where: {uri: {in: uris}}})
+        await ctx.db.topicInteraction.deleteMany({where: {recordId: uri}})
         await db.notification.deleteMany({where: {causedByRecordId: {in: uris}}})
         await db.reaction.deleteMany({where: {uri: {in: uris}}})
         await db.record.deleteMany({where: {uri: {in: uris}}})

@@ -25,7 +25,7 @@ export type StatsDashboard = {
 }
 
 
-const testUsers = [
+export const testUsers = [
     "usuariodepruebas.bsky.social",
     "usuariodepruebas2.bsky.social",
     "usuariodepruebas3.bsky.social",

@@ -27,7 +27,7 @@ import {getThread} from "#/services/thread/thread";
 import {
     getTopicHandler,
     getTopicVersionHandler,
-    getTopTrendingTopics,
+    getTrendingTopics,
     getTopicsHandler,
     getCategories,
     getTopicsMentioned
@@ -159,8 +159,8 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/trending-topics',
-        handler(makeHandler(ctx, getTopTrendingTopics))
+        '/trending-topics/:time',
+        handler(makeHandler(ctx, getTrendingTopics))
     )
     router.get(
         '/profile/:handleOrDid',
@@ -260,7 +260,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/topics/:sort',
+        '/topics/:sort/:time',
         makeHandler(ctx, getTopicsHandler)
     )
 

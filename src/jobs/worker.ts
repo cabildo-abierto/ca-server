@@ -6,7 +6,7 @@ import {dbHandleToDid} from "#/services/user/users";
 import {restartReferenceLastUpdate, updateReferences} from "#/services/wiki/references";
 import {updateEngagementCounts} from "#/services/feed/getUserEngagement";
 import {deleteCollection} from "#/services/delete";
-import {updateTopicPopularityScores} from "#/services/wiki/popularity";
+import {restartLastContentInteractionsUpdate, updateTopicPopularityScores} from "#/services/wiki/popularity";
 import {updateTopicsCategories} from "#/services/wiki/categories";
 import {updateTopicContributions} from "#/services/wiki/contributions";
 import {createUserMonths} from "#/services/monetization/user-months";
@@ -105,6 +105,7 @@ export class CAWorker {
         this.registerJob("batch-jobs", () => this.batchJobs())
         this.registerJob("test-job", async () => {console.log("Test job run!")})
         this.registerJob("restart-references-last-update", () => restartReferenceLastUpdate(ctx))
+        this.registerJob("restart-interactions-last-update", () => restartLastContentInteractionsUpdate(ctx))
 
         await this.removeAllRepeatingJobs()
         await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)

@@ -172,8 +172,12 @@ model Topic {
   categories         TopicToCategory[]
   lastSynonymsChange DateTime?
   popularityScore    Int?              @default(1)
+  popularityScoreLastDay    Int              @default(0)
+  popularityScoreLastWeek    Int              @default(0)
+  popularityScoreLastMonth    Int              @default(0)
   lastEdit           DateTime?         @updatedAt
   readSessions       ReadSession[]
+  interactions       TopicInteraction[]
 }
 
 model TopicVersion {
@@ -255,6 +259,11 @@ model Record {
   CAProfileOf User? @relation("CAProfile")
 
   notificationsGenerated Notification[]
+
+  CAIndexedAt           DateTime        @default(now())
+  lastUpdatedAt         DateTime        @default(now())
+
+  topicInteractions TopicInteraction[]
 }
 
 model Content {
@@ -275,6 +284,15 @@ model Content {
   datasetsUsed         Dataset[]
   readSessions         ReadSession[]
   paymentPromises      PaymentPromise[]
+}
+
+model TopicInteraction {
+  recordId  String
+  record    Record @relation(fields: [recordId], references: [uri])
+  topicId   String
+  topic     Topic  @relation(fields: [topicId], references: [id])
+
+  @@unique([recordId, topicId])
 }
 
 model ReadSession {

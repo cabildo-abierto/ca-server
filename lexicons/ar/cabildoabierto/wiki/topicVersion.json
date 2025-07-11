@@ -313,10 +313,8 @@
             }
           },
           "popularity": {
-            "type": "array",
-            "items": {
-              "type": "integer"
-            }
+            "type": "ref",
+            "ref": "#topicPopularity"
           },
           "lastEdit": {
             "type": "string",
@@ -333,6 +331,30 @@
           },
           "all": {
             "type": "string"
+          }
+        }
+      },
+      "topicPopularity": {
+        "type": "object",
+        "required": ["lastDay", "lastWeek", "lastMonth"],
+        "properties": {
+          "lastDay": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "lastWeek": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "lastMonth": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
           }
         }
       }

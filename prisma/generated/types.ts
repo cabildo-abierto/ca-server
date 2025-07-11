@@ -187,6 +187,8 @@ export type Record = {
     uniqueRepostsCount: Generated<number>;
     uniqueAcceptsCount: Generated<number>;
     uniqueRejectsCount: Generated<number>;
+    CAIndexedAt: Generated<Timestamp>;
+    lastUpdatedAt: Generated<Timestamp>;
 };
 export type Reference = {
     id: string;
@@ -201,10 +203,17 @@ export type Topic = {
     currentVersionId: string | null;
     lastSynonymsChange: Timestamp | null;
     popularityScore: Generated<number | null>;
+    popularityScoreLastDay: Generated<number>;
+    popularityScoreLastWeek: Generated<number>;
+    popularityScoreLastMonth: Generated<number>;
     lastEdit: Timestamp | null;
 };
 export type TopicCategory = {
     id: string;
+};
+export type TopicInteraction = {
+    recordId: string;
+    topicId: string;
 };
 export type TopicToCategory = {
     topicId: string;
@@ -307,6 +316,7 @@ export type DB = {
     Reference: Reference;
     Topic: Topic;
     TopicCategory: TopicCategory;
+    TopicInteraction: TopicInteraction;
     TopicToCategory: TopicToCategory;
     TopicVersion: TopicVersion;
     User: User;

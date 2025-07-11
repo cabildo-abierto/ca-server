@@ -49,6 +49,7 @@ export async function processDeleteTopicVersion(ctx: AppContext, uri: string) {
     const currentVersionId = newCurrentVersionIndex != null ? spliced[newCurrentVersionIndex].uri : undefined
 
     const updates = [
+        ctx.db.topicInteraction.deleteMany({where: {recordId: uri}}),
         ctx.db.notification.deleteMany({where: {causedByRecordId: uri}}),
         ctx.db.notification.deleteMany({where: {causedByRecordId: uri}}),
         ctx.db.readSession.deleteMany({where: {readContentId: uri}}),

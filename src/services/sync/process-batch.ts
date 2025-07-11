@@ -44,6 +44,8 @@ export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: 
         created_at?: Date,
         authorId: string
         record: string
+        CAIndexedAt: Date
+        lastUpdatedAt: Date
     }[] = []
 
 
@@ -57,7 +59,9 @@ export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: 
             collection,
             created_at: new Date(record.createdAt),
             authorId: did,
-            record: JSON.stringify(record)
+            record: JSON.stringify(record),
+            CAIndexedAt: new Date(),
+            lastUpdatedAt: new Date()
         })
     })
 
@@ -72,7 +76,8 @@ export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: 
                     collection: eb.ref('excluded.collection'),
                     created_at: eb.ref('excluded.created_at'),
                     authorId: eb.ref('excluded.authorId'),
-                    record: eb.ref('excluded.record')
+                    record: eb.ref('excluded.record'),
+                    lastUpdatedAt: eb.ref('excluded.lastUpdatedAt') // CAIndexedAt no se actualiza
                 }))
             )
             .execute()
