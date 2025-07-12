@@ -100,6 +100,19 @@ export async function createCAUser(ctx: AppContext, agent: SessionAgent, code: s
     await processCAProfile(ctx, {uri: data.uri, cid: data.cid}, caProfileRecord)
     await processBskyProfile(ctx, {uri: bskyProfile.uri, cid: bskyProfile.cid!}, bskyProfile.value as BskyProfileRecord)
 
+    const status = await ctx.db.user.findFirst({
+        select: {
+            mirrorStatus: true
+        },
+        where: {
+            did
+        }
+    })
+
+    if(!status || (status.mirrorStatus != "Sync" && status.mirrorStatus != "InProcess")){
+        await ctx.worker?.addJob("sync-user", {handleOrDid: did})
+    }
+
     return {}
 }
 

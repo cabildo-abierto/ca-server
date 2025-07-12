@@ -53,6 +53,9 @@ model User {
   usedInviteCode      InviteCode?      @relation("invite-code-used")
   recommendCodes      InviteCode[]     @relation("invite-codes-available") // los códigos de invitación que tiene disponibles para usar
   seenTutorial        Boolean          @default(false)
+  seenTopicsTutorial  Boolean          @default(false)
+  seenTopicMinimizedTutorial Boolean   @default(false)
+  seenTopicMaximizedTutorial Boolean   @default(false)
 
   hasReacted HasReacted[]
 

@@ -251,6 +251,9 @@ export type User = {
     editorStatus: Generated<EditorStatus>;
     platformAdmin: Generated<boolean>;
     seenTutorial: Generated<boolean>;
+    seenTopicsTutorial: Generated<boolean>;
+    seenTopicMinimizedTutorial: Generated<boolean>;
+    seenTopicMaximizedTutorial: Generated<boolean>;
     userValidationHash: string | null;
     orgValidation: string | null;
     lastSeenNotifications: Generated<Timestamp>;

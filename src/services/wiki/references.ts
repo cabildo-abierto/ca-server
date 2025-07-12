@@ -2,7 +2,6 @@ import {cleanText} from "#/utils/strings";
 import {AppContext} from "#/index";
 import {gett, unique} from "#/utils/arrays";
 import {decompress} from "#/utils/compression";
-import {CAHandler} from "#/utils/handler";
 import {getTopicSynonyms} from "#/services/wiki/utils";
 import {getCollectionFromUri, getDidFromUri, isPost} from "#/utils/uri";
 import {BlobRef} from "#/services/hydration/hydrate";
@@ -25,39 +24,6 @@ function countSynonymInText(regex: RegExp, textCleaned: string): number {
 }
 
 
-export async function getContentsForReferenceUpdate(ctx: AppContext, since: Date){
-    return ctx.db.record.findMany({
-        select: {
-            uri: true,
-            createdAt: true,
-            content: {
-                select: {
-                    text: true,
-                    textBlobId: true,
-                    format: true,
-                    article: {
-                        select: {
-                            title: true
-                        }
-                    }
-                }
-            }
-        },
-        where: {
-            createdAt: {
-                gt: since
-            },
-            content: {
-                isNot: null
-            }
-        },
-        orderBy: {
-            createdAt: "asc"
-        }
-    })
-}
-
-
 export async function getLastReferencesUpdate(ctx: AppContext){
     const lastUpdateStr = await ctx.ioredis.get("last-references-update")
     return lastUpdateStr ? new Date(lastUpdateStr) : new Date(0)
@@ -74,20 +40,41 @@ export async function updateReferencesForNewContents(ctx: AppContext) {
     const lastUpdate = await getLastReferencesUpdate(ctx)
     console.log("Last references update", lastUpdate)
 
-    const contents = await getContentsForReferenceUpdate(ctx, lastUpdate)
-    if(contents.length == 0) {
-        console.log("No new contents, skipping")
-        return
-    }
-    console.log("Got new contents", contents.length)
-
+    const batchSize = 10000
+    let curOffset = 0
     const synonymsMap = await getSynonymsToTopicsMap(ctx)
-    await updateReferencesForContentsAndTopics(ctx, contents, synonymsMap)
+
+    while(true){
+        const contents: ContentProps[] = await ctx.kysely
+            .selectFrom('Record')
+            .innerJoin('Content', 'Record.uri', 'Content.uri')
+            .leftJoin('Article', 'Record.uri', 'Article.uri')
+            .leftJoin('Reference', 'Reference.referencingContentId', 'Record.uri')
+            .select([
+                'Record.uri',
+                'Record.CAIndexedAt',
+                'Content.text',
+                'Content.textBlobId',
+                'Content.format',
+                'Article.title'
+            ])
+            .where('Record.CAIndexedAt', '>=', lastUpdate)
+            .where('Reference.id', 'is', null)
+            .orderBy('Record.CAIndexedAt', 'asc')
+            .limit(batchSize)
+            .offset(curOffset)
+            .execute()
+
+        if(contents.length == 0) break
+        curOffset += contents.length
+        console.log(`Got ${contents.length} contents.`)
+        await updateReferencesForContentsAndTopics(ctx, contents, synonymsMap)
+    }
 }
 
 
 async function updateReferencesForContentsAndTopics(ctx: AppContext, contents: ContentProps[], synonymsMap: SynonymsMap){
-    const batchSize = 100
+    const batchSize = 500
     for(let i = 0; i < contents.length; i += batchSize){
         console.log("Updating references for new contents", i, "-", i+batchSize, "of", contents.length)
         const texts = await getContentsText(ctx, contents.slice(i, i+batchSize), 10)
@@ -114,8 +101,7 @@ export function getTopicsReferencedInText(text: string, synonymsMap: Map<string,
 type SynonymsMap = Map<string, {topics: Set<string>, regex: RegExp}>
 
 function withExtra(text: string, content: ContentProps){
-    if(content.content?.article?.title) return text + " " + content.content.article.title
-    return text
+    return text + ` ${content.title ?? ""}`
 }
 
 
@@ -167,14 +153,11 @@ export async function applyReferencesUpdate(ctx: AppContext, contents: ContentPr
 
 type ContentProps = {
     uri: string
-    content: {
-        text: string | null
-        textBlobId: string | null
-        format: string | null
-        article: {
-            title: string
-        } | null
-    } | null
+    CAIndexedAt: Date
+    text: string | null
+    textBlobId: string | null
+    format: string | null
+    title: string | null
 }
 
 
@@ -190,10 +173,10 @@ export async function getContentsText(ctx: AppContext, contents: ContentProps[],
     const blobRefs: {i: number, blob: BlobRef}[] = []
     for(let i = 0; i < contents.length; i++){
         const c = contents[i]
-        if(c.content?.text != null){
-            texts[i] = c.content.text
-        } else if(c.content?.textBlobId){
-            blobRefs.push({i, blob: {cid: c.content.textBlobId, authorId: getDidFromUri(c.uri)}})
+        if(c.text != null){
+            texts[i] = c.text
+        } else if(c.textBlobId){
+            blobRefs.push({i, blob: {cid: c.textBlobId, authorId: getDidFromUri(c.uri)}})
         }
     }
 
@@ -205,7 +188,7 @@ export async function getContentsText(ctx: AppContext, contents: ContentProps[],
 
     for(let i = 0; i < texts.length; i++){
         const text = texts[i]
-        if(text != null && text.length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(contents[i].content?.format ?? null)){
+        if(text != null && text.length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(contents[i].format ?? null)){
             try {
                 texts[i] = decompress(text)
             } catch {
@@ -237,43 +220,34 @@ export async function updateReferencesForNewTopics(ctx: AppContext) {
         console.log("No new topics, skipping")
         return
     }
+    const synonymsMap = await getSynonymsToTopicsMap(ctx, topicsList)
 
     console.log("Got new topics", topicsList.length)
-    const contents = await ctx.db.record.findMany({
-        select: {
-            uri: true,
-            createdAt: true,
-            content: {
-                select: {
-                    text: true,
-                    textBlobId: true,
-                    format: true,
-                    article: {
-                        select: {
-                            title: true
-                        }
-                    }
-                }
-            }
-        },
-        where: {
-            content: {
-                isNot: null
-            }
-        },
-        orderBy: {
-            createdAt: "asc"
-        }
-    })
-    console.log("Got contents", contents.length)
+    const batchSize = 10000
+    let curOffset = 0
+    while(true){
+        console.log(`Running batch at offset ${curOffset}`)
+        const contents: ContentProps[] = await ctx.kysely
+            .selectFrom("Record")
+            .innerJoin("Content", "Record.uri", "Content.uri")
+            .leftJoin("Article", "Record.uri", "Article.uri")
+            .select(["Record.uri", "Record.CAIndexedAt", "Content.text", "Content.textBlobId", "Content.format", "Article.title"])
+            .where("Record.CAIndexedAt", ">=", lastUpdate)
+            .orderBy("Record.CAIndexedAt", "asc")
+            .limit(batchSize)
+            .offset(curOffset)
+            .execute()
+        if(contents.length == 0) break
+        curOffset += contents.length
+        console.log("Got contents", contents.length)
 
-    const synonymsMap = await getSynonymsToTopicsMap(ctx, topicsList)
-    await updateReferencesForContentsAndTopics(ctx, contents, synonymsMap)
+        await updateReferencesForContentsAndTopics(ctx, contents, synonymsMap)
+    }
 }
 
 
 export async function restartReferenceLastUpdate(ctx: AppContext) {
-    await setLastReferencesUpdate(ctx, new Date(0))
+    await setLastReferencesUpdate(ctx, new Date(Date.now()-1000*24*3600*5))
 }
 
 

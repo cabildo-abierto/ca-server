@@ -65,7 +65,8 @@ const getTopicMentionsSkeleton = async (ctx: AppContext, agent: Agent, data: Dat
         },
         orderBy: {
             createdAt: "desc"
-        }
+        },
+        take: 25
     })
     return mentions.map(r => ({post: r.uri}))
 }

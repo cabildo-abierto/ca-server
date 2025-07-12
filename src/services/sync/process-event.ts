@@ -162,6 +162,7 @@ export function newUser(db: PrismaTransactionClient, did: string, inCA: boolean)
 
 
 export const processCAProfile: RecordProcessor<CAProfile.Record> = async (ctx, ref, r) => {
+
     const u = new SyncUpdate(ctx.db)
     u.addUpdatesAsTransaction([
         ...processRecord(ctx, ref, r),
@@ -176,6 +177,7 @@ export const processCAProfile: RecordProcessor<CAProfile.Record> = async (ctx, r
         })
     ])
     await u.apply()
+
 }
 
 export const processBskyProfile: RecordProcessor<BskyProfile.Record> = async (ctx, ref, r) => {

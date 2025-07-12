@@ -211,6 +211,9 @@ export const getSessionData = async (ctx: AppContext, agent: SessionAgent): Prom
             platformAdmin: true,
             editorStatus: true,
             seenTutorial: true,
+            seenTopicMaximizedTutorial: true,
+            seenTopicMinimizedTutorial: true,
+            seenTopicsTutorial: true,
             handle: true,
             displayName: true,
             avatar: true,
@@ -229,7 +232,12 @@ export const getSessionData = async (ctx: AppContext, agent: SessionAgent): Prom
         displayName: data.displayName,
         avatar: data.avatar,
         hasAccess: data.hasAccess,
-        seenTutorial: data.seenTutorial,
+        seenTutorial: {
+            home: data.seenTutorial,
+            topics: data.seenTopicsTutorial,
+            topicMinimized: data.seenTopicMinimizedTutorial,
+            topicMaximized: data.seenTopicMaximizedTutorial
+        },
         editorStatus: data.editorStatus,
         platformAdmin: data.platformAdmin,
         validation: getValidationState(data)
@@ -313,15 +321,24 @@ export const getAccount: CAHandler<{}, Account> = async (ctx, agent) => {
 }
 
 
-export const setSeenTutorial: CAHandler = async (ctx, agent) => {
-    await ctx.db.user.update({
-        data: {
-            seenTutorial: true
-        },
-        where: {
-            did: agent.did
-        }
-    })
+type Tutorial = "topic-minimized" | "topic-normal" | "home" | "topics"
+
+
+export const setSeenTutorial: CAHandler<{params: {tutorial: Tutorial}}, {}> = async (ctx, agent, {params}) => {
+    const {tutorial} = params
+    const did = agent.did
+    console.log("setting seen tutorial", tutorial)
+    if(tutorial == "topic-minimized"){
+        await ctx.db.user.update({data: {seenTopicMinimizedTutorial: true}, where: {did}})
+    } else if(tutorial == "home"){
+        await ctx.db.user.update({data: {seenTutorial: true}, where: {did}})
+    } else if(tutorial == "topics"){
+        await ctx.db.user.update({data: {seenTopicsTutorial: true}, where: {did}})
+    } else if(tutorial == "topic-normal"){
+        await ctx.db.user.update({data: {seenTopicMaximizedTutorial: true}, where: {did}})
+    } else {
+        console.log("Unknown tutorial", tutorial)
+    }
     return {data: {}}
 }
 

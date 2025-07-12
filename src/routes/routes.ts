@@ -284,7 +284,7 @@ export const createRouter = (ctx: AppContext) => {
         makeHandler(ctx, cancelEditVote)
     )
 
-    router.post('/seen-tutorial',
+    router.post('/seen-tutorial/:tutorial',
         makeHandler(ctx, setSeenTutorial)
     )
 
