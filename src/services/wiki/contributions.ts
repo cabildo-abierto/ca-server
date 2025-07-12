@@ -65,6 +65,8 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
         }
     }
 
+    if(!topicIds || !(topicIds instanceof Array) || topicIds.length == 0) return
+
     const versions: TopicVersion[] = await ctx.db.topicVersion.findMany({
         select: {
             uri: true,

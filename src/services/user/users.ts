@@ -93,7 +93,8 @@ export const getCAUsersDids = async (ctx: AppContext) => {
             did: true
         },
         where: {
-            inCA: true
+            inCA: true,
+            hasAccess: true
         }
     })).map(({did}) => did)
 }

@@ -8,6 +8,7 @@ import {BlobRef} from "#/services/hydration/hydrate";
 import {fetchTextBlobs} from "#/services/blob";
 import {formatIsoDate} from "#/utils/dates";
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+import {getCAUsersDids} from "#/services/user/users";
 
 
 function getSynonymRegex(synonym: string){
@@ -43,6 +44,7 @@ export async function updateReferencesForNewContents(ctx: AppContext) {
     const batchSize = 10000
     let curOffset = 0
     const synonymsMap = await getSynonymsToTopicsMap(ctx)
+    const caUsers = await getCAUsersDids(ctx)
 
     while(true){
         const contents: ContentProps[] = await ctx.kysely
@@ -60,6 +62,7 @@ export async function updateReferencesForNewContents(ctx: AppContext) {
             ])
             .where('Record.CAIndexedAt', '>=', lastUpdate)
             .where('Reference.id', 'is', null)
+            .where("Record.authorId", "in", caUsers)
             .orderBy('Record.CAIndexedAt', 'asc')
             .limit(batchSize)
             .offset(curOffset)
@@ -221,6 +224,7 @@ export async function updateReferencesForNewTopics(ctx: AppContext) {
         return
     }
     const synonymsMap = await getSynonymsToTopicsMap(ctx, topicsList)
+    const caUsers = await getCAUsersDids(ctx)
 
     console.log("Got new topics", topicsList.length)
     const batchSize = 10000
@@ -233,6 +237,7 @@ export async function updateReferencesForNewTopics(ctx: AppContext) {
             .leftJoin("Article", "Record.uri", "Article.uri")
             .select(["Record.uri", "Record.CAIndexedAt", "Content.text", "Content.textBlobId", "Content.format", "Article.title"])
             .where("Record.CAIndexedAt", ">=", lastUpdate)
+            .where("Record.authorId", "in", caUsers)
             .orderBy("Record.CAIndexedAt", "asc")
             .limit(batchSize)
             .offset(curOffset)
@@ -247,7 +252,7 @@ export async function updateReferencesForNewTopics(ctx: AppContext) {
 
 
 export async function restartReferenceLastUpdate(ctx: AppContext) {
-    await setLastReferencesUpdate(ctx, new Date(Date.now()-1000*24*3600*5))
+    await setLastReferencesUpdate(ctx, new Date(Date.now()))
 }
 
 
@@ -312,4 +317,21 @@ export async function getSynonymsToTopicsMap(ctx: AppContext, topicsList?: strin
     })
 
     return synonymsToTopicsMap
+}
+
+
+export async function cleanNotCAReferences(ctx: AppContext) {
+    const caUsers = await getCAUsersDids(ctx)
+    const count = await ctx.db.reference.deleteMany({
+        where: {
+            referencingContent: {
+                record: {
+                    authorId: {
+                        notIn: caUsers
+                    }
+                }
+            }
+        }
+    })
+    console.log(`Removed ${count.count} references.`)
 }
