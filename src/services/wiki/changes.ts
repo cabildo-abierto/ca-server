@@ -15,11 +15,7 @@ export const getNewVersionDiff: CAHandler<{currentText: string, currentFormat: s
         return {error: "No se pudo procesar una de las versiones."}
     }
 
-    const d = nodesCharDiff(nodes1, nodes2)
-
-    if(!d){
-        return {error: "Ocurrió un error al procesar los cambios."}
-    }
+    const d = nodesCharDiff(nodes1, nodes2, true)
 
     return {
         data: {
@@ -64,8 +60,8 @@ export const getTopicVersionChanges: CAHandler<{
 
     const curUri = getUri(curDid, "ar.cabildoabierto.wiki.topicVersion", curRkey)
     const prevUri = getUri(prevDid, "ar.cabildoabierto.wiki.topicVersion", prevRkey)
-    const cur = await getTopicVersion(ctx, agent, curUri)
-    const prev = await getTopicVersion(ctx, agent, prevUri)
+    const cur = await getTopicVersion(ctx, curUri)
+    const prev = await getTopicVersion(ctx, prevUri)
 
     if(!cur.data || !prev.data){
         return {error: "No se encontró una de las versiones."}
@@ -78,10 +74,7 @@ export const getTopicVersionChanges: CAHandler<{
         return {error: "No se pudo procesar una de las versiones."}
     }
 
-    const d = diff(nodes1, nodes2)
-    if(!d){
-        return {error: "Ocurrió un error al analizar los cambios."}
-    }
+    const d = diff(nodes1, nodes2, true)
 
     return {
         data: {

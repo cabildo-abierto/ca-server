@@ -119,15 +119,20 @@ function dbLabelsToLabelsView(labels: string[], uri: string){
 }
 
 
+export function markdownToPlainText(md: string){
+    return removeMarkdown(md)
+        .trim()
+        .replaceAll("\n", " ")
+        .replaceAll("\\n", " ")
+        .replaceAll("\|", " ")
+        .replaceAll("\-\-\-", " ")
+}
+
+
 function getArticleSummary(text: string, format?: string) {
     let summary = ""
     if (format == "markdown") {
-        summary = removeMarkdown(text)
-            .trim()
-            .replaceAll("\n", " ")
-            .replaceAll("\\n", " ")
-            .replaceAll("\|", " ")
-            .replaceAll("\-\-\-", " ")
+        summary = markdownToPlainText(text)
             .slice(0, 150)
             .trim()
     } else if (!format || format == "lexical-compressed") {

@@ -142,11 +142,10 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
                 continue
             }
 
-            const d = nodesCharDiff(prev.split("\n\n"), markdown.split("\n\n"))
-            if(d == null) {
-                console.log(`Error computing diff between versions ${i} and ${i-1} of ${topicId}`)
-                return
-            }
+            const d = nodesCharDiff(
+                prev.split("\n\n"),
+                markdown.split("\n\n")
+            )
 
             accCharsAdded += d.charsAdded
             if(v.authorship){
