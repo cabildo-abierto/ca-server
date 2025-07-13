@@ -2,13 +2,13 @@ import {cleanText} from "#/utils/strings";
 import {AppContext} from "#/index";
 import {gett, unique} from "#/utils/arrays";
 import {decompress} from "#/utils/compression";
-import {getTopicSynonyms} from "#/services/wiki/utils";
 import {getCollectionFromUri, getDidFromUri, isPost} from "#/utils/uri";
 import {BlobRef} from "#/services/hydration/hydrate";
 import {fetchTextBlobs} from "#/services/blob";
 import {formatIsoDate} from "#/utils/dates";
-import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {getCAUsersDids} from "#/services/user/users";
+import {sql} from "kysely";
+import {logTimes} from "#/utils/utils";
 
 
 function getSynonymRegex(synonym: string){
@@ -275,36 +275,44 @@ export async function updateReferences(ctx: AppContext){
 }
 
 
-export async function getSynonymsToTopicsMap(ctx: AppContext, topicsList?: string[]): Promise<SynonymsMap> {
-    const topics = await ctx.db.topic.findMany({
-        select: {
-            id: true,
-            currentVersion: {
-                select: {
-                    props: true
-                }
-            }
-        },
-        where: topicsList ? {
-            id: {
-                in: topicsList
-            },
-            currentVersionId: {
-                not: null
-            }
-        } : {
-            currentVersionId: {
-                not: null
-            }
-        }
-    })
+export async function getSynonymsToTopicsMap(
+    ctx: AppContext, topicsList?: string[]
+): Promise<SynonymsMap> {
+    const synonymsSql = sql<unknown>`
+        (
+            SELECT p -> 'value' -> 'value'
+            FROM jsonb_array_elements(
+                     -- make sure we always hand an ARRAY to jsonb_array_elements
+                         COALESCE(
+                                 CASE
+                                     WHEN jsonb_typeof(tv.props) = 'array' THEN tv.props
+                                     ELSE '[]'::jsonb
+                                     END,
+                                 '[]'::jsonb
+                         )
+                 ) AS p
+            WHERE p ->> 'name' = 'Sinónimos'
+                LIMIT 1
+        )
+    `.as('synonyms')
+
+    const select = ctx.kysely
+        .selectFrom('Topic as t')
+
+    const t1 = Date.now()
+    const topics: {synonyms: unknown, id: string}[] = await (topicsList ? select.where("t.id", "in", topicsList) : select)
+        .innerJoin('TopicVersion as tv', 't.currentVersionId', 'tv.uri')
+        .select(['t.id', synonymsSql])
+        .execute()
+
+    const t2 = Date.now()
+    logTimes("get synonyms map 2", [t1, t2])
 
     const synonymsToTopicsMap: SynonymsMap = new Map()
 
     topics.forEach((t) => {
-        const synonyms = unique(getTopicSynonyms({
-            id: t.id, props: t.currentVersion?.props as (TopicProp[] | undefined)
-        }).map(cleanText))
+        const synList = t.synonyms instanceof Array ? t.synonyms as string[] : []
+        const synonyms = unique([...synList, t.id].map(cleanText))
 
         synonyms.forEach(s => {
             if(synonymsToTopicsMap.has(s)){

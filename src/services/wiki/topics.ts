@@ -87,7 +87,6 @@ export async function getTopics(
     time: TimePeriod,
     limit?: number): CAHandlerOutput<TopicViewBasic[]> {
 
-    const t1 = Date.now()
     let baseQuery = ctx.kysely
         .selectFrom('Topic')
         .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
@@ -126,9 +125,6 @@ export async function getTopics(
     }
 
     const topics = await (limit ? baseQuery.limit(limit) : baseQuery).execute()
-
-    const t2 = Date.now()
-    logTimes("getTopics", [t1, t2])
 
     return {
         data: topics.map(t => topicQueryResultToTopicViewBasic({
