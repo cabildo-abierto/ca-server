@@ -10,6 +10,7 @@ import {
   type OmitKey,
 } from '../../../../util'
 import type * as AppBskyFeedDefs from '../../../app/bsky/feed/defs.js'
+import type * as ArCabildoabiertoDataDataset from '../data/dataset.js'
 import type * as ArCabildoabiertoActorDefs from '../actor/defs.js'
 import type * as AppBskyEmbedImages from '../../../app/bsky/embed/images.js'
 import type * as AppBskyEmbedVideo from '../../../app/bsky/embed/video.js'
@@ -54,6 +55,7 @@ export interface ThreadViewContent {
     | $Typed<PostView>
     | $Typed<ArticleView>
     | $Typed<FullArticleView>
+    | $Typed<ArCabildoabiertoDataDataset.DatasetView>
     | { $type: string }
   parent?:
     | $Typed<ThreadViewContent>

@@ -1,7 +1,7 @@
 import {ThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
-import {getCollectionFromUri, getUri, isArticle, isPost} from "#/utils/uri";
+import {getCollectionFromUri, getUri, isArticle, isDataset, isPost} from "#/utils/uri";
 import {FeedSkeleton} from "#/services/feed/feed";
 import {
     hydrateThreadViewContent,
@@ -75,8 +75,10 @@ export async function getThreadRepliesSkeleton(ctx: AppContext, agent: SessionAg
 
     if(isPost(collection)){
         return await getThreadRepliesSkeletonForPost(ctx, agent, uri)
-    } else if(isArticle(collection)){
+    } else if(isArticle(collection)) {
         return await getThreadRepliesSkeletonForArticle(ctx, agent, uri)
+    } else if(isDataset(collection)){
+        return []
     } else {
         throw Error("Replies skeleton not implemented for:" + collection)
     }

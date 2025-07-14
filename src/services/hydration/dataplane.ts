@@ -14,6 +14,7 @@ import {
     getCollectionFromUri,
     getDidFromUri,
     isArticle,
+    isDataset,
     isPost,
     postUris,
     topicVersionUris
@@ -386,7 +387,9 @@ export class Dataplane {
                 topic: {
                     select: {
                         id: true,
-                        popularityScore: true,
+                        popularityScoreLastDay: true,
+                        popularityScoreLastWeek: true,
+                        popularityScoreLastMonth: true,
                         lastEdit: true,
                         categories: {
                             select: {
@@ -577,7 +580,9 @@ export class Dataplane {
 
         await Promise.all([
             this.fetchPostAndArticleViewsHydrationData(uris),
-            isArticle(c) ? this.fetchTopicsMentioned(skeleton.post) : null
+            isArticle(c) ? this.fetchTopicsMentioned(skeleton.post) : null,
+            isDataset(c) ? this.fetchDatasetsHydrationData([skeleton.post]) : null,
+            isDataset(c) ? this.fetchDatasetContents([skeleton.post]) : null
         ])
     }
 

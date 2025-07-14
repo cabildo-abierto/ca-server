@@ -7,7 +7,7 @@ import {
     PostView,
     ThreadViewContent
 } from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri";
+import {getCollectionFromUri, getDidFromUri, isArticle, isDataset, isPost, isTopicVersion} from "#/utils/uri";
 import {isNotFoundPost, isReasonRepost, NotFoundPost, SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {FeedSkeleton} from "#/services/feed/feed";
 import {decompress} from "#/utils/compression";
@@ -23,6 +23,7 @@ import {creationDateSortKey} from "#/services/feed/utils";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {hydrateEmbedViews, hydrateTopicViewBasicFromUri} from "#/services/wiki/topics";
 import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {DatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset"
 import {getTopicTitle} from "#/services/wiki/utils";
 import {
     isDatasetDataSource,
@@ -362,7 +363,7 @@ function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView
 
 
 export function hydrateContent(uri: string, data: Dataplane, full: boolean = false): {
-    data?: $Typed<PostView> | $Typed<ArticleView> | $Typed<FullArticleView> | $Typed<TopicViewBasic>,
+    data?: $Typed<PostView> | $Typed<ArticleView> | $Typed<FullArticleView> | $Typed<TopicViewBasic> | $Typed<DatasetView>,
     error?: string
 } {
     const collection = getCollectionFromUri(uri)
@@ -372,6 +373,9 @@ export function hydrateContent(uri: string, data: Dataplane, full: boolean = fal
         return full ? hydrateFullArticleView(uri, data) : hydrateArticleView(uri, data)
     } else if (isTopicVersion(collection)) {
         return hydrateTopicViewBasicFromUri(uri, data)
+    } else if(isDataset(collection)) {
+        const res = hydrateDatasetView(uri, data)
+        if(res) return {data: res}; else return {error: "No se pudo hidratar el dataset."}
     } else {
         console.log("Warning: Hidratación no implementada para: ", collection)
         return {error: "Hidratación no implementada para: " + collection}

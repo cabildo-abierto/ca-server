@@ -45,7 +45,8 @@
           "refs": [
             "#postView",
             "#articleView",
-            "#fullArticleView"
+            "#fullArticleView",
+            "ar.cabildoabierto.data.dataset#datasetView"
           ]
         },
         "parent": {

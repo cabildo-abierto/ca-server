@@ -10,7 +10,7 @@ import {count, listOrderDesc, sortByKey} from "#/utils/arrays";
 
 
 export type StatsDashboard = {
-    lastUsers: (ProfileViewBasicCA & { lastReadSession: Date | null })[]
+    lastUsers: (ProfileViewBasicCA & { lastReadSession: Date | null, CAProfileCreatedAt?: Date })[]
     counts: {
         registered: number
         active: number
@@ -18,6 +18,7 @@ export type StatsDashboard = {
         verifiedActive: number
     }
     WAUPlot: { date: Date, count: number }[]
+    usersPlot: { date: Date, count: number }[]
     WAUPlotVerified: { date: Date, count: number }[]
     articlesPlot: {date: Date, count: number}[]
     topicVersionsPlot: {date: Date, count: number}[]
@@ -49,6 +50,11 @@ async function getRegisteredUsers(ctx: AppContext, agent: SessionAgent): Promise
                 orderBy: {
                     createdAt: "desc"
                 }
+            },
+            CAProfile: {
+                select: {
+                    createdAt: true
+                }
             }
         },
         where: {
@@ -69,6 +75,7 @@ async function getRegisteredUsers(ctx: AppContext, agent: SessionAgent): Promise
         if (user) {
             return {
                 ...p,
+                CAProfileCreatedAt: user.CAProfile?.createdAt,
                 lastReadSession: user.readSessions.length > 0 ? user?.readSessions[0].createdAt : null,
                 createdAt: user.createdAt.toString(),
             }
@@ -172,6 +179,21 @@ async function getCACommentsPlot(ctx: AppContext) {
 }
 
 
+async function getUsersPlot(ctx: AppContext, users: StatsDashboard["lastUsers"]){
+    return dailyPlotData(
+        users,
+        (x, d) => x.CAProfileCreatedAt != null && new Date(x.CAProfileCreatedAt) <= getEndOfDay(d)
+    )
+}
+
+
+function getEndOfDay(date: Date) {
+    const endOfDay = new Date(date); // clone the date
+    endOfDay.setHours(23, 59, 59, 999);
+    return endOfDay;
+}
+
+
 export const getStatsDashboard: CAHandler<{}, StatsDashboard> = async (ctx, agent, {}) => {
     const lastUsers = await getRegisteredUsers(ctx, agent)
 
@@ -181,11 +203,13 @@ export const getStatsDashboard: CAHandler<{}, StatsDashboard> = async (ctx, agen
     const topicVersionsPlot = await getTopicVersionsPlot(ctx)
     const caCommentsPlot = await getCACommentsPlot(ctx)
     const articlesPlot = await getArticlesPlot(ctx)
+    const usersPlot = await getUsersPlot(ctx, lastUsers)
 
     return {
         data: {
             lastUsers,
             WAUPlot,
+            usersPlot,
             WAUPlotVerified,
             counts: {
                 active,
