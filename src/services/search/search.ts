@@ -5,7 +5,6 @@ import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {unique} from "#/utils/arrays";
 import {cleanText} from "#/utils/strings";
 import {TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import { Prisma } from "@prisma/client";
 import {AppContext} from "#/index";
 import {JsonValue} from "@prisma/client/runtime/library";
 import {topicQueryResultToTopicViewBasic} from "#/services/wiki/topics";
@@ -81,10 +80,6 @@ export const searchUsers: CAHandler<{
     return {data: users.filter(x => x != null)}
 }
 
-export function isJsonObject(value: Prisma.JsonValue): value is Prisma.JsonObject {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 
 export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | string[] | undefined}}, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
     let {q} = params
@@ -95,6 +90,11 @@ export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | s
         .selectFrom('Topic')
         .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
         .select(["id", "lastEdit", "popularityScoreLastDay", "popularityScoreLastWeek", "popularityScoreLastMonth", "TopicVersion.props"])
+        // Add similarity calculation
+        .select(eb => [
+            eb.fn("similarity", [eb.ref('id'), eb.val(searchQuery)]).as('match_score'),
+            eb.fn('levenshtein', [eb.ref('id'), eb.val(searchQuery)]).as('distance')
+        ])
 
     const queryInCategories = categories ? baseQuery
         .where(categories.includes("Sin categoría") ?
@@ -106,6 +106,8 @@ export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | s
 
     const topics = await queryInCategories
         .where(sql`unaccent("Topic"."id")`, 'ilike', sql`unaccent('%' || ${searchQuery} || '%')`)
+        .orderBy('match_score', 'desc')
+        .orderBy('popularityScoreLastDay', 'desc')
         .limit(20)
         .execute()
 
@@ -122,4 +124,3 @@ export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | s
         }))
     }
 }
-

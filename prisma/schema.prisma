@@ -461,6 +461,8 @@ model Notification {
   moreContext String?
 
   reasonSubject String?
+
+  @@unique([causedByRecordId, userNotifiedId])
 }
 
 
