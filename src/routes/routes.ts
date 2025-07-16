@@ -58,6 +58,7 @@ import {
     markConversationRead,
     sendMessage
 } from "#/services/messaging/conversations";
+import {getDraft, getDrafts, saveDraft } from '#/services/write/drafts';
 
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
@@ -370,6 +371,12 @@ export const createRouter = (ctx: AppContext) => {
     router.post("/access-request", makeHandlerNoAuth(ctx, createAccessRequest))
 
     router.post('/clear-follows', makeHandler(ctx, clearFollows))
+
+    router.get('/drafts', makeHandler(ctx, getDrafts))
+
+    router.get('/draft/:id', makeHandler(ctx, getDraft))
+
+    router.post('/draft', makeHandler(ctx, saveDraft))
 
     router.use(adminRoutes(ctx))
 

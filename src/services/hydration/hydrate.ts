@@ -130,7 +130,7 @@ export function markdownToPlainText(md: string){
 }
 
 
-function getArticleSummary(text: string, format?: string) {
+export function getArticleSummary(text: string, format?: string) {
     let summary = ""
     if (format == "markdown") {
         summary = markdownToPlainText(text)

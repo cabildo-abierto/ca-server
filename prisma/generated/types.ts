@@ -119,6 +119,16 @@ export type Donation = {
     transactionId: string;
     amount: number;
 };
+export type Draft = {
+    id: string;
+    created_at: Generated<Timestamp>;
+    lastUpdate: Generated<Timestamp>;
+    collection: string;
+    text: string;
+    title: string | null;
+    embeds: unknown | null;
+    authorId: string;
+};
 export type Follow = {
     uri: string;
     userFollowedId: string | null;
@@ -307,6 +317,7 @@ export type DB = {
     DataBlock: DataBlock;
     Dataset: Dataset;
     Donation: Donation;
+    Draft: Draft;
     Follow: Follow;
     HasReacted: HasReacted;
     InviteCode: InviteCode;

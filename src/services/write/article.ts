@@ -19,6 +19,7 @@ export type CreateArticleProps = {
     enDiscusion: boolean
     embeds?: ArticleEmbedView[]
     embedContexts?: EmbedContext[]
+    draftId?: string
 }
 
 export const createArticleAT = async (agent: SessionAgent, article: CreateArticleProps) => {
@@ -88,7 +89,10 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
     } : undefined
 
     try {
-        await processArticle(ctx, ref, record, afterTransaction)
+        await Promise.all([
+            processArticle(ctx, ref, record, afterTransaction),
+            article.draftId ? ctx.kysely.deleteFrom("Draft").where("id", "=", article.draftId).execute() : null
+        ])
     } catch (err) {
         console.error(err)
         return {

@@ -14,3 +14,13 @@ export function pxToNumber(x: string | number): number {
     }
     return x
 }
+
+
+export function prettyPrintJSON(obj: any): void {
+    try {
+        const prettyJSON = JSON.stringify(obj, null, 2); // 2-space indentation
+        console.log(prettyJSON);
+    } catch (error) {
+        console.error("Failed to pretty print JSON:", error);
+    }
+}

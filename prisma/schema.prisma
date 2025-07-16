@@ -75,6 +75,8 @@ model User {
   lastSeenNotifications DateTime @default(dbgenerated("'1970-01-01 00:00:00'::timestamp"))
 
   moderationState ModerationState @default(Ok)
+
+  drafts Draft[]
 }
 
 enum ModerationState {
@@ -443,6 +445,19 @@ model AccessRequest {
   sentInviteAt DateTime?
   inviteCodeId String? @unique
   inviteCode InviteCode? @relation(fields: [inviteCodeId], references: [code])
+}
+
+
+model Draft {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now()) @map("created_at")
+  lastUpdate   DateTime @default(now())
+  collection   String
+  text         String
+  title        String?
+  embeds       Json?
+  author       User     @relation(fields: [authorId], references: [did])
+  authorId     String
 }
 
 
