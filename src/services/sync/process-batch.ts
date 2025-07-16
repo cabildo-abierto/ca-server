@@ -23,7 +23,7 @@ import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/def
 import {
     getCidFromBlobRef,
     parseRecord, processBskyProfile,
-    processCAProfile, processDeleteReaction,
+    processCAProfile,
     SyncContentProps
 } from "#/services/sync/process-event";
 import {ReactionRecord, ReactionType} from "#/services/reactions/reactions";
@@ -33,6 +33,7 @@ import {isRecord as isVoteReject} from "#/lex-api/types/ar/cabildoabierto/wiki/v
 import {deleteRecordsDB} from "#/services/delete";
 import {unique} from "#/utils/arrays";
 import {NotificationBatchData, NotificationJobData} from "#/services/notifications/notifications";
+import {isReactionCollection} from "#/utils/type-utils";
 
 
 export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: ATProtoStrongRef, record: any }[]) {
@@ -310,18 +311,19 @@ export const processPostsBatch: BatchRecordProcessor<Post.Record> = async (ctx, 
 }
 
 
+const columnMap: Record<ReactionType, keyof DB['Record']> = {
+    'app.bsky.feed.like': 'uniqueLikesCount',
+    'app.bsky.feed.repost': 'uniqueRepostsCount',
+    'ar.cabildoabierto.wiki.voteAccept': 'uniqueAcceptsCount',
+    'ar.cabildoabierto.wiki.voteReject': 'uniqueRejectsCount',
+}
+
+
 export async function batchIncrementReactionCounter(
     trx: Transaction<DB>,
     type: ReactionType,
     recordIds: string[]
 ) {
-    const columnMap: Record<ReactionType, keyof DB['Record']> = {
-        'app.bsky.feed.like': 'uniqueLikesCount',
-        'app.bsky.feed.repost': 'uniqueRepostsCount',
-        'ar.cabildoabierto.wiki.voteAccept': 'uniqueAcceptsCount',
-        'ar.cabildoabierto.wiki.voteReject': 'uniqueRejectsCount',
-    }
-
     const column = columnMap[type]
 
     if (!column) {
@@ -335,6 +337,29 @@ export async function batchIncrementReactionCounter(
         .where('uri', 'in', recordIds)
         .set((eb) => ({
             [column]: eb(eb.ref(column), '+', 1)
+        }))
+        .execute()
+}
+
+
+export async function batchDecrementReactionCounter(
+    trx: Transaction<DB>,
+    type: ReactionType,
+    recordIds: string[]
+) {
+    const column = columnMap[type]
+
+    if (!column) {
+        throw new Error(`Unknown reaction type: ${type}`)
+    }
+
+    if(recordIds.length == 0) return
+
+    await trx
+        .updateTable('Record')
+        .where('uri', 'in', recordIds)
+        .set((eb) => ({
+            [column]: eb(eb.ref(column), '-', 1)
         }))
         .execute()
 }
@@ -732,9 +757,86 @@ export const processDatasetsBatch: BatchRecordProcessor<Dataset.Record> = async 
 
 
 export async function processDeleteReactionsBatch(ctx: AppContext, uris: string[]){
-    // TO DO
-    for(let i = 0; i < uris.length; i++){
-        await processDeleteReaction(ctx, uris[i])
+    if(uris.length == 0) return
+    const type = getCollectionFromUri(uris[0])
+    if (!isReactionCollection(type)) return
+
+    const ids = await ctx.kysely.transaction().execute(async (db) => {
+        const subjectIds = (await db
+            .selectFrom("Reaction")
+            .select(["subjectId", "uri"])
+            .where("uri", "in", uris)
+            .execute())
+            .map(e => e.subjectId != null ? {...e, subjectId: e.subjectId} : null)
+            .filter(x => x != null)
+
+        if(subjectIds.length == 0) return
+
+        try {
+            const deletedSubjects = await db
+                .deleteFrom("HasReacted")
+                .where("reactionType", "=", type)
+                .where(({eb, refTuple, tuple}) =>
+                    eb(
+                        refTuple("HasReacted.recordId", 'HasReacted.userId'),
+                        'in',
+                        subjectIds.map(e => tuple(e.subjectId, getDidFromUri(e.uri)))
+                    )
+                )
+                .returning(["HasReacted.recordId"])
+                .execute()
+
+            await batchDecrementReactionCounter(db, type, deletedSubjects.map(u => u.recordId))
+        } catch {
+        }
+
+        const sameSubjectUris = (await db
+            .selectFrom("Reaction")
+            .innerJoin("Record", "Record.uri", "Reaction.uri")
+            .select("Record.uri")
+            .where("Record.collection", "=", type)
+            .where(({eb, refTuple, tuple}) =>
+                eb(
+                    refTuple("Reaction.subjectId", 'Record.authorId'),
+                    'in',
+                    subjectIds.map(e => tuple(e.subjectId, getDidFromUri(e.uri)))
+                )
+            )
+            .execute()).map(u => u.uri)
+
+        if (type == "ar.cabildoabierto.wiki.voteReject") {
+            await db
+                .deleteFrom("VoteReject")
+                .where("uri", "in", sameSubjectUris)
+                .execute()
+        }
+
+        await db.deleteFrom("TopicInteraction").where("recordId", "in", sameSubjectUris).execute()
+
+        await db.deleteFrom("Notification").where("causedByRecordId", "in", sameSubjectUris).execute()
+
+        await db.deleteFrom("Reaction").where("uri", "in", sameSubjectUris).execute()
+
+        for(const u of sameSubjectUris){
+            await db.deleteFrom("Record").where("uri", "in", [u]).execute()
+        }
+        //await db.deleteFrom("Record").where("uri", "in", sameSubjectUris).execute()
+
+        if (type == "ar.cabildoabierto.wiki.voteReject" || type == "ar.cabildoabierto.wiki.voteAccept") {
+            const topicIds = (await db
+                .selectFrom("TopicVersion")
+                .select("topicId")
+                .where("uri", "in", subjectIds.map(s => s.subjectId))
+                .execute()).map(t => t.topicId)
+
+            if(topicIds.length > 0){
+                await updateTopicsCurrentVersionBatch(db, topicIds)
+                return topicIds
+            }
+        }
+    })
+    if (ids && ids.length > 0) {
+        await addUpdateContributionsJobForTopics(ctx, ids)
     }
 }
 
@@ -813,6 +915,7 @@ export async function processDeleteBatch(ctx: AppContext, uris: string[]){
         const [c, uris] = entries[i]
         const batch_size = 500
         for(let j = 0; j < uris.length; j += batch_size){
+            console.log(`deleting batch ${j} of ${uris.length} entries of type ${c}`)
             const batchUris = uris.slice(j, j+batch_size)
             if(isReactionType(c)){
                 await processDeleteReactionsBatch(ctx, batchUris)
@@ -822,6 +925,7 @@ export async function processDeleteBatch(ctx: AppContext, uris: string[]){
                 const su = deleteRecordsDB(ctx, batchUris)
                 await su.apply()
             }
+            console.log("batch finished")
         }
     }
 }

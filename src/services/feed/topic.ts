@@ -136,7 +136,6 @@ export const getTopicFeed: CAHandlerNoAuth<{ query: { i?: string, did?: string, 
     }
 
     try {
-        console.log("fetching topic feed", id)
         const [replies, mentions, topicMentions] = await Promise.all([
             getTopicVersionReplies(ctx, agent, id),
             getFeed({

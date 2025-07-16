@@ -28,12 +28,5 @@ export async function getDirtyUsers(ctx: AppContext){
 
 
 export async function setMirrorStatus(ctx: AppContext, did: string, mirrorStatus: MirrorStatus){
-    await ctx.db.user.update({
-        data: {
-            mirrorStatus
-        },
-        where: {did}
-    })
-    // revalidateTag("dirtyUsers")
-    // revalidateTag("mirrorStatus:"+did)
+    await ctx.db.user.update({data: {mirrorStatus}, where: {did}})
 }

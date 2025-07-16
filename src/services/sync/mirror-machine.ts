@@ -1,5 +1,4 @@
 import WebSocket, {RawData} from 'ws';
-import {restartSync} from "#/services/sync/sync-user";
 import {getCAUsersDids} from "#/services/user/users";
 import {AppContext} from "#/index";
 import {processEvent} from "#/services/sync/process-event";
@@ -14,7 +13,6 @@ export class MirrorMachine {
     }
 
     async fetchUsers(){
-        await restartSync(this.ctx)
         const dids = await getCAUsersDids(this.ctx)
         this.knownUsers = new Set(dids)
     }

@@ -92,7 +92,8 @@
       "required": ["columnName"],
       "properties": {
         "columnName": {"type":  "string"},
-        "alias": {"type":  "string"}
+        "alias": {"type":  "string"},
+        "precision": {"type": "integer"}
       }
     },
     "twoAxisPlot": {
@@ -146,10 +147,12 @@
         "xTickLabelsFontSize": {"type": "integer"},
         "xTicksCount": {"type": "integer"},
         "xLabelOffset": {"type":  "integer"},
+        "xAxisPrecision": {"type": "integer"},
         "yTicksCount": {"type": "integer"},
         "yLabelOffset": {"type":  "integer"},
         "yLabelFontSize": {"type": "integer"},
         "yTickLabelsFontSize": {"type": "integer"},
+        "yAxisPrecision": {"type":  "integer"},
         "marginBottom": {"type": "integer"},
         "marginLeft": {"type": "integer"}
       }

@@ -9,6 +9,7 @@ import {discoverFeedPipeline} from "#/services/feed/inicio/discover";
 import {SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {CAHandler, CAHandlerOutput} from "#/utils/handler";
 import {Dataplane} from "#/services/hydration/dataplane";
+import {articlesFeedPipeline} from "#/services/feed/inicio/articles";
 
 
 export const getFeedByKind: CAHandler<{params: {kind: string}, query: {cursor?: string, metric?: EnDiscusionMetric, time?: EnDiscusionTime}}, GetFeedOutput> = async (ctx, agent, {params, query}) => {
@@ -19,8 +20,10 @@ export const getFeedByKind: CAHandler<{params: {kind: string}, query: {cursor?: 
         pipeline = getEnDiscusionFeedPipeline(metric, time)
     } else if(kind == "siguiendo"){
         pipeline = followingFeedPipeline
-    } else if(kind == "descubrir"){
+    } else if(kind == "descubrir") {
         pipeline = discoverFeedPipeline
+    } else if(kind == "articulos") {
+        pipeline = articlesFeedPipeline
     } else {
         return {error: "Invalid feed kind:" + kind}
     }

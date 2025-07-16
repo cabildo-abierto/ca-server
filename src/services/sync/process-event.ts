@@ -19,17 +19,14 @@ import {
     SyncUpdate
 } from "#/services/sync/sync-update";
 import {
-    processDeleteTopicVersion,
-    getTopicIdFromTopicVersionUri,
-    updateTopicCurrentVersion
+    processDeleteTopicVersion
 } from "#/services/wiki/current-version";
-import {decrementReactionCounter, ReactionRecord} from "#/services/reactions/reactions";
+import {ReactionRecord} from "#/services/reactions/reactions";
 import {isReactionCollection} from "#/utils/type-utils";
 import {CID} from "multiformats/cid";
 import {deleteRecordsDB} from "#/services/delete";
 import {
-    addUpdateContributionsJobForTopics,
-    processArticlesBatch, processDatasetsBatch,
+    processArticlesBatch, processDatasetsBatch, processDeleteReactionsBatch,
     processFollowsBatch,
     processPostsBatch,
     processReactionsBatch, processTopicVersionsBatch
@@ -92,7 +89,7 @@ export async function processDelete(ctx: AppContext, uri: string) {
         return await processDeleteTopicVersion(ctx, uri)
 
     } else if (isReactionCollection(c)) {
-        await processDeleteReaction(ctx, uri)
+        await processDeleteReactionsBatch(ctx, [uri])
         return {}
     } else {
         const su = deleteRecordsDB(ctx, [uri])
@@ -252,84 +249,6 @@ export const processDataset: RecordProcessor<Dataset.Record> = async (ctx, ref, 
 
 export const processReaction: RecordProcessor<ReactionRecord> = async (ctx, ref, r) => {
     await processReactionsBatch(ctx, [{ref, record: r}])
-}
-
-
-export async function processDeleteReaction(ctx: AppContext, uri: string) {
-    /* Idea:
-        Eliminamos todos los likes
-        Borramos HasReacted
-        Si lo logramos borrar, restamos 1 al contador.
-
-        Asunción: Al borrar un like del protocolo se borran todos los likes del usuario al post.
-        ¿Qué pasa si no se cumple eso?
-        Si los likes se borran individualmente, los likes quedan zombies: el usuario no ve el corazón rojo y tampoco aparece en el contador.
-     */
-    // TO DO: Bastante seguro que no hace falta que esto sea una transaction
-    const id = await ctx.db.$transaction(async (db) => {
-        const type = getCollectionFromUri(uri)
-        if (!isReactionCollection(type)) return
-
-        // 1. Obtenemos el subjectId
-        const subjectId = await db.reaction.findFirst({
-            select: {
-                subjectId: true
-            },
-            where: {
-                uri: uri
-            }
-        })
-        if (!subjectId || !subjectId.subjectId) return // No se encontró la reacción
-
-        // 2. Intentamos borrar HasReacted y si lo logramos restamos 1
-        try {
-            const deleted = await db.hasReacted.deleteMany({
-                where: {
-                    userId: getDidFromUri(uri),
-                    reactionType: type,
-                    recordId: subjectId.subjectId
-                }
-            })
-            if (deleted.count > 0) {
-                await decrementReactionCounter(db, type, subjectId.subjectId)
-            }
-        } catch {
-        }
-
-        // 3. Eliminamos todas las reacciones del mismo tipo y sus records.
-        const uris = (await db.reaction.findMany({
-            select: {
-                uri: true
-            },
-            where: {
-                subjectId: subjectId.subjectId,
-                record: {
-                    collection: type,
-                    authorId: getDidFromUri(uri)
-                },
-            }
-        })).map(r => r.uri)
-
-        if (type == "ar.cabildoabierto.wiki.voteReject") await db.voteReject.deleteMany({where: {uri: {in: uris}}})
-        await ctx.db.topicInteraction.deleteMany({where: {recordId: uri}})
-        await db.notification.deleteMany({where: {causedByRecordId: {in: uris}}})
-        await db.reaction.deleteMany({where: {uri: {in: uris}}})
-        await db.record.deleteMany({where: {uri: {in: uris}}})
-
-        if (type == "ar.cabildoabierto.wiki.voteReject" || type == "ar.cabildoabierto.wiki.voteAccept") {
-            const {did, rkey} = splitUri(subjectId.subjectId)
-            const id = await getTopicIdFromTopicVersionUri(db, did, rkey)
-            if (id) {
-                await updateTopicCurrentVersion(db, id)
-                return id
-            } else {
-                throw Error("No se encontró el tema votado.")
-            }
-        }
-    })
-    if (id) {
-        await addUpdateContributionsJobForTopics(ctx, [id])
-    }
 }
 
 

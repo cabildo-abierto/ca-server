@@ -13,6 +13,7 @@ import {updateTopicContributionsHandler} from "#/services/wiki/contributions";
 import {getStatsDashboard} from "#/services/admin/stats";
 import {getRepoCounts} from "#/services/admin/repo";
 import {startJob} from "#/jobs/worker";
+import {getUsersSyncStatus} from "#/services/admin/sync";
 
 
 function isAdmin(did: string) {
@@ -132,6 +133,8 @@ export const adminRoutes = (ctx: AppContext) => {
     router.get("/access-requests", makeAdminHandler(ctx, getAccessRequests))
 
     router.post("/access-request-sent/:id", makeAdminHandler(ctx, markAccessRequestSent))
+
+    router.get("/sync-status", makeAdminHandler(ctx, getUsersSyncStatus))
 
     return router
 }
