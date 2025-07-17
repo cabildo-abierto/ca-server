@@ -1,9 +1,9 @@
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import MercadoPagoConfig, {Preference} from "mercadopago";
-import {NoSessionAgent, SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
 import {getUsersWithReadSessions} from "#/services/monetization/user-months";
 import {count} from "#/utils/arrays";
+import {v4 as uuidv4} from "uuid";
 
 type Donation = {
     date: Date
@@ -55,6 +55,7 @@ export async function getMonthlyActiveUsers(ctx: AppContext) {
 export async function getGrossIncome(ctx: AppContext): Promise<number> {
     const result = await ctx.kysely
         .selectFrom("Donation")
+        .where("Donation.transactionId", "is not", null)
         .select((eb) => eb.fn.sum<number>("amount").as("total"))
         .executeTakeFirstOrThrow()
 
@@ -130,6 +131,17 @@ export const createPreference: CAHandler<{amount: number}, {id: string}> = async
             console.log("No id", result)
             return {error: "Ocurrió un error al iniciar el pago."}
         } else {
+            await ctx.kysely
+                .insertInto("Donation")
+                .values([{
+                    id: uuidv4(),
+                    created_at: new Date(),
+                    userById: agent.did,
+                    amount: amount,
+                    mpPreferenceId: result.id
+                }])
+                .execute()
+
             return {data: {id: result.id}}
         }
     } catch (err) {
@@ -139,63 +151,84 @@ export const createPreference: CAHandler<{amount: number}, {id: string}> = async
 }
 
 
-const getPaymentDetails = async (paymentId: string) => {
-    const url = `https://api.mercadopago.com/v1/payments/${paymentId}`;
+const getPaymentDetails = async (orderId: string) => {
+    const url = `https://api.mercadopago.com/merchant_orders/${orderId}`;
 
     const response = await fetch(url, {
         method: 'GET',
         headers: {
+            "Content-Type": "application/json",
             'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN!}`,
         },
     });
 
-    return await response.json();
-};
-
-
-export async function createDonation(ctx: AppContext, amount: number, paymentId: string, userId: string) {
-    try {
-        await ctx.db.donation.create({
-            data: {
-                userById: userId ?? undefined,
-                transactionId: paymentId,
-                amount
-            }
-        })
-    } catch (err) {
-        console.log("error creating donation", err)
-        return {error: "error on buy subscriptions"}
+    const body = await response.json()
+    console.log(`order ${orderId} resulted in body`, body)
+    const payments = body.payments
+    if(payments && payments.length > 0){
+        const payment = payments[0]
+        const id = payment.id
+        const amount = payment.transaction_amount
+        const preference_id = body.preference_id
+        return {paymentId: id, amount, paymentStatus: payment.status, preferenceId: preference_id}
+    } else {
+        throw Error("Couldn't find payments in order")
     }
-
-    return {}
 }
 
+type MPNotificationBody = {
+    action: string
+    api_version: string
+    data: {
+        id?: string
+    }
+    date_created: string
+    id: string
+    live_mode: boolean
+    type: string
+    user_id: string
+    params: any
+    query: {"data.id": string}
+}
 
-export const processPayment: CAHandlerNoAuth<{data: any}, {}> = async (ctx, agent, params) => {
-    const data = params.data
-    const paymentId = data.id
-    console.log("processing payment with data", data)
-
-    const paymentDetails = await getPaymentDetails(paymentId)
+export const processPayment: CAHandlerNoAuth<MPNotificationBody, {}> = async (ctx, agent, body) => {
+    console.log("processing payment notification with body", body)
+    let orderId = body.id
+    if(!orderId){
+        console.log("No order id", orderId)
+        return {error: "Ocurrió un error al procesar el identificador de la transacción."}
+    }
+    console.log("getting payment details with order id", orderId)
+    const paymentDetails = await getPaymentDetails(orderId)
     console.log("got payment details", paymentDetails)
 
-    if(paymentDetails.status != "approved"){
-        console.log("status was", paymentDetails.status)
+    if(paymentDetails.paymentStatus != "approved"){
+        console.log("status was", paymentDetails.paymentStatus)
         return {error: "El pago no fue aprobado."}
     }
 
-    const donationAmount = paymentDetails.metadata.amount
-    const userId = paymentDetails.metadata.user_id
+    const preferenceId = paymentDetails.preferenceId
+    console.log("got preference id", preferenceId)
 
-    console.log("metadata", paymentDetails.metadata)
+    const donationId = await ctx.kysely
+        .selectFrom("Donation")
+        .select("id")
+        .where("mpPreferenceId", "=", preferenceId)
+        .execute()
 
-    const {error} = await createDonation(ctx, donationAmount, paymentId, paymentDetails.metadata.user_id)
+    if(donationId.length > 0){
+        const id = donationId[0].id
+        console.log("found donation", id)
 
-    if(error) {
-        console.log("error", error)
-        console.log("details", paymentDetails)
-        console.log(userId, donationAmount, paymentId)
-        return {error: "Ocurrió un error al procesar un pago."}
+        await ctx.kysely
+            .updateTable("Donation")
+            .set("transactionId", paymentDetails.paymentId as string)
+            .where("id", "=", id)
+            .execute()
+
+    } else {
+        console.log(`Couldn't find donation for preference ${preferenceId} in db.`)
+        return {error: `Couldn't find donation for preference ${preferenceId} in db.`}
     }
 
     return {}

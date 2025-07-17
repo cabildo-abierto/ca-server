@@ -144,8 +144,11 @@ model Donation {
   createdAt       DateTime         @default(now()) @map("created_at")
   userById        String?
   userBy          User?            @relation(fields: [userById], references: [did])
-  transactionId   String
+  transactionId   String?
   amount          Int
+  mpPreferenceId  String?
+
+  @@unique([mpPreferenceId])
 }
 
 enum PromiseStatus {

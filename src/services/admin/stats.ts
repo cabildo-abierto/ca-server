@@ -161,7 +161,7 @@ async function getCACommentsPlot(ctx: AppContext) {
         where: {
             content: {
                 post: {
-                    replyTo: {
+                    root: {
                         collection: {
                             in: ["ar.cabildoabierto.feed.article", "ar.cabildoabierto.wiki.topicVersion"]
                         }

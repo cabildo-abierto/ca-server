@@ -116,8 +116,9 @@ export type Donation = {
     id: string;
     created_at: Generated<Timestamp>;
     userById: string | null;
-    transactionId: string;
+    transactionId: string | null;
     amount: number;
+    mpPreferenceId: string | null;
 };
 export type Draft = {
     id: string;

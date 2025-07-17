@@ -98,7 +98,7 @@
     },
     "twoAxisPlot": {
       "type": "object",
-      "required": ["xAxis", "yAxis", "plot"],
+      "required": ["xAxis", "plot"],
       "properties": {
         "xAxis": {"type": "string"},
         "xLabel": {"type": "string"},
@@ -115,7 +115,21 @@
             "#lines",
             "#scatterplot"
           ]
+        },
+        "yAxes": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#axisConfig"
+          }
         }
+      }
+    },
+    "axisConfig": {
+      "type": "object",
+      "properties": {
+        "column": {"type": "string"},
+        "label": {"type":  "string"}
       }
     },
     "oneAxisPlot": {
