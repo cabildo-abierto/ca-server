@@ -33,6 +33,7 @@ export const testUsers = [
     "usuariodepruebas4.bsky.social",
     "usuariodepruebas5.bsky.social",
     "carlitos-tester.bsky.social",
+    "pruebaprueba.bsky.social"
 ]
 
 
