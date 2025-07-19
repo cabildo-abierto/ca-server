@@ -1,25 +1,33 @@
 import {FeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {followingFeedPipeline} from "#/services/feed/inicio/following";
+import {getFollowingFeedPipeline} from "#/services/feed/inicio/following";
 import {Agent} from "#/utils/session-agent";
 import {hydrateFeed} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {AppContext} from "#/index";
-import {EnDiscusionMetric, EnDiscusionTime, getEnDiscusionFeedPipeline} from "#/services/feed/inicio/discusion";
+import {
+    EnDiscusionMetric,
+    EnDiscusionTime,
+    FeedFormatOption,
+    getEnDiscusionFeedPipeline
+} from "#/services/feed/inicio/discusion";
 import {discoverFeedPipeline} from "#/services/feed/inicio/discover";
-import {SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {CAHandler, CAHandlerOutput} from "#/utils/handler";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {articlesFeedPipeline} from "#/services/feed/inicio/articles";
+import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 
 
-export const getFeedByKind: CAHandler<{params: {kind: string}, query: {cursor?: string, metric?: EnDiscusionMetric, time?: EnDiscusionTime}}, GetFeedOutput> = async (ctx, agent, {params, query}) => {
+export type FollowingFeedFilter = "Todos" | "Solo Cabildo Abierto"
+
+
+export const getFeedByKind: CAHandler<{params: {kind: string}, query: {cursor?: string, metric?: EnDiscusionMetric, time?: EnDiscusionTime, format?: FeedFormatOption, filter?: FollowingFeedFilter}}, GetFeedOutput> = async (ctx, agent, {params, query}) => {
     let pipeline: FeedPipelineProps
     const {kind} = params
-    const {cursor, metric, time} = query
+    const {cursor, metric, time, filter, format} = query
     if(kind == "discusion"){
-        pipeline = getEnDiscusionFeedPipeline(metric, time)
+        pipeline = getEnDiscusionFeedPipeline(metric, time, format)
     } else if(kind == "siguiendo"){
-        pipeline = followingFeedPipeline
+        pipeline = getFollowingFeedPipeline(filter, format)
     } else if(kind == "descubrir") {
         pipeline = discoverFeedPipeline
     } else if(kind == "articulos") {
@@ -60,7 +68,21 @@ export type GetFeedOutput = {
 
 export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAHandlerOutput<GetFeedOutput> => {
     const data = new Dataplane(ctx, agent)
-    const {skeleton, cursor: newCursor} = await pipeline.getSkeleton(ctx, agent, data, cursor)
+
+    let newCursor: string | undefined
+    let skeleton: FeedSkeleton
+    try {
+        const res = await pipeline.getSkeleton(ctx, agent, data, cursor)
+        newCursor = res.cursor
+        skeleton = res.skeleton
+    } catch (err) {
+        console.log("Error getting feed skeleton", err)
+        if(err instanceof Error){
+            console.log("name", err.name)
+            console.log("message", err.message)
+        }
+        return {error: "Ocurrió un error al obtener el muro."}
+    }
 
     let feed: FeedViewContent[] = await hydrateFeed(skeleton, data)
 

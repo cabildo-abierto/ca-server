@@ -18,6 +18,12 @@ export function max<T>(a: T[], f?: (x: T) => number): T | undefined {
     return a.reduce((max, current) => ((f ? f(current) > f(max) : current > max) ? current : max));
 }
 
+
+export function min<T>(a: T[], f?: (x: T) => number): T | undefined {
+    return max(a, x => f ? -f(x) : -x)
+}
+
+
 export function sum<T>(a: T[], f: (x: T) => number): number {
     return a.reduce((acc, x) => acc+f(x), 0)
 }

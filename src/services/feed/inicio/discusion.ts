@@ -25,13 +25,16 @@ function getEnDiscusionStartDate(time: EnDiscusionTime){
 
 export type EnDiscusionMetric = "Me gustas" | "Interacciones" | "Popularidad relativa" | "Recientes"
 export type EnDiscusionTime = "Último día" | "Última semana" | "Último mes"
+export type FeedFormatOption = "Todos" | "Artículos"
 
 
-export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusionTime) => GetSkeletonProps = (metric, time) => async (ctx, agent, data, cursor) => {
+export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption) => GetSkeletonProps = (metric, time, format) => async (ctx, agent, data, cursor) => {
     const startDate = getEnDiscusionStartDate(time)
     // Me gustas: usamos uniqueLikesCount.
     // Interacciones: usamos uniqueLikesCount + uniqueRepliesCount + uniqueRepostsCount
     // Popularidad relativa: usamos Interacciones / Cantidad de seguidores del autor en Bsky
+
+    const collections = format == "Artículos" ? ["ar.cabildoabierto.feed.article"] : ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
 
     if(metric == "Me gustas"){
         let skeleton = await ctx.db.record.findMany({
@@ -45,6 +48,9 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
                     selfLabels: {
                         has: "ca:en discusión"
                     }
+                },
+                collection: {
+                    in: collections
                 }
             }
         })
@@ -78,6 +84,9 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
                     selfLabels: {
                         has: "ca:en discusión"
                     }
+                },
+                collection: {
+                    in: collections
                 }
             }
         })
@@ -120,6 +129,9 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
                     selfLabels: {
                         has: "ca:en discusión"
                     }
+                },
+                collection: {
+                    in: collections
                 }
             }
         })
@@ -148,9 +160,10 @@ const enDiscusionSortKey = (metric: EnDiscusionMetric): FeedSortKey => {
 }
 
 
-export const getEnDiscusionFeedPipeline = (metric: EnDiscusionMetric = "Me gustas", time: EnDiscusionTime = "Último día"): FeedPipelineProps => {
+export const getEnDiscusionFeedPipeline = (
+    metric: EnDiscusionMetric = "Me gustas", time: EnDiscusionTime = "Último día", format: FeedFormatOption = "Todos"): FeedPipelineProps => {
     return {
-        getSkeleton: getEnDiscusionSkeleton(metric, time),
+        getSkeleton: getEnDiscusionSkeleton(metric, time, format),
         sortKey: enDiscusionSortKey(metric),
     }
 }

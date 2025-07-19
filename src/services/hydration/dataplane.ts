@@ -429,7 +429,12 @@ export class Dataplane {
         this.topicsById = joinMaps(this.topicsById, mapById)
     }
 
-    async expandUrisWithReplies(uris: string[]): Promise<string[]> {
+    async expandUrisWithRepliesAndReposts(skeleton: FeedSkeleton): Promise<string[]> {
+        const uris = skeleton.map(e => e.post)
+        const repostUris = skeleton
+            .map(e => e.reason && isSkeletonReasonRepost(e.reason) ? e.reason.repost : null)
+            .filter(x => x != null)
+
         const caPosts = (await Promise.all([
             this.fetchBskyPosts(postUris(uris)),
             this.ctx.db.post.findMany({
@@ -450,6 +455,7 @@ export class Dataplane {
 
         return unique([
             ...uris,
+            ...repostUris,
             ...caPosts.map(p => p.replyToId),
             ...caPosts.map(p => p.rootId),
             ...bskyPosts.map(p => (p.record as PostRecord).reply?.root?.uri),
@@ -459,12 +465,39 @@ export class Dataplane {
     }
 
     async fetchFeedHydrationData(skeleton: FeedSkeleton) {
-        const uris = skeleton.map(p => p.post)
-        const urisWithReplies = await this.expandUrisWithReplies(uris)
-        const repostDids = skeleton
-            .map(p => p.reason && isSkeletonReasonRepost(p.reason) && p.reason.repost ? getDidFromUri(p.reason.repost) : null)
-            .filter(x => x != null)
-        await this.fetchPostAndArticleViewsHydrationData(urisWithReplies, repostDids)
+        const expandedUris = await this.expandUrisWithRepliesAndReposts(skeleton)
+        await Promise.all([
+            this.fetchPostAndArticleViewsHydrationData(expandedUris),
+            this.fetchRepostsHydrationData(expandedUris)
+        ])
+    }
+
+
+    async fetchRepostsHydrationData(uris: string[]){
+        uris = uris.filter(u => getCollectionFromUri(u) == "app.bsky.feed.repost")
+        if(uris.length > 0){
+            const reposts: RepostQueryResult[] = await this.ctx.db.record.findMany({
+                select: {
+                    uri: true,
+                    createdAt: true,
+                    reaction: {
+                        select: {
+                            subjectId: true
+                        }
+                    }
+                },
+                where: {
+                    uri: {
+                        in: uris
+                    }
+                }
+            })
+            reposts.forEach(r => {
+                if(r.reaction?.subjectId){
+                    this.reposts.set(r.reaction.subjectId, r)
+                }
+            })
+        }
     }
 
 
@@ -570,7 +603,7 @@ export class Dataplane {
     }
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
-        const expanded = await this.expandUrisWithReplies([skeleton.post])
+        const expanded = await this.expandUrisWithRepliesAndReposts([{post: skeleton.post}])
         const c = getCollectionFromUri(skeleton.post)
 
         const uris = [
@@ -605,13 +638,11 @@ export class Dataplane {
                 }
             }
             if (f.reason) {
-                if (isReasonRepost(f.reason)) {
+                if (isReasonRepost(f.reason) && f.post.uri) {
                     this.reposts.set(f.post.uri, {
                         createdAt: new Date(f.reason.indexedAt),
                         reaction: {
-                            subject: {
-                                uri: f.post.uri
-                            }
+                            subjectId: f.post.uri
                         }
                     })
                 }

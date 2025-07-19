@@ -1,7 +1,7 @@
 import {SessionAgent} from "#/utils/session-agent";
 import {getFollowing} from "#/services/user/users";
 import {AppContext} from "#/index";
-import {FeedPipelineProps, FeedSkeleton, GetSkeletonProps} from "#/services/feed/feed";
+import {FeedPipelineProps, FeedSkeleton, FollowingFeedFilter, GetSkeletonProps} from "#/services/feed/feed";
 import {rootCreationDateSortKey} from "#/services/feed/utils";
 import {FeedViewPost, isFeedViewPost, isReasonRepost, SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
 import {articleCollections, getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri";
@@ -12,23 +12,23 @@ import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
 import {isTopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+import {min} from "#/utils/arrays";
+import {FeedFormatOption} from "#/services/feed/inicio/discusion";
 
 export type RepostQueryResult = {
     uri?: string
     createdAt: Date | null
     reaction: {
-        subject: {
-            uri: string
-        } | null
+        subjectId: string | null
     } | null
 }
 
 
 function skeletonFromArticleReposts(p: RepostQueryResult): SkeletonFeedPost | null {
-    if(p.reaction && p.reaction.subject){
+    if(p.reaction && p.reaction.subjectId){
         return {
             $type: "app.bsky.feed.defs#skeletonFeedPost",
-            post: p.reaction.subject.uri,
+            post: p.reaction.subjectId,
             reason: {
                 $type: "app.bsky.feed.defs#skeletonReasonRepost",
                 repost: p.uri
@@ -139,21 +139,10 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, followi
         select: {
             uri: true,
             createdAt: true,
-            author: {
-                select: {
-                    did: true,
-                    displayName: true,
-                    handle: true
-                }
-            },
             reaction: {
                 select: {
                     uri: true,
-                    subject: {
-                        select: {
-                            uri: true,
-                        }
-                    },
+                    subjectId: true
                 }
             }
         },
@@ -171,13 +160,11 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, followi
         take: 10
     })
     res.forEach(r => {
-        const uri = r.reaction?.subject?.uri
+        const uri = r.reaction?.subjectId
         const repostUri = r.reaction?.uri
         if(uri && repostUri) dataplane.reposts.set(uri, {
             reaction: {
-                subject: {
-                    uri
-                }
+                subjectId: uri
             },
             uri: repostUri,
             createdAt: r.createdAt
@@ -187,17 +174,33 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, followi
 }
 
 
+async function retry<X, Y>(x: X, f: (params: X) => Promise<Y>, attempts: number, delay: number = 200): Promise<Y> {
+    console.log("Trying function with attempts", attempts)
+    try {
+        return await f(x)
+    } catch (err) {
+        console.log("Got errro!", attempts)
+        if(attempts > 0){
+            console.log(`Retrying after error. Attempts remaining ${attempts-1}. Error:`, err)
+            await new Promise(r => setTimeout(r, delay))
+            return retry(x, f, attempts-1)
+        } else {
+            throw(err)
+        }
+    }
+
+}
+
+
 export async function getBskyTimeline(agent: SessionAgent, limit: number, data: Dataplane, cursor?: string): Promise<{
     feed: $Typed<FeedViewPost>[],
-    cursor: string | undefined
-}> {
-    const res = await agent.bsky.getTimeline({limit, cursor})
+    cursor: string | undefined}> {
+
+    const res = await retry({limit, cursor}, agent.bsky.getTimeline, 3)
 
     const newCursor = res.data.cursor
-
     const feed = res.data.feed
     data.storeFeedViewPosts(feed)
-
     return {
         feed: feed.map(f => ({
             ...f,
@@ -208,8 +211,9 @@ export async function getBskyTimeline(agent: SessionAgent, limit: number, data: 
 }
 
 
-export const getFollowingFeedSkeleton: GetSkeletonProps = async (ctx, agent, data, cursor) => {
+const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, cursor) => {
     if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
+
     const following = [agent.did, ...(await getFollowing(ctx, agent.did))]
 
     const timelineQuery = getBskyTimeline(agent, 25, data, cursor)
@@ -241,6 +245,116 @@ export const getFollowingFeedSkeleton: GetSkeletonProps = async (ctx, agent, dat
     return {
         skeleton,
         cursor: timelineSkeleton.length > 0 ? timeline.cursor : undefined
+    }
+}
+
+
+function followingFeedOnlyCABaseQueryAll(ctx: AppContext, agent: SessionAgent, cursor?: string) {
+    const baseQuery = ctx.kysely
+        .selectFrom("Record")
+        .leftJoin("Follow", "Follow.userFollowedId", "Record.authorId")
+        .leftJoin("Record as followRecord", "Follow.uri", "followRecord.uri")
+        .leftJoin("Reaction", "Reaction.uri", "Record.uri")
+        .innerJoin("User as author", "Record.authorId", "author.did")
+        .select(["Record.uri", "Reaction.subjectId", "Record.created_at"])
+        .leftJoin("Post", "Post.uri", "Record.uri")
+        .where("author.CAProfileUri", "is not", null)
+        .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.post", "app.bsky.feed.repost"])
+        .where(eb =>
+            eb.or([
+                eb("followRecord.authorId", "=", agent.did),
+                eb("Record.authorId", "=", agent.did)
+            ])
+        )
+        .where(eb =>
+            eb.or([
+                eb("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.repost"]),
+                eb("Post.replyToId", "is", null)
+            ])
+        )
+
+    return (cursor != null ? baseQuery.where("Record.created_at", "<", new Date(cursor)) : baseQuery)
+        .orderBy("Record.created_at", "desc")
+}
+
+
+function followingFeedOnlyCABaseQueryArticles(ctx: AppContext, agent: SessionAgent, cursor?: string) {
+    const baseQuery = ctx.kysely
+        .selectFrom("Record")
+        .leftJoin("Follow", "Follow.userFollowedId", "Record.authorId")
+        .leftJoin("Record as followRecord", "Follow.uri", "followRecord.uri")
+        .leftJoin("Reaction", "Reaction.uri", "Record.uri")
+        .innerJoin("User as author", "Record.authorId", "author.did")
+        .leftJoin("Article", "Article.uri", "Record.uri")
+        .select(["Record.uri", "Reaction.subjectId", "Record.created_at"])
+        .where("author.CAProfileUri", "is not", null)
+        .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.repost"])
+        .where(eb =>
+            eb.or([
+                eb("followRecord.authorId", "=", agent.did),
+                eb("Record.authorId", "=", agent.did)
+            ])
+        )
+        .where(eb =>
+            eb.or([
+                eb.and([
+                    eb("Record.collection", "=", "ar.cabildoabierto.feed.article"),
+                    eb("Article.uri", "is not", null)
+                ]),
+                eb('Reaction.subjectId', 'like', `%ar.cabildoabierto.feed.article%`)
+            ])
+        )
+
+    return (cursor != null ? baseQuery.where("Record.created_at", "<", new Date(cursor)) : baseQuery)
+        .orderBy("Record.created_at", "desc")
+}
+
+
+const getFollowingFeedSkeletonOnlyCA: (format: FeedFormatOption) => GetSkeletonProps = (format) => async (ctx, agent, data, cursor) => {
+    if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
+
+    const query = format == "Todos" ? followingFeedOnlyCABaseQueryAll(ctx, agent, cursor) : followingFeedOnlyCABaseQueryArticles(ctx, agent, cursor)
+
+    const limit = 25
+
+    const posts = await query
+        .limit(limit)
+        .execute()
+
+    function queryToSkeletonElement(e: {uri: string, subjectId: string | null}): SkeletonFeedPost {
+        if(!e.subjectId){
+            return {
+                $type: "app.bsky.feed.defs#skeletonFeedPost",
+                post: e.uri
+            }
+        } else {
+            return {
+                $type: "app.bsky.feed.defs#skeletonFeedPost",
+                post: e.subjectId,
+                reason: {
+                    $type: "app.bsky.feed.defs#skeletonReasonRepost",
+                    repost: e.uri
+                }
+            }
+        }
+    }
+
+    const skeleton = posts.map(queryToSkeletonElement)
+
+    const newCursor = posts.length < limit ? undefined : min(posts, p => new Date(p.created_at).getTime())?.created_at.toISOString()
+
+    return {
+        skeleton,
+        cursor: newCursor
+    }
+}
+
+
+export const getFollowingFeedSkeleton: (filter: FollowingFeedFilter, format: FeedFormatOption) => GetSkeletonProps = (filter, format) => async (ctx, agent, data, cursor) => {
+    if(filter == "Todos" && format == "Todos"){
+        return getFollowingFeedSkeletonAll(ctx, agent, data, cursor)
+    } else {
+        return getFollowingFeedSkeletonOnlyCA(format)(ctx, agent, data, cursor)
     }
 }
 
@@ -281,8 +395,8 @@ export function filterFeed(feed: FeedViewContent[], allowTopicVersions: boolean 
 }
 
 
-export const followingFeedPipeline: FeedPipelineProps = {
-    getSkeleton: getFollowingFeedSkeleton,
+export const getFollowingFeedPipeline: (filter?: FollowingFeedFilter, format?: FeedFormatOption) => FeedPipelineProps = (filter="Todos", format="Todos") => ({
+    getSkeleton: getFollowingFeedSkeleton(filter, format),
     sortKey: rootCreationDateSortKey,
     filter: filterFeed
-}
+})

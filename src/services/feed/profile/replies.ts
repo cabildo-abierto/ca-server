@@ -20,6 +20,7 @@ const getRepliesProfileFeedSkeletonBsky = async (agent: SessionAgent, data: Data
 
 export const getRepliesProfileFeedSkeleton = (did: string) : GetSkeletonProps => {
     return async (ctx, agent, data, cursor) => {
+        if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
 
         let [bskySkeleton, CASkeleton] = await Promise.all([
             getRepliesProfileFeedSkeletonBsky(agent, data, did, cursor),
