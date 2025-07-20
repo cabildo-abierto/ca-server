@@ -10,7 +10,7 @@ import {sessionAgent} from "#/utils/session-agent";
 import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration";
 import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation";
 import {updateTopicContributionsHandler} from "#/services/wiki/contributions";
-import {getStatsDashboard} from "#/services/admin/stats";
+import {getActivityStats, getStatsDashboard} from "#/services/admin/stats";
 import {getRepoCounts} from "#/services/admin/repo";
 import {startJob} from "#/jobs/worker";
 import {getUsersSyncStatus} from "#/services/admin/sync";
@@ -123,6 +123,8 @@ export const adminRoutes = (ctx: AppContext) => {
     router.post('/update-topic-contributions/:id', makeHandler(ctx, updateTopicContributionsHandler))
 
     router.get("/stats-dashboard", makeAdminHandler(ctx, getStatsDashboard))
+
+    router.get("/activity-stats", makeAdminHandler(ctx, getActivityStats))
 
     router.get("/repo/:handleOrDid", makeAdminHandler(ctx, getRepoCounts))
 

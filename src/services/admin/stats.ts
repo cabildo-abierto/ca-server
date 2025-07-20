@@ -7,6 +7,7 @@ import {SessionAgent} from "#/utils/session-agent";
 import {getUsersWithReadSessions} from "#/services/monetization/user-months";
 import {isWeeklyActiveUser} from "#/services/monetization/donations";
 import {count, listOrderDesc, sortByKey} from "#/utils/arrays";
+import {sql} from "kysely";
 
 
 export type StatsDashboard = {
@@ -225,4 +226,50 @@ export const getStatsDashboard: CAHandler<{}, StatsDashboard> = async (ctx, agen
     }
 }
 
+
+export type ActivityStats = {
+    did: string
+    handle: string
+    articles: number
+    topicVersions: number
+    enDiscusion: number
+}
+
+
+export const getActivityStats: CAHandler<{}, ActivityStats[]> = async (ctx, agent, {}) => {
+
+    const results = await ctx.kysely
+        .selectFrom('User')
+        .leftJoin('Record', 'Record.authorId', 'User.did')
+        .innerJoin("Content", "Content.uri", "Record.uri")
+        .select([
+            'User.did',
+            'User.handle',
+            ctx.kysely.fn
+                .count<number>(sql`case when "Record".collection = 'app.bsky.feed.post' and 'ca:en discusión' = ANY("Content"."selfLabels") then 1 end`)
+                .as('enDiscusion'),
+            ctx.kysely.fn
+                .count<number>(sql`case when "Record".collection = 'ar.cabildoabierto.feed.article' then 1 end`)
+                .as('articles'),
+            ctx.kysely.fn
+                .count<number>(sql`case when "Record".collection = 'ar.cabildoabierto.wiki.topicVersion' then 1 end`)
+                .as('topicVersions')
+        ])
+        .where('User.inCA', '=', true)
+        .groupBy(['User.did', 'User.handle'])
+        .execute()
+
+    const stats: ActivityStats[] = []
+
+    results.forEach(s => {
+        if(s.handle){
+            stats.push({
+                ...s,
+                handle: s.handle
+            })
+        }
+    })
+
+    return {data: stats}
+}
 
