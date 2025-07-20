@@ -484,6 +484,16 @@ model Notification {
 }
 
 
+model Meeting {
+  id          String   @id @default(cuid())
+  date        DateTime
+  title       String
+  url         String
+  description String
+  show        Boolean @default(false)
+}
+
+
 enum EditorStatus {
   Beginner
   Editor

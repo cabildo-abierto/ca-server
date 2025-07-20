@@ -295,9 +295,6 @@ export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?:
     const {data: currentVersionId} = await cached(ctx, ["currentVersion", id], async () => getTopicCurrentVersionFromDB(ctx, id))
     let uri: string
     if (!currentVersionId) {
-        if(!agent.hasSession()){
-
-        }
         console.log(`Warning: Current version not set for topic ${id}.`)
         const history = await getTopicHistory(ctx.db, id, agent.hasSession() ? agent : undefined)
 

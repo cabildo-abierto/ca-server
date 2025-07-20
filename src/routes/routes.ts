@@ -59,6 +59,7 @@ import {
     sendMessage
 } from "#/services/messaging/conversations";
 import {getDraft, getDrafts, saveDraft } from '#/services/write/drafts';
+import { getNextMeeting } from '#/services/admin/meetings';
 
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
@@ -377,6 +378,8 @@ export const createRouter = (ctx: AppContext) => {
     router.get('/draft/:id', makeHandler(ctx, getDraft))
 
     router.post('/draft', makeHandler(ctx, saveDraft))
+
+    router.get("/next-meeting", makeHandler(ctx, getNextMeeting))
 
     router.use(adminRoutes(ctx))
 

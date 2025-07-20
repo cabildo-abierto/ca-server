@@ -424,13 +424,7 @@ export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOr
         getFollowxFromBsky(agent, did, data, kind)
     ])
 
-    console.log("caUsers", caUsers)
-
-    console.log("bskyUsers", bskyUsers)
-
     const userList = unique([...caUsers, ...bskyUsers])
-
-    console.log("userList", userList)
 
     await data.fetchUsersHydrationData(userList)
 

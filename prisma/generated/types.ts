@@ -147,6 +147,14 @@ export type InviteCode = {
     recommenderId: string | null;
     created_at: Generated<Timestamp | null>;
 };
+export type Meeting = {
+    id: string;
+    date: Timestamp;
+    title: string;
+    url: string;
+    description: string;
+    show: Generated<boolean>;
+};
 export type Notification = {
     id: string;
     created_at: Generated<Timestamp>;
@@ -322,6 +330,7 @@ export type DB = {
     Follow: Follow;
     HasReacted: HasReacted;
     InviteCode: InviteCode;
+    Meeting: Meeting;
     Notification: Notification;
     PaymentPromise: PaymentPromise;
     Post: Post;
