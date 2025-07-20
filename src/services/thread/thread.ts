@@ -1,38 +1,52 @@
 import {ThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
-import {getCollectionFromUri, getUri, isArticle, isDataset, isPost} from "#/utils/uri";
-import {FeedSkeleton} from "#/services/feed/feed";
+import {getCollectionFromUri, getDidFromUri, getUri, isArticle, isDataset, isPost} from "#/utils/uri";
 import {
     hydrateThreadViewContent,
+    threadPostRepliesSortKey,
     ThreadSkeleton
 } from "#/services/hydration/hydrate";
-import {unique} from "#/utils/arrays";
 import {isThreadViewPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {CAHandler} from "#/utils/handler";
 import {handleToDid} from "#/services/user/users";
 import {Dataplane} from "#/services/hydration/dataplane";
+import {ThreadViewPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
+import {listOrderDesc, sortByKey} from "#/utils/arrays";
 
 
-async function getThreadRepliesSkeletonForPostFromBsky(ctx: AppContext, agent: SessionAgent, uri: string){
-    try {
-        const {data} = await agent.bsky.getPostThread({uri})
-        const thread = isThreadViewPost(data.thread) ? data.thread : null
-
-        const bskySkeleton = thread && thread.replies ? thread.replies
-            .map(r => isThreadViewPost(r) ? {post: r.post.uri} : null)
-            .filter(x => x != null) : []
-
-        return unique(bskySkeleton, (x => x.post))
-    } catch {
-        return []
+function threadViewPostToThreadSkeleton(thread: ThreadViewPost, isAncestor: boolean = false): ThreadSkeleton {
+    return {
+        post: thread.post.uri,
+        replies: !isAncestor && thread.replies ? sortByKey(
+            thread.replies.filter(isThreadViewPost),
+            threadPostRepliesSortKey(getDidFromUri(thread.post.uri)),
+            listOrderDesc
+        ).map(r => threadViewPostToThreadSkeleton(r)) : undefined,
+        parent: thread.parent && isThreadViewPost(thread.parent) ? threadViewPostToThreadSkeleton(thread.parent, true) : undefined
     }
 }
 
 
-export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, agent: SessionAgent, uri: string){
-    // necesario en principio solo porque getPostThread de Bsky no funciona con posts que tienen selection quote
-    return (await ctx.db.post.findMany({
+async function getThreadRepliesSkeletonForPostFromBsky(ctx: AppContext, agent: SessionAgent, uri: string, dataplane: Dataplane){
+    try {
+        const {data} = await agent.bsky.getPostThread({uri})
+        const thread = isThreadViewPost(data.thread) ? data.thread : null
+
+        if(thread){
+            dataplane.saveDataFromPostThread(thread, true)
+        }
+
+        return thread ? threadViewPostToThreadSkeleton(thread) : {post: uri}
+    } catch {
+        return null
+    }
+}
+
+
+export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, agent: SessionAgent, uri: string): Promise<ThreadSkeleton> {
+    // necesario solo porque getPostThread de Bsky no funciona con posts que tienen selection quote
+    const replies = (await ctx.db.post.findMany({
         select: {
             uri: true
         },
@@ -41,21 +55,25 @@ export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, age
         },
         take: 20
     })).map(x => ({post: x.uri}))
+    return {
+        post: uri,
+        replies
+    }
 }
 
 
-async function getThreadRepliesSkeletonForPost(ctx: AppContext, agent: SessionAgent, uri: string){
-    const [repliesBsky, repliesCA] = await Promise.all([
-        getThreadRepliesSkeletonForPostFromBsky(ctx, agent, uri),
+async function getThreadSkeletonForPost(ctx: AppContext, agent: SessionAgent, uri: string, data: Dataplane): Promise<ThreadSkeleton> {
+    const [skeletonBsky, skeletonCA] = await Promise.all([
+        getThreadRepliesSkeletonForPostFromBsky(ctx, agent, uri, data),
         getThreadRepliesSkeletonForPostFromCA(ctx, agent, uri)
     ])
 
-    return unique([...repliesBsky, ...repliesCA], (x => x.post))
+    return skeletonBsky ?? skeletonCA
 }
 
 
-export async function getThreadRepliesSkeletonForArticle(ctx: AppContext, agent: SessionAgent, uri: string): Promise<FeedSkeleton> {
-    return (await ctx.db.record.findMany({
+export async function getThreadSkeletonForArticle(ctx: AppContext, agent: SessionAgent, uri: string): Promise<ThreadSkeleton> {
+    const replies = (await ctx.db.record.findMany({
         select: {
             uri: true
         },
@@ -67,20 +85,25 @@ export async function getThreadRepliesSkeletonForArticle(ctx: AppContext, agent:
             }
         }
     })).map(x => ({post: x.uri}))
+
+    return {
+        post: uri,
+        replies
+    }
 }
 
 
-export async function getThreadRepliesSkeleton(ctx: AppContext, agent: SessionAgent, uri: string): Promise<FeedSkeleton> {
+export async function getThreadSkeleton(ctx: AppContext, agent: SessionAgent, uri: string, data: Dataplane): Promise<ThreadSkeleton> {
     const collection = getCollectionFromUri(uri)
 
     if(isPost(collection)){
-        return await getThreadRepliesSkeletonForPost(ctx, agent, uri)
+        return await getThreadSkeletonForPost(ctx, agent, uri, data)
     } else if(isArticle(collection)) {
-        return await getThreadRepliesSkeletonForArticle(ctx, agent, uri)
+        return await getThreadSkeletonForArticle(ctx, agent, uri)
     } else if(isDataset(collection)){
-        return []
+        return {post: uri}
     } else {
-        throw Error("Replies skeleton not implemented for:" + collection)
+        throw Error("Thread skeleton not implemented for:" + collection)
     }
 }
 
@@ -91,16 +114,38 @@ export const getThread: CAHandler<{params: {handleOrDid: string, collection: str
     if(!did) {
         return {error: "No se encontró el autor."}
     }
+    const data = new Dataplane(ctx, agent)
 
     const uri = getUri(did, collection, rkey)
-    const replies = await getThreadRepliesSkeleton(ctx, agent, uri)
-    const skeleton: ThreadSkeleton = {post: uri, replies}
+    const skeleton = await getThreadSkeleton(ctx, agent, uri, data)
 
-    const data = new Dataplane(ctx, agent)
     await data.fetchThreadHydrationData(skeleton)
 
-    const thread = hydrateThreadViewContent({post: uri, replies}, data, true)
+    let thread = hydrateThreadViewContent(skeleton, data, true)
 
     return thread ? {data: thread} : {error: "Ocurrió un error al obtener el contenido."}
 }
 
+
+export function getUrisFromThreadSkeleton(skeleton: ThreadSkeleton): string[] {
+    const ancestors: string[] = []
+    let parent = skeleton.parent
+    while(parent){
+        ancestors.push(parent.post)
+        parent = parent.parent
+    }
+
+    return [
+        ...getUrisFromThreadSkeletonSubtree(skeleton),
+        ...ancestors
+    ]
+}
+
+
+export function getUrisFromThreadSkeletonSubtree(skeleton: ThreadSkeleton): string[] {
+    return [
+        skeleton.post,
+        ...(skeleton.replies?.flatMap(getUrisFromThreadSkeletonSubtree)
+            .filter(x => x != null)) ?? []
+    ]
+}

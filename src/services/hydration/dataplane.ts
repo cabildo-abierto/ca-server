@@ -27,8 +27,8 @@ import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/
 import {
     FeedViewPost,
     isPostView, isReasonRepost,
-    isSkeletonReasonRepost,
-    PostView
+    isSkeletonReasonRepost, isThreadViewPost,
+    PostView, ThreadViewPost
 } from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {fetchTextBlobs} from "#/services/blob";
 import {Prisma} from "@prisma/client";
@@ -48,6 +48,7 @@ import {
     ColumnFilter,
     isColumnFilter
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
+import {getUrisFromThreadSkeleton} from "#/services/thread/thread";
 
 function getUriFromEmbed(embed: PostView["embed"]): string | null {
     if (isEmbedRecordView(embed)) {
@@ -603,13 +604,9 @@ export class Dataplane {
     }
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
-        const expanded = await this.expandUrisWithRepliesAndReposts([{post: skeleton.post}])
-        const c = getCollectionFromUri(skeleton.post)
+        const uris = getUrisFromThreadSkeleton(skeleton)
 
-        const uris = [
-            ...(skeleton.replies ? skeleton.replies.map(({post}) => post) : []),
-            ...expanded
-        ]
+        const c = getCollectionFromUri(skeleton.post)
 
         await Promise.all([
             this.fetchPostAndArticleViewsHydrationData(uris),
@@ -890,5 +887,29 @@ export class Dataplane {
         datasets.forEach((d, index) => {
             this.topicsDatasets.set(getObjectKey(manyFilters[index]), d)
         })
+    }
+
+    saveDataFromPostThread(thread: ThreadViewPost, includeParents: boolean, excludeChild?: string) {
+        if(isPostView(thread.post)){
+            this.bskyPosts.set(thread.post.uri, thread.post)
+            this.bskyUsers.set(thread.post.author.did, {
+                ...thread.post.author,
+                $type: "app.bsky.actor.defs#profileViewBasic"
+            })
+
+            if(includeParents && thread.parent && isThreadViewPost(thread.parent)){
+                this.saveDataFromPostThread(thread.parent, true, thread.post.uri)
+            }
+
+            if(thread.replies){
+                thread.replies.forEach(r => {
+                    if(isThreadViewPost(r) && isPostView(r.post)){
+                        if(r.post.uri != excludeChild){
+                            this.saveDataFromPostThread(r, true)
+                        }
+                    }
+                })
+            }
+        }
     }
 }

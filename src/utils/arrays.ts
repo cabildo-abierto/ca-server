@@ -6,6 +6,7 @@ export function getObjectKey(obj: any): string {
     return stableStr ? objectHash(stableStr) : "null"
 }
 
+
 export function union<T>(s: Set<T>, t: Set<T>): Set<T> {
     const m = new Set<T>(s)
     t.forEach(x => {m.add(x)})
@@ -139,4 +140,22 @@ export function gett<K, V>(map: Map<K, V>, key: K): V {
         throw new Error(`Key not found in map: ${String(key)}`)
     }
     return value;
+}
+
+
+export const orderStrAsc = (a: string, b: string) => {
+    return b > a ? 1 : -1
+}
+
+export const orderDateAsc = (a: Date, b: Date) => {
+    return b.getTime() - a.getTime()
+}
+
+export const orderNumberAsc = (a: number, b: number) => {
+    return b - a
+}
+
+
+export const orderNumberDesc = (a: number, b: number) => {
+    return a - b
 }

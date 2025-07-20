@@ -19,7 +19,8 @@ import {
     Main as SelectionQuoteEmbed,
     View as SelectionQuoteEmbedView
 } from "#/lex-server/types/ar/cabildoabierto/embed/selectionQuote"
-import {creationDateSortKey} from "#/services/feed/utils";
+import {isPostView, isThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {isPostView as isBskyPostView} from "#/lex-api/types/app/bsky/feed/defs"
 import {Dataplane} from "#/services/hydration/dataplane";
 import {hydrateEmbedViews, hydrateTopicViewBasicFromUri} from "#/services/wiki/topics";
 import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
@@ -40,7 +41,12 @@ import {
     Main as CARecordEmbed,
     View as CARecordEmbedView
 } from "#/lex-api/types/ar/cabildoabierto/embed/record"
-import {isSkeletonReasonRepost} from "@atproto/api/dist/client/types/app/bsky/feed/defs"
+import {
+    BlockedPost,
+    isSkeletonReasonRepost,
+    isThreadViewPost,
+    ThreadViewPost
+} from "@atproto/api/dist/client/types/app/bsky/feed/defs"
 import {hydrateProfileViewBasic} from "#/services/hydration/profile"
 import removeMarkdown from "remove-markdown"
 import {
@@ -477,27 +483,58 @@ export async function hydrateFeed(skeleton: FeedSkeleton, data: Dataplane): Prom
 
 export type ThreadSkeleton = {
     post: string
-    replies?: { post: string }[]
+    replies?: ThreadSkeleton[]
+    parent?: ThreadSkeleton
 }
 
+
+type ThreadViewContentReply = $Typed<ThreadViewContent> | $Typed<NotFoundPost> | $Typed<BlockedPost> | {$type: string}
+
+
+export const threadRepliesSortKey = (authorId: string) => (r: ThreadViewContentReply) => {
+    return isThreadViewContent(r) && isPostView(r.content) && r.content.author.did == authorId ?
+        [1, -new Date(r.content.indexedAt).getTime()] : [0, 0]
+}
+
+
+export const threadPostRepliesSortKey = (authorId: string) => (r: ThreadViewPost) => {
+    return isThreadViewPost(r) &&
+        isBskyPostView(r.post) &&
+        r.post.author.did == authorId ?
+        [1, -new Date(r.post.indexedAt).getTime()] : [0, 0]
+}
 
 export function hydrateThreadViewContent(skeleton: ThreadSkeleton, data: Dataplane, includeReplies: boolean = false): $Typed<ThreadViewContent> | null {
     const content = hydrateContent(skeleton.post, data, true).data
     if (!content) return null
 
+    const authorDid = getDidFromUri(skeleton.post)
+
     let replies: $Typed<ThreadViewContent>[] | undefined
     if (includeReplies && skeleton.replies) {
         replies = skeleton.replies
-            .map((r) => (hydrateThreadViewContent(r, data, false)))
+            .map((r) => (hydrateThreadViewContent(r, data, true)))
             .filter(x => x != null)
 
-        replies = sortByKey(replies, creationDateSortKey, listOrderDesc)
+        replies = sortByKey(replies, threadRepliesSortKey(authorDid), listOrderDesc)
+    }
+
+    let parent: $Typed<ThreadViewContent> | undefined
+    if(skeleton.parent){
+        const hydratedParent = hydrateThreadViewContent(skeleton.parent, data, false)
+        if(hydratedParent) {
+            parent = {
+                ...hydratedParent,
+                $type: "ar.cabildoabierto.feed.defs#threadViewContent"
+            }
+        }
     }
 
     return {
         $type: "ar.cabildoabierto.feed.defs#threadViewContent",
         content,
-        replies
+        replies,
+        parent
     }
 }
 
