@@ -43,31 +43,26 @@ const getTopicRepliesSkeleton = async (ctx: AppContext, id: string) => {
 
 
 const getTopicMentionsSkeleton = async (ctx: AppContext, agent: Agent, data: Dataplane, id: string): Promise<FeedSkeleton> => {
-    const mentions = await ctx.db.record.findMany({
-        select: {
-            uri: true
-        },
-        where: {
-            content: {
-                references: {
-                    some: {
-                        referencedTopicId: id
-                    }
-                }
-            },
-            collection: {
-                in: [
-                    "ar.com.cabildoabierto.article",
-                    "app.bsky.feed.post",
-                    "ar.cabildoabierto.feed.article"
-                ]
-            }
-        },
-        orderBy: {
-            createdAt: "desc"
-        },
-        take: 25
-    })
+    const collections = [
+        "app.bsky.feed.post",
+        "ar.cabildoabierto.feed.article"
+    ]
+
+    const mentions = await ctx.kysely
+        .selectFrom("Record")
+        .select(["Record.uri"])
+        .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
+        .leftJoin("Post", "Post.uri", "Record.uri")
+        .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
+        .where("Reference.referencedTopicId", "=", id)
+        .where("Record.collection", "in", collections)
+        .where(eb => eb.or([
+            eb("TopicVersion.topicId", "!=", id),
+            eb("TopicVersion.uri", "is", null)
+        ]))
+        .orderBy("created_at", "desc")
+        .limit(25)
+        .execute()
     return mentions.map(r => ({post: r.uri}))
 }
 
