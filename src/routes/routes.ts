@@ -6,7 +6,7 @@ import {searchTopics, searchUsers} from "#/services/search/search";
 import {createArticle} from "#/services/write/article";
 import {getIronSession} from "iron-session";
 import {env} from "#/lib/env";
-import {createAccessRequest, login} from "#/services/user/access";
+import {createAccessRequest, getInviteCodesToShare, login} from "#/services/user/access";
 import {getFeedByKind} from "#/services/feed/feed";
 import {getProfileFeed} from "#/services/feed/profile/profile";
 import {
@@ -380,6 +380,8 @@ export const createRouter = (ctx: AppContext) => {
     router.post('/draft', makeHandler(ctx, saveDraft))
 
     router.get("/next-meeting", makeHandler(ctx, getNextMeeting))
+
+    router.get("/invite-codes-to-share", makeHandler(ctx, getInviteCodesToShare))
 
     router.use(adminRoutes(ctx))
 

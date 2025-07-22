@@ -246,3 +246,89 @@ export const markAccessRequestSent: CAHandler<{params: {id: string}}, {}> = asyn
 
     return {data: {}}
 }
+
+
+export const getInviteCodesToShare: CAHandler<{}, {code: string}[]> = async (ctx, agent, {}) => {
+    const codes = await ctx.kysely
+        .selectFrom("InviteCode")
+        .select("code")
+        .where("recommenderId", "=", agent.did)
+        .where("usedByDid", "is", null)
+        .execute()
+
+    if(codes.length == 0){
+        const allCodes = await ctx.kysely
+            .selectFrom("InviteCode")
+            .select("code")
+            .where("recommenderId", "=", agent.did)
+            .execute()
+        if(allCodes.length < 3){
+            const values: {
+                code: string
+                recommenderId: string
+                created_at: Date
+            }[] = []
+            for(let i = 0; i < 3 - allCodes.length; i++){
+                const code = uuidv4()
+                values.push({
+                    code,
+                    recommenderId: agent.did,
+                    created_at: new Date()
+                })
+            }
+            if(values.length > 0){
+                await ctx.kysely
+                    .insertInto("InviteCode")
+                    .values(values)
+                    .execute()
+            }
+            return {
+                data: values.map(c => ({code: c.code}))
+            }
+        }
+    }
+
+    return {
+        data: codes
+    }
+}
+
+
+export const assignInviteCodesToUsers = async (ctx: AppContext) => {
+
+    await ctx.kysely.transaction().execute(async (db) => {
+        const users = await db
+            .selectFrom("User")
+            .leftJoin("InviteCode", "InviteCode.recommenderId", "User.did")
+            .select([
+                "User.did",
+                (eb) => eb.fn.count<number>("InviteCode.code").as("codeCount"),
+            ])
+            .where("inCA", "=", true)
+            .groupBy("User.did")
+            .execute()
+
+        const values: {
+            code: string
+            recommenderId: string
+            created_at: Date
+        }[] = []
+        users.forEach(u => {
+            for(let i = 0; i < 3 - u.codeCount; i++){
+                const code = uuidv4()
+                values.push({
+                    code,
+                    recommenderId: u.did,
+                    created_at: new Date()
+                })
+            }
+        })
+        console.log(values)
+        if(values.length > 0){
+            await db
+                .insertInto("InviteCode")
+                .values(values)
+                .execute()
+        }
+    })
+}

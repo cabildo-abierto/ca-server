@@ -14,6 +14,7 @@ import {Queue} from "bullmq";
 import Redis from "ioredis";
 import {createNotificationJob, createNotificationsBatchJob} from "#/services/notifications/notifications";
 import {CAHandler} from "#/utils/handler";
+import {assignInviteCodesToUsers} from "#/services/user/access";
 
 const mins = 60 * 1000
 
@@ -107,6 +108,7 @@ export class CAWorker {
         this.registerJob("restart-references-last-update", () => restartReferenceLastUpdate(ctx))
         this.registerJob("restart-interactions-last-update", () => restartLastContentInteractionsUpdate(ctx))
         this.registerJob("clean-not-ca-references", () => cleanNotCAReferences(ctx))
+        this.registerJob("assign-invite-codes", () => assignInviteCodesToUsers(ctx))
 
         await this.removeAllRepeatingJobs()
         await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)
