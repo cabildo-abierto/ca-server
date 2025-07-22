@@ -39,7 +39,7 @@ import {createTopicVersion} from "#/services/write/topic";
 import path from "path";
 import {cancelEditVote, voteEdit} from "#/services/wiki/votes";
 import { adminRoutes } from './admin-routes';
-import { fetchURLMetadata } from '#/services/write/metadata';
+import { fetchURLMetadata, getContentMetadata } from '#/services/write/metadata';
 import {getDataset, getDatasets, getTopicsDatasetHandler } from '#/services/dataset/read';
 import { createDataset } from '#/services/dataset/write';
 import {searchContents} from "#/services/feed/search";
@@ -382,6 +382,8 @@ export const createRouter = (ctx: AppContext) => {
     router.get("/next-meeting", makeHandler(ctx, getNextMeeting))
 
     router.get("/invite-codes-to-share", makeHandler(ctx, getInviteCodesToShare))
+
+    router.get("/content-metadata/:did/:collection/:rkey", makeHandlerNoAuth(ctx, getContentMetadata))
 
     router.use(adminRoutes(ctx))
 

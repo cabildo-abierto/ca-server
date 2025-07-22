@@ -804,23 +804,25 @@ export async function processDeleteReactionsBatch(ctx: AppContext, uris: string[
             )
             .execute()).map(u => u.uri)
 
-        if (type == "ar.cabildoabierto.wiki.voteReject") {
-            await db
-                .deleteFrom("VoteReject")
-                .where("uri", "in", sameSubjectUris)
-                .execute()
+        if(sameSubjectUris.length > 0) {
+            if (type == "ar.cabildoabierto.wiki.voteReject") {
+                await db
+                    .deleteFrom("VoteReject")
+                    .where("uri", "in", sameSubjectUris)
+                    .execute()
+            }
+
+            await db.deleteFrom("TopicInteraction").where("recordId", "in", sameSubjectUris).execute()
+
+            await db.deleteFrom("Notification").where("causedByRecordId", "in", sameSubjectUris).execute()
+
+            await db.deleteFrom("Reaction").where("uri", "in", sameSubjectUris).execute()
+
+            for(const u of sameSubjectUris){
+                await db.deleteFrom("Record").where("uri", "in", [u]).execute()
+            }
+            //await db.deleteFrom("Record").where("uri", "in", sameSubjectUris).execute()
         }
-
-        await db.deleteFrom("TopicInteraction").where("recordId", "in", sameSubjectUris).execute()
-
-        await db.deleteFrom("Notification").where("causedByRecordId", "in", sameSubjectUris).execute()
-
-        await db.deleteFrom("Reaction").where("uri", "in", sameSubjectUris).execute()
-
-        for(const u of sameSubjectUris){
-            await db.deleteFrom("Record").where("uri", "in", [u]).execute()
-        }
-        //await db.deleteFrom("Record").where("uri", "in", sameSubjectUris).execute()
 
         if (type == "ar.cabildoabierto.wiki.voteReject" || type == "ar.cabildoabierto.wiki.voteAccept") {
             const topicIds = (await db
