@@ -176,6 +176,7 @@ export class Dataplane {
     requires: Map<string, string[]> = new Map() // mapea un uri a una lista de uris que sabemos que ese contenido requiere que fetcheemos
     notifications: Map<string, NotificationQueryResult> = new Map()
     topicsDatasets: Map<string, {id: string, props: TopicProp[]}[]> = new Map()
+    rootCreationDates: Map<string, Date> = new Map()
 
     constructor(ctx: AppContext, agent?: SessionAgent | NoSessionAgent) {
         this.ctx = ctx
@@ -469,8 +470,26 @@ export class Dataplane {
         const expandedUris = await this.expandUrisWithRepliesAndReposts(skeleton)
         await Promise.all([
             this.fetchPostAndArticleViewsHydrationData(expandedUris),
-            this.fetchRepostsHydrationData(expandedUris)
+            this.fetchRepostsHydrationData(expandedUris),
+            this.fetchRootCreationDate(skeleton.map(s => s.post))
         ])
+    }
+
+
+    async fetchRootCreationDate(uris: string[]){
+        uris = uris.filter(u => isPost(getCollectionFromUri(u)))
+        if(uris.length == 0) return
+
+        const rootCreationDates = await this.ctx.kysely
+            .selectFrom("Post")
+            .innerJoin("Record", "Record.uri", "Post.rootId")
+            .select(["Post.uri", "Record.created_at"])
+            .where("Post.uri", "in", uris)
+            .execute()
+
+        rootCreationDates.forEach(r => {
+            this.rootCreationDates.set(r.uri, r.created_at)
+        })
     }
 
 

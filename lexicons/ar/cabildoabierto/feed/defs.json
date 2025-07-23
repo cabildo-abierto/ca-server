@@ -150,6 +150,10 @@
         "threadgate": {
           "type": "ref",
           "ref": "app.bsky.feed.defs#threadgateView"
+        },
+        "rootCreationDate": {
+          "type": "string",
+          "format": "datetime"
         }
       }
     },

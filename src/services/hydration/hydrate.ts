@@ -345,6 +345,8 @@ function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView
         return {error: "No se encontraron los datos del autor."}
     }
 
+    const rootCreationDate = data.rootCreationDates?.get(uri)
+
     return {
         data: {
             ...post,
@@ -362,7 +364,8 @@ function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView
             bskyLikeCount: post.likeCount,
             bskyRepostCount: post.repostCount,
             bskyQuoteCount: post.quoteCount,
-            replyCount: post.replyCount
+            replyCount: post.replyCount,
+            rootCreationDate: rootCreationDate?.toISOString()
         }
     }
 }

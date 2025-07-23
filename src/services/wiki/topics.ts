@@ -1,5 +1,5 @@
 import {fetchTextBlobs} from "../blob";
-import {getUri, splitUri} from "#/utils/uri";
+import {getUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {CAHandler, CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
 import {TopicProp, TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
@@ -367,7 +367,6 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
     data?: TopicView,
     error?: string
 }> => {
-    const {did, rkey} = splitUri(uri)
     const topic = await ctx.db.record.findFirst({
         select: {
             uri: true,
@@ -413,8 +412,7 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
             }
         },
         where: {
-            authorId: did, // TO DO: cuando esté estable la collection pasamos a usar uri
-            rkey: rkey
+            uri
         }
     })
 

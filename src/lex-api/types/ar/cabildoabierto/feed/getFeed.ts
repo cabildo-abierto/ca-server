@@ -16,10 +16,9 @@ const is$typed = _is$typed,
   validate = _validate
 const id = 'ar.cabildoabierto.feed.getFeed'
 
-export interface QueryParams {
+export type QueryParams = {
   feed?: string
 }
-
 export type InputSchema = undefined
 
 export interface OutputSchema {

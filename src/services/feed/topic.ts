@@ -113,10 +113,22 @@ export const getTopicVersionReplies = async (ctx: AppContext, agent: Agent, id: 
 }
 
 
+async function getTopicHistoryReferences(ctx: AppContext, id: string) {
+    return await ctx.kysely
+        .selectFrom("TopicVersion")
+        .innerJoin("Record", "Record.uri", "TopicVersion.uri")
+        .select(["TopicVersion.uri", "Record.created_at"])
+        .where("TopicVersion.topicId", "=", id)
+        .orderBy("Record.created_at", "desc")
+        .execute()
+}
+
+
 export const getTopicFeed: CAHandlerNoAuth<{ query: { i?: string, did?: string, rkey?: string } }, {
     mentions: FeedViewContent[],
     replies: FeedViewContent[],
-    topics: string[]
+    topics: string[],
+    history: {uri: string, created_at: Date}[]
 }> = async (ctx, agent, {query}) => {
     let {i: id, did, rkey} = query
     if(!id){
@@ -131,7 +143,7 @@ export const getTopicFeed: CAHandlerNoAuth<{ query: { i?: string, did?: string, 
     }
 
     try {
-        const [replies, mentions, topicMentions] = await Promise.all([
+        const [replies, mentions, topicMentions, history] = await Promise.all([
             getTopicVersionReplies(ctx, agent, id),
             getFeed({
                 ctx,
@@ -141,7 +153,8 @@ export const getTopicFeed: CAHandlerNoAuth<{ query: { i?: string, did?: string, 
                     sortKey: creationDateSortKey
                 }
             }),
-            getTopicMentionsInTopics(ctx, id)
+            getTopicMentionsInTopics(ctx, id),
+            getTopicHistoryReferences(ctx, id)
         ])
 
         if(!mentions.data) return {error: mentions.error}
@@ -150,7 +163,8 @@ export const getTopicFeed: CAHandlerNoAuth<{ query: { i?: string, did?: string, 
             data: {
                 mentions: mentions.data.feed,
                 replies: replies.data,
-                topics: topicMentions.map(t => t.topicVersion?.topicId).filter(x => x != null)
+                topics: topicMentions.map(t => t.topicVersion?.topicId).filter(x => x != null),
+                history
             }
         }
     } catch (e) {
