@@ -7,6 +7,7 @@ import {processArticle, processPost} from "#/services/sync/process-event";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 import {$Typed} from "@atproto/api";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
+import {sql} from "kysely";
 
 
 function getEnDiscusionStartDate(time: EnDiscusionTime){
@@ -37,28 +38,33 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
     const collections = format == "Artículos" ? ["ar.cabildoabierto.feed.article"] : ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
 
     if(metric == "Me gustas"){
-        let skeleton = await ctx.db.record.findMany({
-            select: {
-                uri: true,
-                uniqueLikesCount: true,
-                createdAt: true
-            },
-            where: {
-                content: {
-                    selfLabels: {
-                        has: "ca:en discusión"
-                    }
-                },
-                collection: {
-                    in: collections
-                }
-            }
-        })
+        let skeleton = await ctx.kysely
+            .selectFrom("Record")
+            .select([
+                "Record.uri",
+                "Record.uniqueLikesCount",
+                "Record.created_at",
+                (eb) => eb
+                    .selectFrom("Reaction")
+                    .whereRef("Reaction.subjectId", "=", "Record.uri")
+                    .leftJoin("Record as ReactionRecord", "Reaction.uri", "ReactionRecord.uri")
+                    .where("ReactionRecord.collection", "=", "app.bsky.feed.like")
+                    .whereRef("ReactionRecord.authorId", "=", "Record.authorId")
+                    .select(eb.fn.countAll().as("count"))
+                    .as("reactionsCount")
+            ])
+            .innerJoin("Content", "Record.uri", "Content.uri")
+            .where("Record.collection", "in", collections)
+            .where(sql`Content.selfLabels @> ARRAY['ca: en discusión']::text[]`)
+            .execute()
+        
+        console.log("en discusion skeleton", skeleton)
+
         skeleton = sortByKey(skeleton, e => {
             return [
-                e.createdAt > startDate ? 1 : 0,
+                e.created_at > startDate ? 1 : 0,
                 e.uniqueLikesCount ?? 0,
-                e.createdAt.getTime()
+                e.created_at.getTime()
             ]
         }, listOrderDesc)
         return {
@@ -102,7 +108,7 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
                 .map(e => ({post: e.uri})),
             cursor: undefined
         }
-    } else {
+    } else if(metric == "Popularidad relativa") {
         let skeleton = await ctx.db.record.findMany({
             select: {
                 uri: true,
