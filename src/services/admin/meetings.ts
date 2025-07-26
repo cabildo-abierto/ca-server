@@ -14,6 +14,7 @@ export const getNextMeeting: CAHandler<{}, NextMeeting> = async (ctx, agent, {})
     const meetings = await ctx.kysely
         .selectFrom("Meeting")
         .select(["Meeting.date", "Meeting.title", "Meeting.description", "Meeting.url", "Meeting.show"])
+        .where("Meeting.date", ">", new Date(Date.now()-1000*36000))
         .orderBy("Meeting.date", "desc")
         .limit(1)
         .execute()

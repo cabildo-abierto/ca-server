@@ -44,6 +44,9 @@ export async function updateReferencesForNewContents(ctx: AppContext) {
     const batchSize = 10000
     let curOffset = 0
     const synonymsMap = await getSynonymsToTopicsMap(ctx)
+
+    console.log("synonyms map", synonymsMap)
+
     const caUsers = await getCAUsersDids(ctx)
 
     while(true){
@@ -89,7 +92,7 @@ async function updateReferencesForContentsAndTopics(ctx: AppContext, contents: C
 export function getTopicsReferencedInText(text: string, synonymsMap: Map<string, {topics: Set<string>, regex: RegExp}>){
     const textCleaned = cleanText(text)
     const refs = new Map<string, number>
-    synonymsMap.values().forEach(({topics, regex}) => {
+    Array.from(synonymsMap.values()).forEach(({topics, regex}) => {
         const count = countSynonymInText(regex, textCleaned)
         if(count > 0){
             topics.forEach(t => {

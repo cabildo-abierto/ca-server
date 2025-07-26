@@ -38,10 +38,8 @@ async function createContentInteractions(ctx: AppContext) {
         console.log(`Updating topic interactions batch ${curOffset}`)
         const t1 = Date.now()
         const batchUris = await ctx.kysely.selectFrom("Record")
-            .leftJoin("Post", "Record.uri", "Post.uri")
-            .leftJoin("Reaction", "Record.uri", "Reaction.uri")
             .leftJoin("TopicVersion", "Record.uri", "TopicVersion.uri")
-            .select(["Record.uri", "Post.replyToId", "Reaction.subjectId", "TopicVersion.topicId"])
+            .select(["Record.uri", "TopicVersion.topicId"])
             .where("Record.CAIndexedAt", ">=", lastUpdate)
             .orderBy("Record.CAIndexedAt asc")
             .limit(batchSize)
@@ -56,16 +54,19 @@ async function createContentInteractions(ctx: AppContext) {
             .where("Reference.referencingContentId", "in", batchUris.map(u => u.uri))
             .execute()
 
-        const urisIncSubjects: string[] = [
-            ...batchUris.map(u => u.uri),
-            ...batchUris.map(u => u.replyToId),
-            ...batchUris.map(u => u.subjectId),
-        ].filter(x => x != null)
+        const batchReactionSubjectInteractions = await ctx.kysely
+            .selectFrom("TopicInteraction")
+            .innerJoin("Record", "Record.uri", "TopicInteraction.recordId")
+            .innerJoin("Reaction", "Reaction.subjectId", "Record.uri")
+            .select(["TopicInteraction.topicId", "Reaction.uri"])
+            .where("Reaction.uri", "in", batchUris.map(u => u.uri))
+            .execute()
 
         const batchReplyToInteractions = await ctx.kysely
             .selectFrom("TopicInteraction")
-            .select(["TopicInteraction.topicId", "TopicInteraction.recordId"])
-            .where("TopicInteraction.recordId", "in", urisIncSubjects)
+            .innerJoin("Post", "Post.replyToId", "TopicInteraction.recordId")
+            .select(["TopicInteraction.topicId", "Post.uri"])
+            .where("Post.uri", "in", batchUris.map(u => u.uri))
             .execute()
 
         let values: {recordId: string, topicId: string}[] = []
@@ -77,9 +78,16 @@ async function createContentInteractions(ctx: AppContext) {
             })
         })
 
+        batchReactionSubjectInteractions.forEach(i => {
+            values.push({
+                recordId: i.uri,
+                topicId: i.topicId,
+            })
+        })
+
         batchReplyToInteractions.forEach(i => {
             values.push({
-                recordId: i.recordId,
+                recordId: i.uri,
                 topicId: i.topicId,
             })
         })
