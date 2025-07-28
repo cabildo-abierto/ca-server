@@ -99,17 +99,8 @@ export function getTopicTitle(topic: {id: string, props?: TopicProp[]}): string 
 
 export function getTopicSynonyms(topic: {id: string, props?: TopicProp[]}): string[] {
     const s = getTopicProp("Sinónimos", topic.props)
-    const t = getTopicProp("Título", topic.props)
 
-    let synonyms = [topic.id]
-    if(s && isStringListProp(s.value)){
-        synonyms = [...synonyms, ...s.value.value]
-    }
-    if(t && isStringProp(t.value)) {
-        synonyms.push(t.value.value)
-    }
-
-    return unique(synonyms, cleanText)
+    return s && isStringListProp(s.value) ? unique(s.value.value, cleanText) : []
 }
 
 

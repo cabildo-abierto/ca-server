@@ -76,16 +76,20 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
     const viewer = hydrateViewer(e.uri, data)
     if (!author) return {error: "Ocurrió un error al cargar el contenido."}
 
+    const record = e.record ? JSON.parse(e.record) as ArticleRecord : undefined
+
     let text: string | null = null
-    if (e.content?.textBlobId) {
-        text = data.getFetchedBlob({cid: e.content?.textBlobId, authorId: authorId})
-    } else if (e.content?.text) {
+    let format: string | null = null
+    if(e.content?.text != null){
         text = e.content.text
+        format = e.content.format ?? null
+    } else if (e.content?.textBlobId) {
+        text = data.getFetchedBlob({cid: e.content?.textBlobId, authorId})
+        format = record?.format ?? null
     }
 
-    if (!text || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
+    if (text == null || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
 
-    const record = e.record ? JSON.parse(e.record) as ArticleRecord : undefined
     const embeds = hydrateEmbedViews(author.did, record?.embeds ?? [])
     const {summary, summaryFormat} = getArticleSummary(text, e.content?.format ?? undefined)
 
@@ -96,7 +100,7 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
             cid: e.cid,
             title: e.content.article.title,
             text,
-            format: e.content?.format ?? undefined,
+            format: format ?? undefined,
             summary,
             summaryFormat,
             author,
@@ -165,19 +169,24 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
     const author = hydrateProfileViewBasic(authorId, data)
     if (!author) return {error: "No se encontró el autor del contenido."}
 
+    const record = e.record ? JSON.parse(e.record) as ArticleRecord : undefined
+
     let text: string | null = null
-    if (e.content?.textBlobId) {
-        text = data.getFetchedBlob({cid: e.content?.textBlobId, authorId})
-    } else if (e.content?.text) {
+    let format: string | null = null
+    if(e.content?.text != null){
         text = e.content.text
+        format = e.content.format ?? null
+    } else if (e.content?.textBlobId) {
+        text = data.getFetchedBlob({cid: e.content?.textBlobId, authorId})
+        format = record?.format ?? null
     }
 
-    if (!text || !e.content || !e.content.article || !e.content.article.title) {
+    if (text == null || !e.content || !e.content.article || !e.content.article.title) {
         console.log(`No se encontraron los datos para hidratar el artículo (contenidos): ${uri}`, !text || !e.content || !e.content.article || !e.content.article.title)
         return {error: "Ocurrió un error al cargar el artículo."}
     }
 
-    const {summary, summaryFormat} = getArticleSummary(text, e.content?.format ?? undefined)
+    const {summary, summaryFormat} = getArticleSummary(text, format ?? undefined)
 
     return {
         data: {

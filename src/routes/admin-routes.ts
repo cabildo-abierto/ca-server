@@ -5,7 +5,11 @@ import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user";
 import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete";
 import {createInviteCodes, getAccessRequests, markAccessRequestSent} from "#/services/user/access";
 import {getUsers} from "#/services/user/users";
-import {getAllTopics} from "#/services/wiki/topics";
+import {
+    getAllTopics,
+    getTopicsInCategoryForBatchEditing,
+    getTopicsWhereTitleIsNotSetAsSynonym
+} from "#/services/wiki/topics";
 import {sessionAgent} from "#/utils/session-agent";
 import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration";
 import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation";
@@ -87,6 +91,16 @@ export const adminRoutes = (ctx: AppContext) => {
     router.get(
         "/users",
         makeAdminHandler(ctx, getUsers)
+    )
+
+    router.get(
+        "/category-topics/:cat",
+        makeAdminHandlerNoAuth(ctx, getTopicsInCategoryForBatchEditing)
+    )
+
+    router.get(
+        "/topics-not-selfsynonym",
+        makeAdminHandlerNoAuth(ctx, getTopicsWhereTitleIsNotSetAsSynonym)
     )
 
     router.post(

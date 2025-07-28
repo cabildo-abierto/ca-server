@@ -11,9 +11,12 @@ import {range} from "#/utils/arrays";
 
 
 export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (ctx, agent, {handle, code}) => {
-    if (!handle || !isValidHandle(handle)) {
+
+    if (!handle || !isValidHandle(handle.trim())) {
         return {error: "Nombre de usuario inválido."}
     }
+
+    handle = handle.trim()
 
     const caUsers = await getCAUsersHandles(ctx)
     if(!code){

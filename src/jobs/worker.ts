@@ -3,10 +3,15 @@ import {Worker} from 'bullmq';
 import {AppContext} from "#/index";
 import {syncAllUsers, syncUser} from "#/services/sync/sync-user";
 import {dbHandleToDid} from "#/services/user/users";
-import {cleanNotCAReferences, restartReferenceLastUpdate, updateReferences} from "#/services/wiki/references";
+import {
+    cleanNotCAReferences,
+    restartReferenceLastUpdate,
+    updateReferences,
+    updateTopicMentions
+} from "#/services/wiki/references";
 import {updateEngagementCounts} from "#/services/feed/getUserEngagement";
 import {deleteCollection} from "#/services/delete";
-import {restartLastContentInteractionsUpdate, updateTopicPopularityScores} from "#/services/wiki/popularity";
+import {updateTopicPopularityScores} from "#/services/wiki/popularity";
 import {updateTopicsCategories} from "#/services/wiki/categories";
 import {updateTopicContributions} from "#/services/wiki/contributions";
 import {createUserMonths} from "#/services/monetization/user-months";
@@ -15,6 +20,9 @@ import Redis from "ioredis";
 import {createNotificationJob, createNotificationsBatchJob} from "#/services/notifications/notifications";
 import {CAHandler} from "#/utils/handler";
 import {assignInviteCodesToUsers} from "#/services/user/access";
+import {updateContentsText} from "#/services/wiki/content";
+import {updateThreads} from "#/services/wiki/threads";
+import {restartLastContentInteractionsUpdate} from "#/services/wiki/interactions";
 
 const mins = 60 * 1000
 
@@ -109,6 +117,9 @@ export class CAWorker {
         this.registerJob("restart-interactions-last-update", () => restartLastContentInteractionsUpdate(ctx))
         this.registerJob("clean-not-ca-references", () => cleanNotCAReferences(ctx))
         this.registerJob("assign-invite-codes", () => assignInviteCodesToUsers(ctx))
+        this.registerJob("update-topic-mentions", (data) => updateTopicMentions(ctx, data.id as string))
+        this.registerJob("update-contents-text", (data) => updateContentsText(ctx))
+        this.registerJob("update-threads", (data) => updateThreads(ctx))
 
         await this.removeAllRepeatingJobs()
         await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)
@@ -212,10 +223,11 @@ export class CAWorker {
 }
 
 
-export const startJob: CAHandler<{params: {id: string}}, {}> = async (ctx, app, {params}) => {
-    const {id} = params
+export const startJob: CAHandler<any, {}> = async (ctx, app, data) => {
+    console.log("starting job with data", data)
+    const {id} = data.params
 
-    await ctx.worker?.addJob(id, {})
+    await ctx.worker?.addJob(id, data)
 
     return {data: {}}
 }

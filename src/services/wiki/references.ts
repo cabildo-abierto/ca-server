@@ -9,7 +9,11 @@ import {formatIsoDate} from "#/utils/dates";
 import {getCAUsersDids} from "#/services/user/users";
 import {sql} from "kysely";
 import {logTimes} from "#/utils/utils";
-
+import {v4 as uuidv4} from "uuid";
+import {getTopicSynonyms} from "#/services/wiki/utils";
+import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {updateContentInteractionsForTopics} from "#/services/wiki/interactions";
+import {updateTopicPopularities} from "#/services/wiki/popularity";
 
 function getSynonymRegex(synonym: string){
     const escapedKey = cleanText(synonym).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -45,8 +49,6 @@ export async function updateReferencesForNewContents(ctx: AppContext) {
     let curOffset = 0
     const synonymsMap = await getSynonymsToTopicsMap(ctx)
 
-    console.log("synonyms map", synonymsMap)
-
     const caUsers = await getCAUsersDids(ctx)
 
     while(true){
@@ -79,12 +81,19 @@ export async function updateReferencesForNewContents(ctx: AppContext) {
 }
 
 
-async function updateReferencesForContentsAndTopics(ctx: AppContext, contents: ContentProps[], synonymsMap: SynonymsMap){
+async function updateReferencesForContentsAndTopics(ctx: AppContext, contents: ContentProps[], synonymsMap: SynonymsMap, topicIds?: string[]){
     const batchSize = 500
     for(let i = 0; i < contents.length; i += batchSize){
-        console.log("Updating references for new contents", i, "-", i+batchSize, "of", contents.length)
-        const texts = await getContentsText(ctx, contents.slice(i, i+batchSize), 10)
-        await applyReferencesUpdate(ctx, contents.slice(i, i+batchSize), texts, synonymsMap)
+        console.log("Updating references contents", i, "-", i+batchSize, "of", contents.length)
+        try {
+            const texts = await getContentsText(ctx, contents.slice(i, i+batchSize), 10)
+            console.log("Apply references update")
+            const referencesToInsert = getReferencesToInsert(contents, texts, synonymsMap)
+            await applyReferencesUpdate(ctx, referencesToInsert, contents.slice(i, i+batchSize).map(c => c.uri), topicIds)
+        } catch (err) {
+            console.log("error updating references", err)
+            throw err
+        }
     }
 }
 
@@ -111,10 +120,17 @@ function withExtra(text: string, content: ContentProps){
 }
 
 
-export async function applyReferencesUpdate(ctx: AppContext, contents: ContentProps[], texts: string[], synonymsMap: SynonymsMap) {
-    const contentUris: string[] = []
-    const placeholders: string[] = []
-    const values: (string | number)[] = []
+type ReferenceToInsert = {
+    id: string
+    type: "Strong" | "Weak"
+    count: number
+    referencedTopicId: string
+    referencingContentId: string
+}
+
+
+function getReferencesToInsert(contents: ContentProps[], texts: (string | null)[], synonymsMap: SynonymsMap) {
+    const referencesToInsert: ReferenceToInsert[] = []
 
     console.log("Analyzing references...")
     const t1 = Date.now()
@@ -122,32 +138,70 @@ export async function applyReferencesUpdate(ctx: AppContext, contents: ContentPr
         const c = contents[i]
         let text = texts[i]
 
-        const references: {topicId: string, count: number}[] = getTopicsReferencedInText(withExtra(text, c), synonymsMap)
+        const references: {topicId: string, count: number}[] = getTopicsReferencedInText(withExtra(text ?? "", c), synonymsMap)
         references.forEach(r => {
             console.log(`Found reference! URI: ${c.uri}. Topic: ${r.topicId}. Count: ${r.count}`)
         })
         references.forEach(r => {
-            contentUris.push(c.uri)
-            placeholders.push(`(uuid_generate_v4(), $${values.length + 1}, $${values.length + 2}, 'Weak', $${values.length + 3})`)
-            values.push(c.uri, r.topicId, r.count)
+            referencesToInsert.push({
+                id: uuidv4(),
+                type: "Weak",
+                count: r.count,
+                referencingContentId: c.uri,
+                referencedTopicId: r.topicId
+            })
         })
     }
     const t2 = Date.now()
     console.log("Done after", t2-t1)
 
+    return referencesToInsert
+}
+
+
+export async function applyReferencesUpdate(ctx: AppContext, referencesToInsert: ReferenceToInsert[], contentIds?: string[], topicIds?: string[]) {
+    // asumimos que referencesToInsert tiene todas las referencias en el producto cartesiano
+    // entre contentIds y topicIds
+    // si contentIds es undefined son todos los contenidos y lo mismo con topicIds
     try {
-        console.log("Inserting", contentUris.length, "references...")
-        if(contentUris.length == 0) return
+        console.log("Inserting", referencesToInsert.length, "references...")
+        console.log("Between", contentIds?.length, "contents and", topicIds?.length, "topics")
         const t1 = Date.now()
-        // TO DO: Borrar las referencias que no estén más
-        await ctx.db.$executeRawUnsafe(
-            `
-                INSERT INTO "Reference" (id, "referencingContentId", "referencedTopicId", type, count)
-                VALUES ${placeholders.join(", ")}
-                    ON CONFLICT DO NOTHING
-            `,
-            ...values
-        )
+
+        if(referencesToInsert.length > 0){
+            await ctx.kysely
+                .insertInto("Reference")
+                .values(referencesToInsert)
+                .onConflict(ob => ob.columns(["referencingContentId", "referencedTopicId"]).doNothing())
+                .execute()
+        }
+
+        let query = ctx.kysely
+            .deleteFrom("Reference")
+
+        if(referencesToInsert.length > 0) {
+            query = query
+                .where(({eb, refTuple, tuple}) =>
+                    eb(
+                        refTuple("Reference.referencedTopicId", 'Reference.referencingContentId'),
+                        'not in',
+                        referencesToInsert.map(e => tuple(e.referencedTopicId, e.referencingContentId))
+                    )
+                )
+        }
+
+        if(topicIds) {
+            query = query
+                .where("Reference.referencedTopicId", "in", topicIds)
+        }
+
+        if(contentIds) {
+            query = query
+                .where("Reference.referencingContentId", "in", contentIds)
+        }
+
+        await query.execute()
+
         const t2 = Date.now()
         console.log("Updates applied after", t2-t1)
     } catch (e) {
@@ -161,7 +215,7 @@ type ContentProps = {
     uri: string
     CAIndexedAt: Date
     text: string | null
-    textBlobId: string | null
+    textBlobId?: string | null
     format: string | null
     title: string | null
 }
@@ -173,7 +227,7 @@ function isCompressed(format: string | null){
 }
 
 
-export async function getContentsText(ctx: AppContext, contents: ContentProps[], retries: number = 10){
+export async function getContentsText(ctx: AppContext, contents: Omit<ContentProps, "title" | "CAIndexedAt">[], retries: number = 10, decompressed: boolean = true){
     const texts: (string | null)[] = contents.map(_ => "")
 
     const blobRefs: {i: number, blob: BlobRef}[] = []
@@ -192,19 +246,77 @@ export async function getContentsText(ctx: AppContext, contents: ContentProps[],
         texts[blobRefs[i].i] = blobTexts[i]
     }
 
-    for(let i = 0; i < texts.length; i++){
-        const text = texts[i]
-        if(text != null && text.length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(contents[i].format ?? null)){
-            try {
-                texts[i] = decompress(text)
-            } catch {
-                console.log(`Error decompressing text ${contents[i].uri}`)
-                texts[i] = null
+    if(decompressed){
+        for(let i = 0; i < texts.length; i++){
+            const text = texts[i]
+            if(text != null && text.length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(contents[i].format ?? null)){
+                try {
+                    texts[i] = decompress(text)
+                } catch {
+                    console.log(`Error decompressing text ${contents[i].uri}`)
+                    texts[i] = null
+                }
             }
         }
     }
 
-    return texts.map(t => t != null ? t : "")
+    return texts
+}
+
+
+async function getContentsContainingSynonyms(ctx: AppContext, synonyms: string[]){
+    const cleanedSynonyms = synonyms
+        .map(s => cleanText(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .filter(Boolean)
+
+    console.log("cleaned synonyms", cleanedSynonyms)
+
+    if (cleanedSynonyms.length === 0) return []
+
+    const pattern = `(?<!\\w)(${cleanedSynonyms.join('|')})(?!\\w)`
+
+    return await ctx.kysely
+        .selectFrom("Content")
+        .innerJoin("Record", "Record.uri", "Content.uri")
+        .innerJoin("User", "User.did", "Record.authorId")
+        .select([
+            'Content.uri',
+            sql<number>`array_length(regexp_matches("text", ${pattern}, 'gi'), 1)`.as('match_count')
+        ])
+        .where('text', '~*', pattern)
+        .where("User.inCA", "=", true)
+        .execute()
+}
+
+
+export async function updateReferencesForTopics(ctx: AppContext, topicIds: string[]){
+
+    const topics = await ctx.kysely
+        .selectFrom("Topic")
+        .innerJoin("TopicVersion", "TopicVersion.uri", "Topic.currentVersionId")
+        .select(["id", "TopicVersion.props"])
+        .where("id", "in", topicIds)
+        .execute()
+
+    for(const t of topics) {
+        const synonyms = getTopicSynonyms({id: t.id, props: t.props as TopicProp[]})
+        console.log(`updating references for topic ${t.id} with synonyms:`, synonyms)
+
+        const results = await getContentsContainingSynonyms(ctx, synonyms)
+        const refs: ReferenceToInsert[] = []
+        for(const r of results) {
+            refs.push({
+                id: uuidv4(),
+                type: "Weak",
+                count: r.match_count,
+                referencedTopicId: t.id,
+                referencingContentId: r.uri
+            })
+        }
+        console.log("got refs", refs.length)
+        console.log(results.slice(0, 10))
+        await applyReferencesUpdate(ctx, refs, undefined, topicIds)
+    }
 }
 
 
@@ -212,7 +324,7 @@ export async function updateReferencesForNewTopics(ctx: AppContext) {
     const lastUpdate = await getLastReferencesUpdate(ctx)
     console.log("Last reference update", lastUpdate)
 
-    const topicsList = (await ctx.db.topic.findMany({
+    const topicIds = (await ctx.db.topic.findMany({
         select: {
             id: true
         },
@@ -222,35 +334,15 @@ export async function updateReferencesForNewTopics(ctx: AppContext) {
             }
         }
     })).map(t => t.id)
-    if(topicsList.length == 0) {
+
+    if(topicIds.length == 0) {
         console.log("No new topics, skipping")
         return
     }
-    const synonymsMap = await getSynonymsToTopicsMap(ctx, topicsList)
-    const caUsers = await getCAUsersDids(ctx)
 
-    console.log("Got new topics", topicsList.length)
-    const batchSize = 10000
-    let curOffset = 0
-    while(true){
-        console.log(`Running batch at offset ${curOffset}`)
-        const contents: ContentProps[] = await ctx.kysely
-            .selectFrom("Record")
-            .innerJoin("Content", "Record.uri", "Content.uri")
-            .leftJoin("Article", "Record.uri", "Article.uri")
-            .select(["Record.uri", "Record.CAIndexedAt", "Content.text", "Content.textBlobId", "Content.format", "Article.title"])
-            .where("Record.CAIndexedAt", ">=", lastUpdate)
-            .where("Record.authorId", "in", caUsers)
-            .orderBy("Record.CAIndexedAt", "asc")
-            .limit(batchSize)
-            .offset(curOffset)
-            .execute()
-        if(contents.length == 0) break
-        curOffset += contents.length
-        console.log("Got contents", contents.length)
+    console.log("Got new topics", topicIds.length)
 
-        await updateReferencesForContentsAndTopics(ctx, contents, synonymsMap)
-    }
+    await updateReferencesForTopics(ctx, topicIds)
 }
 
 
@@ -315,7 +407,7 @@ export async function getSynonymsToTopicsMap(
 
     topics.forEach((t) => {
         const synList = t.synonyms instanceof Array ? t.synonyms as string[] : []
-        const synonyms = unique([...synList, t.id].map(cleanText))
+        const synonyms = unique(synList.map(cleanText))
 
         synonyms.forEach(s => {
             if(synonymsToTopicsMap.has(s)){
@@ -345,4 +437,15 @@ export async function cleanNotCAReferences(ctx: AppContext) {
         }
     })
     console.log(`Removed ${count.count} references.`)
+}
+
+
+
+export async function updateTopicMentions(ctx: AppContext, id: string) {
+    // Actualizamos las referencias al tema y la popularidad del tema
+    await updateReferencesForTopics(ctx, [id])
+
+    await updateContentInteractionsForTopics(ctx, [id])
+
+    await updateTopicPopularities(ctx, [id])
 }

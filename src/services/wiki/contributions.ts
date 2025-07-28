@@ -129,7 +129,7 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
 
     let updates: Upd[] = []
 
-    versionsByTopic.entries().forEach(([topicId, topicVersions]) => {
+    Array.from(versionsByTopic.entries()).forEach(([topicId, topicVersions]) => {
         let prev = ""
         let accCharsAdded = 0
         let monetizedCharsAdded = 0

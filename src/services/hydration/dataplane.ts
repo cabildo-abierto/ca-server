@@ -190,7 +190,9 @@ export class Dataplane {
         await this.fetchCAContents(uris)
 
         const contents = Array.from(this.caContents?.values() ?? [])
-        const blobRefs = blobRefsFromContents(contents)
+        const blobRefs = blobRefsFromContents(contents
+            .filter(c => c.content && c.content.text == null)
+        )
 
         const datasets = contents.reduce((acc, cur) => {
             return [...acc, ...cur.content?.datasetsUsed.map(d => d.uri) ?? []]
@@ -342,7 +344,7 @@ export class Dataplane {
                     cid: r.cid,
                     content: {
                         ...r.content,
-                        text: r.content?.text ?? null,
+                        text: r.content?.text != null ? r.content?.text : null,
                         selfLabels: r.content?.selfLabels ?? [],
                         datasetsUsed: r.content?.datasetsUsed ?? [],
                         embeds: r.content?.embeds ?? null

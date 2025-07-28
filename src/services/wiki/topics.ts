@@ -10,7 +10,7 @@ import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import {Prisma} from "@prisma/client";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
-import {getTopicTitle} from "#/services/wiki/utils";
+import {getTopicSynonyms, getTopicTitle} from "#/services/wiki/utils";
 import {getSynonymsToTopicsMap, getTopicsReferencedInText} from "#/services/wiki/references";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
 import {gett} from "#/utils/arrays";
@@ -23,6 +23,7 @@ import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read"
 import {logTimes} from "#/utils/utils";
 import { JsonValue } from "@prisma/client/runtime/library";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
+import {cleanText} from "#/utils/strings";
 
 export type TimePeriod = "day" | "week" | "month" | "all"
 
@@ -421,7 +422,7 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
     }
 
     let text: string | null = null
-    if (!topic.content.text) {
+    if (topic.content.text == null) {
         if (topic.content.textBlob) {
             [text] = await fetchTextBlobs(
                 ctx,
@@ -523,4 +524,72 @@ export const getAllTopics: CAHandlerNoAuth<{}, {topicId: string, uri: string}[]>
         }
     })
     return {data: topicVersions}
+}
+
+
+type TopicWithEditors = {
+    topicId: string
+    editors: string[]
+}
+
+export const getTopicsInCategoryForBatchEditing: CAHandlerNoAuth<{params: {cat: string}}, TopicWithEditors[]> = async (ctx, agent, {params}) => {
+    console.log("getting topics in category", params.cat)
+    const {data: topics, error} = await getTopics(ctx, [params.cat], "recent", "all", undefined)
+
+    if(!topics) {
+        console.log("error getting topics", error)
+        return {error}
+    }
+
+    const editors = await ctx.kysely
+        .selectFrom("TopicVersion")
+        .innerJoin("Record", "Record.uri", "TopicVersion.uri")
+        .innerJoin("User", "User.did", "Record.authorId")
+        .select(["topicId", "User.handle", "User.did"])
+        .where("TopicVersion.topicId", "in", topics.map(t => t.id))
+        .execute()
+
+    const m = new Map<string, TopicWithEditors>()
+
+    editors.forEach(editor => {
+        if(!editor.handle) return
+        let cur = m.get(editor.topicId)
+        if(!cur) {
+            m.set(editor.topicId, {
+                topicId: editor.topicId,
+                editors: [editor.handle]
+            })
+        } else {
+            m.set(editor.topicId, {
+                topicId: editor.topicId,
+                editors: [...cur.editors, editor.handle]
+            })
+        }
+    })
+
+    console.log("returning", Array.from(m.values()))
+
+    return {data: Array.from(m.values())}
+}
+
+
+export const getTopicsWhereTitleIsNotSetAsSynonym: CAHandlerNoAuth<{}, string[]> = async (ctx, agent, {}) => {
+    const topics = await ctx.kysely.selectFrom("Topic")
+        .where("Topic.id", "not like", "%Ley%")
+        .innerJoin("TopicVersion", "TopicVersion.uri", "Topic.currentVersionId")
+        .select(["TopicVersion.props", "Topic.id"])
+        .execute()
+
+    const data = topics.filter(t => {
+        const synonyms = getTopicSynonyms({
+            id: t.id,
+            props: t.props as TopicProp[]
+        })
+        console.log("topic", t.id, "synonyms", synonyms)
+        return !synonyms.some(s => {
+            return cleanText(t.id).includes(cleanText(s))
+        })
+    })
+
+    return {data: data.map(d => d.id)}
 }

@@ -1,132 +1,15 @@
-import {unique} from "#/utils/arrays";
 import {AppContext} from "#/index";
 import {getDidFromUri} from "#/utils/uri";
 import {logTimes} from "#/utils/utils";
-import {formatIsoDate} from "#/utils/dates";
 import {testUsers} from "#/services/admin/stats";
+import {
+    getEditedTopics,
+    updateContentInteractionsForEditedTopics,
+    updateContentInteractionsForTopics
+} from "#/services/wiki/interactions";
 
 
-export async function getLastContentInteractionsUpdate(ctx: AppContext){
-    const lastUpdateStr = await ctx.ioredis.get("last-topic-interactions-update")
-    return lastUpdateStr ? new Date(lastUpdateStr) : new Date(0)
-}
-
-
-export async function setLastContentInteractionsUpdate(ctx: AppContext, date: Date){
-    await ctx.ioredis.set("last-topic-interactions-update", date.toISOString())
-    console.log("Last topic interactions update set to", formatIsoDate(date))
-}
-
-
-export async function restartLastContentInteractionsUpdate(ctx: AppContext) {
-    await setLastContentInteractionsUpdate(ctx, new Date(0))
-}
-
-
-async function createContentInteractions(ctx: AppContext) {
-    // recorremos los records y por cada uno anotamos con qué temas interactúa
-    // si es un post, vemos a quién menciona y a quién responde
-    // si es un artículo solo vemos a quién menciona
-    // si es una reacción solo vemos a qué record reacciona
-    // si es un tema
-    const lastUpdate = await getLastContentInteractionsUpdate(ctx)
-
-    const batchSize = 5000
-    let curOffset = 0
-
-    while(true){
-        console.log(`Updating topic interactions batch ${curOffset}`)
-        const t1 = Date.now()
-        const batchUris = await ctx.kysely.selectFrom("Record")
-            .leftJoin("TopicVersion", "Record.uri", "TopicVersion.uri")
-            .select(["Record.uri", "TopicVersion.topicId"])
-            .where("Record.CAIndexedAt", ">=", lastUpdate)
-            .orderBy("Record.CAIndexedAt asc")
-            .limit(batchSize)
-            .offset(curOffset)
-            .execute()
-        if(batchUris.length == 0) break
-        curOffset += batchUris.length
-
-        const batchReferences = await ctx.kysely
-            .selectFrom("Reference")
-            .select(["referencingContentId", "referencedTopicId"])
-            .where("Reference.referencingContentId", "in", batchUris.map(u => u.uri))
-            .execute()
-
-        const batchReactionSubjectInteractions = await ctx.kysely
-            .selectFrom("TopicInteraction")
-            .innerJoin("Record", "Record.uri", "TopicInteraction.recordId")
-            .innerJoin("Reaction", "Reaction.subjectId", "Record.uri")
-            .select(["TopicInteraction.topicId", "Reaction.uri"])
-            .where("Reaction.uri", "in", batchUris.map(u => u.uri))
-            .execute()
-
-        const batchReplyToInteractions = await ctx.kysely
-            .selectFrom("TopicInteraction")
-            .innerJoin("Post", "Post.replyToId", "TopicInteraction.recordId")
-            .select(["TopicInteraction.topicId", "Post.uri"])
-            .where("Post.uri", "in", batchUris.map(u => u.uri))
-            .execute()
-
-        let values: {recordId: string, topicId: string}[] = []
-
-        batchReferences.forEach(ref => {
-            values.push({
-                recordId: ref.referencingContentId,
-                topicId: ref.referencedTopicId,
-            })
-        })
-
-        batchReactionSubjectInteractions.forEach(i => {
-            values.push({
-                recordId: i.uri,
-                topicId: i.topicId,
-            })
-        })
-
-        batchReplyToInteractions.forEach(i => {
-            values.push({
-                recordId: i.uri,
-                topicId: i.topicId,
-            })
-        })
-
-        batchUris.forEach(u => {
-            if(u.topicId){
-                values.push({
-                    recordId: u.uri,
-                    topicId: u.topicId
-                })
-            }
-        })
-
-        values = unique(values, v => `${v.recordId}:${v.topicId}`)
-        const t2 = Date.now()
-
-        console.log(`adding ${values.length} interactions`)
-
-        if(values.length > 0){
-            await ctx.kysely.insertInto("TopicInteraction")
-                .values(values)
-                .onConflict((oc) => oc.columns(["topicId", "recordId"]).doNothing())
-                .execute()
-        }
-        const t3 = Date.now()
-        logTimes("content interactions batch", [t1, t2, t3])
-    }
-
-    await setLastContentInteractionsUpdate(ctx, new Date())
-}
-
-
-async function updateTopicPopularities(ctx: AppContext) {
-    const topics = await ctx.db.topic.findMany({
-        select: {
-            id: true
-        }
-    })
-
+export async function updateTopicPopularities(ctx: AppContext, topicIds: string[]) {
     const lastMonth = new Date(Date.now() - 1000*3600*24*30)
     const lastWeek = new Date(Date.now() - 1000*3600*24*7)
     const lastDay = new Date(Date.now() - 1000*3600*24)
@@ -144,9 +27,9 @@ async function updateTopicPopularities(ctx: AppContext) {
     })).map(d => d.did))
 
     let batchSize = 2000
-    for(let i = 0; i < topics.length; i+=batchSize){
+    for(let i = 0; i < topicIds.length; i+=batchSize){
         console.log("Updating batch", i)
-        const batchIds = topics.slice(i, i+batchSize).map(i => i.id)
+        const batchIds = topicIds.slice(i, i+batchSize)
         const batchInteractions = await ctx.kysely
             .selectFrom("TopicInteraction")
             .innerJoin("Record", "Record.uri", "TopicInteraction.recordId")
@@ -213,12 +96,18 @@ async function updateTopicPopularities(ctx: AppContext) {
 
 export async function updateTopicPopularityScores(ctx: AppContext) {
     console.log("creating interactions")
+
+    const topicIds = await getEditedTopics(ctx)
+
+    console.log(`found ${topicIds} edited topics`)
+
     const t1 = Date.now()
-    await createContentInteractions(ctx)
+    await updateContentInteractionsForTopics(ctx, topicIds)
     const t2 = Date.now()
 
     console.log("updating topic popularities")
-    await updateTopicPopularities(ctx)
+
+    await updateTopicPopularities(ctx, topicIds)
     const t3 = Date.now()
 
     logTimes("update topic popularities", [t1, t2, t3])

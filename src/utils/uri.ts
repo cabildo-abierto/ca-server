@@ -38,14 +38,14 @@ export function shortCollectionToCollection(collection: string) {
 }
 
 export function collectionToShortCollection(collection: string) {
-    if (collection == "ar.com.cabildoabierto.article") {
-        return "article"
-    }
-    if (collection == "app.bsky.feed.post") {
+    if (isPost(collection)) {
         return "post"
     }
-    if (collection == "ar.com.cabildoabierto.visualization") {
-        return "visualization"
+    if(isArticle(collection)){
+        return "article"
+    }
+    if(isDataset(collection)){
+        return "dataset"
     }
     return collection
 }

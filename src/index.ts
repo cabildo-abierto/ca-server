@@ -126,6 +126,7 @@ export class Server {
             'https://fly-ca-withered-wind-redis.upstash.io',
             'http://192.168.0.10:3000',
             'http://192.168.0.11:3000',
+            'http://192.168.0.34:3000',
             'http://0.0.0.0:3000'
         ]
 

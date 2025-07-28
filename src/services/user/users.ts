@@ -100,18 +100,43 @@ export const getCAUsersDids = async (ctx: AppContext) => {
 }
 
 
-export const getUsers: CAHandler<{}, CAProfileViewBasic[]> = async (ctx, agent, {}) => {
+type UserAccessStatus = {
+    did: string
+    handle: string | null
+    created_at: Date | null
+    hasAccess: boolean
+    inCA: boolean
+    inviteCode: string | null
+    mirrorStatus: string
+    displayName: string | null
+}
+
+
+export const getUsers: CAHandler<{}, UserAccessStatus[]> = async (ctx, agent, {}) => {
     try {
-        const dids = await getCAUsersDids(ctx)
+        const users = await ctx.kysely
+            .selectFrom("User")
+            .leftJoin("InviteCode", "InviteCode.usedByDid", "User.did")
+            .select(["did", "handle", "displayName", "mirrorStatus", "hasAccess", "CAProfileUri", "User.created_at", "inCA", "InviteCode.code"])
+            .where(eb => eb.or([
+                eb("InviteCode.code", "is not", null),
+                eb("User.inCA", "=", true),
+                eb("User.hasAccess", "=", true),
+                eb("User.CAProfileUri", "is not", null)
+            ]))
+            .execute()
 
-        const dataplane = new Dataplane(ctx, agent)
+        function queryToStatus(_: any, i: number): UserAccessStatus {
+            const u = users[i]
+            return {
+                ...u,
+                inviteCode: u.code ?? null
+            }
+        }
 
-        await dataplane.fetchUsersHydrationData(dids)
-
-        const users = dids.map(d => hydrateProfileViewBasic(d, dataplane)).filter(x => x != null)
-
-        return {data: users}
-    } catch {
+        return {data: users.map(queryToStatus)}
+    } catch (err) {
+        console.log("error getting users", err)
         return {error: "Error al obtener a los usuarios."}
     }
 }

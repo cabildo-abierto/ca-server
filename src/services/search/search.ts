@@ -10,9 +10,10 @@ import {JsonValue} from "@prisma/client/runtime/library";
 import {topicQueryResultToTopicViewBasic} from "#/services/wiki/topics";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {SessionAgent} from "#/utils/session-agent";
-import {sql} from "kysely";
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
 import {$Typed} from "@atproto/api";
+import {logTimes} from "#/utils/utils";
+import {sql} from "kysely";
 
 
 export async function searchUsersInCA(ctx: AppContext, query: string, dataplane: Dataplane): Promise<string[]> {
@@ -82,34 +83,54 @@ export const searchUsers: CAHandler<{
 
 
 export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | string[] | undefined}}, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
-    let {q} = params
-    const categories = query.c == undefined ? undefined : (typeof query.c == "string" ? [query.c] : query.c)
-    const searchQuery = cleanText(q)
+    let {q} = params;
+    const categories = query.c == undefined ? undefined : (typeof query.c == "string" ? [query.c] : query.c);
+    const searchQuery = cleanText(q);
 
-    const baseQuery = ctx.kysely
-        .selectFrom('Topic')
-        .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
-        .select(["id", "lastEdit", "popularityScoreLastDay", "popularityScoreLastWeek", "popularityScoreLastMonth", "TopicVersion.props"])
-        // Add similarity calculation
+    const topics = await ctx.kysely
+        .with('topics_with_titles', (eb) =>
+            eb.selectFrom('Topic')
+                .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
+                .select([
+                    'Topic.id',
+                    'Topic.lastEdit',
+                    'Topic.popularityScoreLastDay',
+                    'Topic.popularityScoreLastWeek',
+                    'Topic.popularityScoreLastMonth',
+                    'TopicVersion.props',
+                    eb => eb.fn.coalesce(
+                        eb.cast<string>(eb.fn('jsonb_path_query_first', [
+                            eb.ref('TopicVersion.props'),
+                            eb.val('$[*] ? (@.name == "Título").value.value')
+                        ]), "text"),
+                        eb.cast(eb.ref('Topic.id'), 'text')
+                    ).as('title')
+                ])
+        )
+        .selectFrom('topics_with_titles')
+        .selectAll()
         .select(eb => [
-            eb.fn("similarity", [eb.ref('id'), eb.val(searchQuery)]).as('match_score'),
-            eb.fn('levenshtein', [eb.ref('id'), eb.val(searchQuery)]).as('distance')
+            sql<number>`similarity(${eb.ref('title')}::text, ${eb.val(searchQuery)}::text)`.as('match_score')
         ])
+        .where((eb) => {
+            const conditions = [
+                eb(eb.fn('unaccent', [eb.ref('title')]), 'ilike', eb.val(`%${searchQuery}%`))
+            ]
 
-    const queryInCategories = categories ? baseQuery
-        .where(categories.includes("Sin categoría") ?
-            stringListIsEmpty("Categorías") :
-            (eb) =>
-                eb.and(categories.map(c => stringListIncludes("Categorías", c))
+            if (categories) {
+                conditions.push(
+                    categories.includes("Sin categoría") ?
+                        eb.val(stringListIsEmpty("Categorías")) :
+                        eb.and(categories.map(c => stringListIncludes("Categorías", c)))
                 )
-        ) : baseQuery
+            }
 
-    const topics = await queryInCategories
-        .where(sql`unaccent("Topic"."id")`, 'ilike', sql`unaccent('%' || ${searchQuery} || '%')`)
+            return eb.and(conditions)
+        })
         .orderBy('match_score', 'desc')
         .orderBy('popularityScoreLastDay', 'desc')
         .limit(20)
-        .execute()
+        .execute();
 
     return {
         data: topics.map(t => topicQueryResultToTopicViewBasic({
@@ -122,5 +143,5 @@ export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | s
                 props: t.props as JsonValue
             }
         }))
-    }
-}
+    };
+};
