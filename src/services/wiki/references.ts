@@ -266,10 +266,8 @@ export async function getContentsText(ctx: AppContext, contents: Omit<ContentPro
 
 async function getContentsContainingSynonyms(ctx: AppContext, synonyms: string[]){
     const cleanedSynonyms = synonyms
-        .map(s => cleanText(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
         .filter(Boolean)
-
-    console.log("cleaned synonyms", cleanedSynonyms)
 
     if (cleanedSynonyms.length === 0) return []
 
@@ -283,7 +281,7 @@ async function getContentsContainingSynonyms(ctx: AppContext, synonyms: string[]
             'Content.uri',
             sql<number>`array_length(regexp_matches("text", ${pattern}, 'gi'), 1)`.as('match_count')
         ])
-        .where('text', '~*', pattern)
+        .where(sql`unaccent("text")`, '~*', sql`unaccent(${pattern})`)
         .where("User.inCA", "=", true)
         .execute()
 }
@@ -314,7 +312,6 @@ export async function updateReferencesForTopics(ctx: AppContext, topicIds: strin
             })
         }
         console.log("got refs", refs.length)
-        console.log(results.slice(0, 10))
         await applyReferencesUpdate(ctx, refs, undefined, topicIds)
     }
 }
