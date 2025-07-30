@@ -7,6 +7,7 @@ import {
     updateContentInteractionsForEditedTopics,
     updateContentInteractionsForTopics
 } from "#/services/wiki/interactions";
+import {updateReferences} from "#/services/wiki/references";
 
 
 export async function updateTopicPopularities(ctx: AppContext, topicIds: string[]) {
@@ -95,6 +96,9 @@ export async function updateTopicPopularities(ctx: AppContext, topicIds: string[
 
 
 export async function updateTopicPopularityScores(ctx: AppContext) {
+    console.log("Updating references")
+    await updateReferences(ctx)
+
     console.log("creating interactions")
 
     const topicIds = await getEditedTopics(ctx)

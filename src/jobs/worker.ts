@@ -125,7 +125,6 @@ export class CAWorker {
         await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)
         await this.addRepeatingJob("update-topics-categories", 60 * 24 * mins, 60 * mins + 5)
         await this.addRepeatingJob("update-categories-graph", 60 * 24 * mins, 60 * mins + 7)
-        await this.addRepeatingJob("update-references", 60 * 24 * mins, 60 * mins + 10)
         await this.addRepeatingJob("create-user-months", 60 * 24 * mins, 60 * mins + 15)
         await this.addRepeatingJob("batch-jobs", mins / 2, 0)
 

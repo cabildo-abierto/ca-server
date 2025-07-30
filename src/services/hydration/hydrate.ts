@@ -52,6 +52,7 @@ import removeMarkdown from "remove-markdown"
 import {
     isColumnFilter,
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
+import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 
 
 export function hydrateViewer(uri: string, data: Dataplane): { repost?: string, like?: string } {
@@ -212,16 +213,26 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
 function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedContent: string, data: Dataplane): $Typed<SelectionQuoteEmbedView> | null {
     const caData = data.caContents?.get(quotedContent)
 
+    console.log("looking for quoted content", quotedContent, caData != null)
+
     if (caData && caData.content && caData.content) {
         const authorId = getDidFromUri(caData.uri)
         const author = hydrateProfileViewBasic(authorId, data)
-        if (!author) return null
+        if (!author) {
+            console.log("couldn't find author of quoted content:", authorId)
+            return null
+        }
+
+        const record = caData.record ? JSON.parse(caData.record) as ArticleRecord | TopicVersionRecord : null
 
         let text: string | null = null
-        if (caData.content?.textBlobId) {
-            text = data.getFetchedBlob({cid: caData.content.textBlobId, authorId})
-        } else if (caData.content?.text) {
+        let format: string | null = null
+        if(caData.content?.text != null){
             text = caData.content.text
+            format = caData.content.format ?? null
+        } else if (caData.content?.textBlobId) {
+            text = data.getFetchedBlob({cid: caData.content?.textBlobId, authorId})
+            format = record?.format ?? null
         }
         if (!text) return null
 
@@ -245,7 +256,7 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
             start: embed.start,
             end: embed.end,
             quotedText: text,
-            quotedTextFormat: caData.content.format ?? undefined,
+            quotedTextFormat: format ?? undefined,
             quotedContentTitle: title,
             quotedContent,
             quotedContentAuthor: author,
@@ -314,6 +325,7 @@ function hydrateRecordEmbedView(embed: CARecordEmbed | RecordEmbed, data: Datapl
 function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView>, error?: string } {
     const post = data.bskyPosts?.get(uri)
     const caData = data.caContents?.get(uri)
+    console.log("hydrating post", uri)
 
     if (!post) {
         console.log("Warning: No se encontró el post en Bluesky. Uri: ", uri)

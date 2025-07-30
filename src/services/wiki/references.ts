@@ -14,6 +14,7 @@ import {getTopicSynonyms} from "#/services/wiki/utils";
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {updateContentInteractionsForTopics} from "#/services/wiki/interactions";
 import {updateTopicPopularities} from "#/services/wiki/popularity";
+import {updateContentsText} from "#/services/wiki/content";
 
 function getSynonymRegex(synonym: string){
     const escapedKey = cleanText(synonym).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -168,39 +169,30 @@ export async function applyReferencesUpdate(ctx: AppContext, referencesToInsert:
         console.log("Between", contentIds?.length, "contents and", topicIds?.length, "topics")
         const t1 = Date.now()
 
-        if(referencesToInsert.length > 0){
-            await ctx.kysely
-                .insertInto("Reference")
-                .values(referencesToInsert)
-                .onConflict(ob => ob.columns(["referencingContentId", "referencedTopicId"]).doNothing())
-                .execute()
-        }
+        await ctx.kysely.transaction().execute(async trx => {
+            let deleteQuery = trx
+                .deleteFrom("Reference")
 
-        let query = ctx.kysely
-            .deleteFrom("Reference")
+            if(topicIds) {
+                deleteQuery = deleteQuery
+                    .where("Reference.referencedTopicId", "in", topicIds)
+            }
 
-        if(referencesToInsert.length > 0) {
-            query = query
-                .where(({eb, refTuple, tuple}) =>
-                    eb(
-                        refTuple("Reference.referencedTopicId", 'Reference.referencingContentId'),
-                        'not in',
-                        referencesToInsert.map(e => tuple(e.referencedTopicId, e.referencingContentId))
-                    )
-                )
-        }
+            if(contentIds) {
+                deleteQuery = deleteQuery
+                    .where("Reference.referencingContentId", "in", contentIds)
+            }
 
-        if(topicIds) {
-            query = query
-                .where("Reference.referencedTopicId", "in", topicIds)
-        }
+            await deleteQuery.execute()
 
-        if(contentIds) {
-            query = query
-                .where("Reference.referencingContentId", "in", contentIds)
-        }
-
-        await query.execute()
+            if(referencesToInsert.length > 0){
+                await trx
+                    .insertInto("Reference")
+                    .values(referencesToInsert)
+                    .onConflict(ob => ob.columns(["referencingContentId", "referencedTopicId"]).doNothing())
+                    .execute()
+            }
+        })
 
         const t2 = Date.now()
         console.log("Updates applied after", t2-t1)
@@ -440,6 +432,8 @@ export async function cleanNotCAReferences(ctx: AppContext) {
 
 export async function updateTopicMentions(ctx: AppContext, id: string) {
     // Actualizamos las referencias al tema y la popularidad del tema
+    await updateContentsText(ctx)
+
     await updateReferencesForTopics(ctx, [id])
 
     await updateContentInteractionsForTopics(ctx, [id])

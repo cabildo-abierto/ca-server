@@ -2,6 +2,7 @@ import {AppContext} from "#/index";
 import {unique} from "#/utils/arrays";
 import {formatIsoDate} from "#/utils/dates";
 import {logTimes} from "#/utils/utils";
+import {sql} from "kysely";
 
 
 export async function getLastContentInteractionsUpdate(ctx: AppContext) {
@@ -21,7 +22,7 @@ export async function restartLastContentInteractionsUpdate(ctx: AppContext) {
 }
 
 export async function updateContentInteractionsForTopics(ctx: AppContext, topicIds: string[]) {
-    const batchSize = 500
+    const batchSize = 10
 
     for (let i = 0; i < topicIds.length; i += batchSize) {
 
@@ -36,17 +37,31 @@ export async function updateContentInteractionsForTopics(ctx: AppContext, topicI
                     .leftJoin("TopicVersion", "Record.uri", "TopicVersion.uri")
                     .leftJoin("Reference", "Reference.referencingContentId", "Record.uri")
                     .leftJoin("Post", "Post.uri", "Record.uri")
-                    .select(["Record.uri", "TopicVersion.topicId", "Reference.referencedTopicId"])
-                    .where(eb => eb.or([
-                        eb("TopicVersion.topicId", "in", batchTopics), // ediciones del tema
-                        eb("Reference.referencedTopicId", "in", batchTopics) // referencias al tema
-                    ]))
-                    .distinctOn("Record.uri")
+                    .select([
+                        "Record.uri",
+                        "TopicVersion.topicId",
+                        "Reference.referencedTopicId",
+                        eb => eb.lit<number>(0).as("depth")
+                    ])
+                    .where((eb) =>
+                        eb.or([
+                            eb("TopicVersion.topicId", "in", batchTopics),
+                            eb("Reference.referencedTopicId", "in", batchTopics),
+                        ])
+                    )
+                    .distinctOn("Record.uri");
 
                 const recursive = db
                     .selectFrom("thread")
                     .innerJoin("Post", "Post.replyToId", "thread.uri")
-                    .select(["Post.uri", "thread.topicId", "thread.referencedTopicId"])
+                    .select([
+                        "Post.uri",
+                        "thread.topicId",
+                        "thread.referencedTopicId",
+                        sql<number>`thread.depth + 1`.as("depth")
+                    ])
+                    .where("thread.depth", "<", 50)
+                    .distinctOn("Post.uri")
 
                 return base.unionAll(recursive);
             })

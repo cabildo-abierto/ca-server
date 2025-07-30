@@ -50,7 +50,7 @@ import {
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {getUrisFromThreadSkeleton} from "#/services/thread/thread";
 
-function getUriFromEmbed(embed: PostView["embed"]): string | null {
+export function getUriFromEmbed(embed: PostView["embed"]): string | null {
     if (isEmbedRecordView(embed)) {
         if (isViewRecord(embed.record)) {
             return embed.record.uri
@@ -627,10 +627,15 @@ export class Dataplane {
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
         const uris = getUrisFromThreadSkeleton(skeleton)
 
+        console.log("fetching uris", uris)
+
         const c = getCollectionFromUri(skeleton.post)
+
+        const dids = uris.map(u => getDidFromUri(u))
 
         await Promise.all([
             this.fetchPostAndArticleViewsHydrationData(uris),
+            this.fetchUsersHydrationData(dids),
             isArticle(c) ? this.fetchTopicsMentioned(skeleton.post) : null,
             isDataset(c) ? this.fetchDatasetsHydrationData([skeleton.post]) : null,
             isDataset(c) ? this.fetchDatasetContents([skeleton.post]) : null

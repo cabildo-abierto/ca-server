@@ -14,7 +14,6 @@ import {Dataplane} from "#/services/hydration/dataplane";
 import {ThreadViewPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 
-
 function threadViewPostToThreadSkeleton(thread: ThreadViewPost, isAncestor: boolean = false): ThreadSkeleton {
     return {
         post: thread.post.uri,
@@ -44,7 +43,7 @@ async function getThreadRepliesSkeletonForPostFromBsky(ctx: AppContext, agent: S
 }
 
 
-export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, agent: SessionAgent, uri: string): Promise<ThreadSkeleton> {
+export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, agent: SessionAgent, dataplane: Dataplane, uri: string): Promise<ThreadSkeleton> {
     // necesario solo porque getPostThread de Bsky no funciona con posts que tienen selection quote
     const replies = (await ctx.db.post.findMany({
         select: {
@@ -54,10 +53,11 @@ export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, age
             replyToId: uri
         },
         take: 20
-    })).map(x => ({post: x.uri}))
+    }))
+
     return {
         post: uri,
-        replies
+        replies: replies.map(x => ({post: x.uri}))
     }
 }
 
@@ -65,7 +65,7 @@ export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, age
 async function getThreadSkeletonForPost(ctx: AppContext, agent: SessionAgent, uri: string, data: Dataplane): Promise<ThreadSkeleton> {
     const [skeletonBsky, skeletonCA] = await Promise.all([
         getThreadRepliesSkeletonForPostFromBsky(ctx, agent, uri, data),
-        getThreadRepliesSkeletonForPostFromCA(ctx, agent, uri)
+        getThreadRepliesSkeletonForPostFromCA(ctx, agent, data, uri)
     ])
 
     return skeletonBsky ?? skeletonCA

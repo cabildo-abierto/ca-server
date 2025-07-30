@@ -13,7 +13,7 @@ export async function updateContentsText(ctx: AppContext) {
             .innerJoin("Record", "Record.uri", "Content.uri")
             .select(["Content.uri", "textBlobId", "format", "Record.record"])
             .where("Record.collection", "in", ["ar.cabildoabierto.wiki.topicVersion", "ar.cabildoabierto.feed.article"])
-            .where("Record.rkey", "=", "3lszjnbrkrz24")
+            .where("text", "is", null)
             .limit(batchSize)
             .offset(offset)
             .execute()
