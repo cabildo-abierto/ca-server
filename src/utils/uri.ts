@@ -28,6 +28,9 @@ export function shortCollectionToCollection(collection: string) {
     if (collection == "post") {
         return "app.bsky.feed.post"
     }
+    if(collection == "dataset") {
+        return "ar.cabildoabierto.data.dataset"
+    }
     if (collection == "visualization") {
         return "ar.cabildoabierto.data.visualization"
     }

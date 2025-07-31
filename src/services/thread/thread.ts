@@ -1,7 +1,15 @@
 import {ThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
-import {getCollectionFromUri, getDidFromUri, getUri, isArticle, isDataset, isPost} from "#/utils/uri";
+import {
+    getCollectionFromUri,
+    getDidFromUri,
+    getUri,
+    isArticle,
+    isDataset,
+    isPost,
+    shortCollectionToCollection
+} from "#/utils/uri";
 import {
     hydrateThreadViewContent,
     threadPostRepliesSortKey,
@@ -109,7 +117,8 @@ export async function getThreadSkeleton(ctx: AppContext, agent: SessionAgent, ur
 
 
 export const getThread: CAHandler<{params: {handleOrDid: string, collection: string, rkey: string}}, ThreadViewContent> = async (ctx, agent, {params})  => {
-    const {handleOrDid, collection, rkey} = params
+    let {handleOrDid, collection, rkey} = params
+    collection = shortCollectionToCollection(collection)
     const did = await handleToDid(ctx, agent, handleOrDid)
     if(!did) {
         return {error: "No se encontró el autor."}
