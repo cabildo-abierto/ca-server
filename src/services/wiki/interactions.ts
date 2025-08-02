@@ -18,8 +18,99 @@ export async function setLastContentInteractionsUpdate(ctx: AppContext, date: Da
 
 
 export async function restartLastContentInteractionsUpdate(ctx: AppContext) {
-    await setLastContentInteractionsUpdate(ctx, new Date(0))
+    await setLastContentInteractionsUpdate(ctx, new Date(Date.now()-1000*3600*24*7))
 }
+
+
+export async function createContentInteractions(ctx: AppContext) {
+    // recorremos los records y por cada uno anotamos con qué temas interactúa
+    // si es un post, vemos a quién menciona y a quién responde
+    // si es un artículo solo vemos a quién menciona
+    // si es una reacción solo vemos a qué record reacciona
+    // si es un tema
+    const lastUpdate = await getLastContentInteractionsUpdate(ctx)
+
+    const batchSize = 5000
+    let curOffset = 0
+
+    while(true){
+        console.log(`Updating topic interactions batch ${curOffset}`)
+        const t1 = Date.now()
+        const batchUris = await ctx.kysely.selectFrom("Record")
+            .leftJoin("Post", "Record.uri", "Post.uri")
+            .leftJoin("Reaction", "Record.uri", "Reaction.uri")
+            .leftJoin("TopicVersion", "Record.uri", "TopicVersion.uri")
+            .select(["Record.uri", "Post.replyToId", "Reaction.subjectId", "TopicVersion.topicId"])
+            .where("Record.CAIndexedAt", ">=", lastUpdate)
+            .orderBy("Record.CAIndexedAt asc")
+            .limit(batchSize)
+            .offset(curOffset)
+            .execute()
+        if(batchUris.length == 0) break
+        curOffset += batchUris.length
+
+        const batchReferences = await ctx.kysely
+            .selectFrom("Reference")
+            .select(["referencingContentId", "referencedTopicId"])
+            .where("Reference.referencingContentId", "in", batchUris.map(u => u.uri))
+            .execute()
+
+        const urisIncSubjects: string[] = [
+            ...batchUris.map(u => u.uri),
+            ...batchUris.map(u => u.replyToId),
+            ...batchUris.map(u => u.subjectId),
+        ].filter(x => x != null)
+
+        const batchReplyToInteractions = await ctx.kysely
+            .selectFrom("TopicInteraction")
+            .select(["TopicInteraction.topicId", "TopicInteraction.recordId"])
+            .where("TopicInteraction.recordId", "in", urisIncSubjects)
+            .execute()
+
+        let values: {recordId: string, topicId: string}[] = []
+
+        batchReferences.forEach(ref => {
+            values.push({
+                recordId: ref.referencingContentId,
+                topicId: ref.referencedTopicId,
+            })
+        })
+
+        batchReplyToInteractions.forEach(i => {
+            values.push({
+                recordId: i.recordId,
+                topicId: i.topicId,
+            })
+        })
+
+        batchUris.forEach(u => {
+            if(u.topicId){
+                values.push({
+                    recordId: u.uri,
+                    topicId: u.topicId
+                })
+            }
+        })
+
+        values = unique(values, v => `${v.recordId}:${v.topicId}`)
+        const t2 = Date.now()
+
+        console.log(`adding ${values.length} interactions`)
+
+        if(values.length > 0){
+            await ctx.kysely.insertInto("TopicInteraction")
+                .values(values)
+                .onConflict((oc) => oc.columns(["topicId", "recordId"]).doNothing())
+                .execute()
+        }
+        const t3 = Date.now()
+        logTimes("content interactions batch", [t1, t2, t3])
+    }
+
+    await setLastContentInteractionsUpdate(ctx, new Date())
+}
+
+
 
 export async function updateContentInteractionsForTopics(ctx: AppContext, topicIds: string[]) {
     const batchSize = 10

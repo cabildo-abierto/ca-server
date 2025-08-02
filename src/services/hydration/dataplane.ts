@@ -22,7 +22,7 @@ import {
 import {$Typed, AppBskyEmbedRecord} from "@atproto/api";
 import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
 import {TopicQueryResultBasic} from "#/services/wiki/topics";
-import {reactionsQuery, recordQuery} from "#/utils/utils";
+import {logTimes, reactionsQuery, recordQuery} from "#/utils/utils";
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {
     FeedViewPost,
@@ -132,6 +132,15 @@ export type TopicMentionedProps = {
         } | null
     }
     count: number
+}
+
+
+function recordViewToPostView({value, ...r}: ViewRecord): PostView {
+    return {
+        ...r,
+        record: value,
+        $type: "app.bsky.feed.defs#postView",
+    }
 }
 
 
@@ -373,6 +382,7 @@ export class Dataplane {
         uris = unique([...uris, ...required])
         const dids = unique([...uris.map(getDidFromUri), ...otherDids])
 
+        const t1 = Date.now()
         await Promise.all([
             this.fetchBskyPosts(postUris(uris)),
             this.fetchCAContentsAndBlobs(uris),
@@ -380,6 +390,8 @@ export class Dataplane {
             this.fetchTopicsBasicByUris(topicVersionUris(uris)),
             this.fetchUsersHydrationData(dids)
         ])
+        const t2 = Date.now()
+        logTimes("fetch posts and article views", [t1, t2])
     }
 
     async fetchTopicsBasicByUris(uris: string[]) {
@@ -439,6 +451,7 @@ export class Dataplane {
             .map(e => e.reason && isSkeletonReasonRepost(e.reason) ? e.reason.repost : null)
             .filter(x => x != null)
 
+        const t1 = Date.now()
         const caPosts = (await Promise.all([
             this.fetchBskyPosts(postUris(uris)),
             this.ctx.db.post.findMany({
@@ -454,6 +467,9 @@ export class Dataplane {
                 }
             })
         ]))[1]
+        const t2 = Date.now()
+
+        logTimes("expanding uris with replies and reposts", [t1, t2])
 
         const bskyPosts = uris.map(u => this.bskyPosts?.get(u)).filter(x => x != null)
 
@@ -470,6 +486,7 @@ export class Dataplane {
 
     async fetchFeedHydrationData(skeleton: FeedSkeleton) {
         const expandedUris = await this.expandUrisWithRepliesAndReposts(skeleton)
+
         await Promise.all([
             this.fetchPostAndArticleViewsHydrationData(expandedUris),
             this.fetchRepostsHydrationData(expandedUris),
@@ -482,12 +499,15 @@ export class Dataplane {
         uris = uris.filter(u => isPost(getCollectionFromUri(u)))
         if(uris.length == 0) return
 
+        const t1 = Date.now()
         const rootCreationDates = await this.ctx.kysely
             .selectFrom("Post")
             .innerJoin("Record", "Record.uri", "Post.rootId")
             .select(["Post.uri", "Record.created_at"])
             .where("Post.uri", "in", uris)
             .execute()
+        const t2 = Date.now()
+        logTimes("root creation dates", [t1, t2])
 
         rootCreationDates.forEach(r => {
             this.rootCreationDates.set(r.uri, r.created_at)
@@ -498,6 +518,7 @@ export class Dataplane {
     async fetchRepostsHydrationData(uris: string[]){
         uris = uris.filter(u => getCollectionFromUri(u) == "app.bsky.feed.repost")
         if(uris.length > 0){
+            const t1 = Date.now()
             const reposts: RepostQueryResult[] = await this.ctx.db.record.findMany({
                 select: {
                     uri: true,
@@ -514,6 +535,8 @@ export class Dataplane {
                     }
                 }
             })
+            const t2 = Date.now()
+            logTimes("fetch reposts", [t1, t2])
             reposts.forEach(r => {
                 if(r.reaction?.subjectId){
                     this.reposts.set(r.reaction.subjectId, r)
@@ -563,7 +586,10 @@ export class Dataplane {
         }
         let postViews: PostView[]
         try {
+            const t1 = Date.now()
             const results = await Promise.all(batches.map(b => agent.bsky.getPosts({uris: b})))
+            const t2 = Date.now()
+            logTimes("fetch bsky posts", [t1, t2])
             postViews = results.map(r => r.data.posts).reduce((acc, cur) => [...acc, ...cur])
         } catch (err) {
             console.log("Error fetching posts", err)
@@ -590,6 +616,7 @@ export class Dataplane {
         if (!agent.hasSession()) return
 
         const did = agent.did
+        const t1 = Date.now()
         const reactions = await this.ctx.db.reaction.findMany({
             select: {
                 subjectId: true,
@@ -607,6 +634,8 @@ export class Dataplane {
                 }
             }
         })
+        const t2 = Date.now()
+        logTimes("fetch engagement", [t1, t2])
 
         reactions.forEach(l => {
             if (l.subjectId) {
@@ -626,8 +655,6 @@ export class Dataplane {
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
         const uris = getUrisFromThreadSkeleton(skeleton)
-
-        console.log("fetching uris", uris)
 
         const c = getCollectionFromUri(skeleton.post)
 
@@ -656,7 +683,9 @@ export class Dataplane {
             }
             if (f.post.embed) {
                 const embedUri = getUriFromEmbed(f.post.embed)
-                if (embedUri) {
+                if(embedUri && isEmbedRecordView(f.post.embed) && isViewRecord(f.post.embed.record)){
+                    this.bskyPosts.set(embedUri, recordViewToPostView(f.post.embed.record))
+                } else if (embedUri) {
                     this.requires.set(f.post.uri, [...(this.requires.get(f.post.uri) ?? []), embedUri])
                 }
             }
@@ -673,6 +702,13 @@ export class Dataplane {
         })
 
         this.bskyPosts = joinMaps(this.bskyPosts, m)
+
+        Array.from(this.bskyPosts.entries()).forEach(([uri, p]) => {
+            this.bskyUsers.set(p.author.did, {
+                ...p.author,
+                $type: "app.bsky.actor.defs#profileViewBasic"
+            })
+        })
     }
 
     async fetchDatasetsHydrationData(uris: string[]) {
@@ -774,6 +810,8 @@ export class Dataplane {
         dids = dids.filter(d => !this.caUsers.has(d))
         if (dids.length == 0) return
 
+        const t1 = Date.now()
+
         const data = await this.ctx.db.user.findMany({
             select: {
                 did: true,
@@ -790,6 +828,10 @@ export class Dataplane {
                 }
             }
         })
+
+        const t2 = Date.now()
+
+        logTimes("fetching users from CA", [t1, t2])
 
         const res: CAProfileViewBasic[] = []
 
@@ -819,8 +861,12 @@ export class Dataplane {
 
         const didBatches: string[][] = []
         for (let i = 0; i < dids.length; i += 25) didBatches.push(dids.slice(i, i + 25))
+        const t1 = Date.now()
         const data = await Promise.all(didBatches.map(b => agent.bsky.getProfiles({actors: b})))
+        const t2 = Date.now()
         const profiles = data.flatMap(d => d.data.profiles)
+
+        logTimes("fetching users from bsky", [t1, t2])
 
         this.bskyUsers = joinMaps(
             this.bskyUsers,
@@ -829,10 +875,13 @@ export class Dataplane {
     }
 
     async fetchUsersHydrationData(dids: string[]) {
+        const t1 = Date.now()
         await Promise.all([
             this.fetchUsersHydrationDataFromCA(dids),
             this.fetchUsersHydrationDataFromBsky(dids)
         ])
+        const t2 = Date.now()
+        logTimes("fetch users", [t1, t2])
     }
 
     async fetchFilesFromStorage(filePaths: string[], bucket: string) {

@@ -3,8 +3,8 @@ import {getDidFromUri} from "#/utils/uri";
 import {logTimes} from "#/utils/utils";
 import {testUsers} from "#/services/admin/stats";
 import {
+    createContentInteractions,
     getEditedTopics,
-    updateContentInteractionsForEditedTopics,
     updateContentInteractionsForTopics
 } from "#/services/wiki/interactions";
 import {updateReferences} from "#/services/wiki/references";
@@ -109,9 +109,15 @@ export async function updateTopicPopularityScores(ctx: AppContext) {
     await updateContentInteractionsForTopics(ctx, topicIds)
     const t2 = Date.now()
 
-    console.log("updating topic popularities")
+    await createContentInteractions(ctx)
 
-    await updateTopicPopularities(ctx, topicIds)
+    console.log("updating topic popularities", topicIds)
+
+    const allTopicIds = await ctx.kysely
+        .selectFrom("Topic")
+        .select("id")
+        .execute()
+    await updateTopicPopularities(ctx, allTopicIds.map(t => t.id))
     const t3 = Date.now()
 
     logTimes("update topic popularities", [t1, t2, t3])

@@ -304,7 +304,7 @@ export async function updateReferencesForTopics(ctx: AppContext, topicIds: strin
             })
         }
         console.log("got refs", refs.length)
-        await applyReferencesUpdate(ctx, refs, undefined, topicIds)
+        await applyReferencesUpdate(ctx, refs, undefined, [t.id])
     }
 }
 
@@ -336,7 +336,7 @@ export async function updateReferencesForNewTopics(ctx: AppContext) {
 
 
 export async function restartReferenceLastUpdate(ctx: AppContext) {
-    await setLastReferencesUpdate(ctx, new Date(Date.now()))
+    await setLastReferencesUpdate(ctx, new Date(Date.now()-1000*3600*24*7))
 }
 
 

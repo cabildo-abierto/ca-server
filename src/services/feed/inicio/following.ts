@@ -14,6 +14,7 @@ import {$Typed} from "@atproto/api";
 import {isTopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {min} from "#/utils/arrays";
 import {FeedFormatOption} from "#/services/feed/inicio/discusion";
+import {logTimes} from "#/utils/utils";
 
 export type RepostQueryResult = {
     uri?: string
@@ -112,65 +113,63 @@ export const getSkeletonFromTimeline = (timeline: FeedViewPost[], following?: st
 }
 
 
-export async function getArticlesForFollowingFeed(ctx: AppContext, following: string[]): Promise<{
-    createdAt: Date,
+export async function getArticlesForFollowingFeed(ctx: AppContext, agent: SessionAgent): Promise<{
+    created_at: Date,
     uri: string
 }[]> {
-    return ctx.db.record.findMany({
-        select: {
-            createdAt: true,
-            uri: true
-        },
-        where: {
-            authorId: {
-                in: following
-            },
-            collection: {
-                in: articleCollections
-            }
-        },
-        take: 10
-    });
+    // quiero todos los artículos publicados por usuarios seguidos por agent.did
+
+    const t1 = Date.now()
+    const res = await ctx.kysely
+        .selectFrom("Record")
+        .select(["Record.created_at", "Record.uri"])
+        .where("Record.collection", "in", articleCollections)
+        .innerJoin("User", "User.did", "Record.authorId")
+        .leftJoin("Follow", "Follow.userFollowedId", "User.did")
+        .leftJoin("Record as FollowRecord", "FollowRecord.uri", "Follow.uri")
+        .where(eb => eb.or([
+            eb("FollowRecord.authorId", "=", agent.did),
+            eb("Record.authorId", "=", agent.did)
+        ]))
+        .orderBy("Record.created_at", "desc")
+        .limit(25)
+        .execute()
+    const t2 = Date.now()
+    logTimes("get articles", [t1, t2])
+    return res
 }
 
 
-export async function getArticleRepostsForFollowingFeed(ctx: AppContext, following: string[], dataplane: Dataplane): Promise<RepostQueryResult[]> {
-    const res = await ctx.db.record.findMany({
-        select: {
-            uri: true,
-            createdAt: true,
-            reaction: {
-                select: {
-                    uri: true,
-                    subjectId: true
-                }
-            }
-        },
-        where: {
-            authorId: {
-                in: following
-            },
-            collection: "app.bsky.feed.repost",
-            reaction: {
-                subject: {
-                    collection: "ar.cabildoabierto.feed.article"
-                }
-            }
-        },
-        take: 10
-    })
+export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: SessionAgent, dataplane: Dataplane): Promise<RepostQueryResult[]> {
+    const t1 = Date.now()
+    const res = await ctx.kysely
+        .selectFrom("Record")
+        .innerJoin("Reaction", "Reaction.uri", "Record.uri")
+        .innerJoin("Record as RepostedRecord", "RepostedRecord.uri", "Reaction.subjectId")
+        .innerJoin("Follow", "Follow.userFollowedId", "Record.authorId")
+        .innerJoin("Record as FollowRecord", "Follow.uri", "FollowRecord.uri")
+        .select(["Record.uri as repostUri", "Record.created_at as repostCreatedAt", "RepostedRecord.uri as recordUri"])
+        .where("Record.collection", "=","app.bsky.feed.repost")
+        .where("RepostedRecord.collection", "=", "ar.cabildoabierto.feed.article")
+        .where("FollowRecord.authorId", "=", agent.did)
+        .orderBy("Record.created_at", "desc")
+        .execute()
+    const t2 = Date.now()
+    logTimes("get article reposts", [t1, t2])
+
+    const qrs: RepostQueryResult[] = []
     res.forEach(r => {
-        const uri = r.reaction?.subjectId
-        const repostUri = r.reaction?.uri
-        if(uri && repostUri) dataplane.reposts.set(uri, {
+        const qr = {
             reaction: {
-                subjectId: uri
+                subjectId: r.recordUri
             },
-            uri: repostUri,
-            createdAt: r.createdAt
-        })
+            uri: r.repostUri,
+            createdAt: r.repostCreatedAt,
+        }
+        qrs.push(qr)
+        dataplane.reposts.set(r.recordUri, qr)
     })
-    return res
+    return qrs
 }
 
 
@@ -196,7 +195,11 @@ export async function getBskyTimeline(agent: SessionAgent, limit: number, data: 
     feed: $Typed<FeedViewPost>[],
     cursor: string | undefined}> {
 
+    const t1 = Date.now()
     const res = await retry({limit, cursor}, agent.bsky.getTimeline, 3)
+    const t2 = Date.now()
+
+    logTimes("bsky timeline", [t1, t2])
 
     const newCursor = res.data.cursor
     const feed = res.data.feed
@@ -211,24 +214,48 @@ export async function getBskyTimeline(agent: SessionAgent, limit: number, data: 
 }
 
 
+async function getFollowingFeedSkeletonAllCASide(ctx: AppContext, agent: SessionAgent, data: Dataplane) {
+    const t1 = Date.now()
+
+    const articlesQuery = getArticlesForFollowingFeed(ctx, agent)
+
+    const t2 = Date.now()
+    const articleRepostsQuery: Promise<RepostQueryResult[]> = getArticleRepostsForFollowingFeed(ctx, agent, data)
+
+    const [articles, articleReposts, following] = await Promise.all([
+        articlesQuery,
+        articleRepostsQuery,
+        getFollowing(ctx, agent.did)
+    ])
+
+    const t3 = Date.now()
+
+    logTimes("following ca side", [t1, t2, t3])
+    return {
+        articles,
+        articleReposts,
+        following: [agent.did, ...following]
+    }
+}
+
+
 const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, cursor) => {
     if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
 
-    const following = [agent.did, ...(await getFollowing(ctx, agent.did))]
-
     const timelineQuery = getBskyTimeline(agent, 25, data, cursor)
 
-    const articlesQuery = getArticlesForFollowingFeed(ctx, following)
-
-    const articleRepostsQuery: Promise<RepostQueryResult[]> = getArticleRepostsForFollowingFeed(ctx, following, data)
-
-    let [timeline, articles, articleReposts] = await Promise.all([timelineQuery, articlesQuery, articleRepostsQuery])
+    const t1 = Date.now()
+    let [timeline, {articles, articleReposts, following}] = await Promise.all([
+        timelineQuery,
+        getFollowingFeedSkeletonAllCASide(ctx, agent, data)
+    ])
+    const t2 = Date.now()
 
     // borramos todos los artículos y reposts de artículos anteriores en fecha al último post de la timeline
     const lastInTimeline = timeline.feed.length > 0 ? timeline.feed[timeline.feed.length - 1].post.indexedAt : null
     if (lastInTimeline) {
         const lastInTimelineDate = new Date(lastInTimeline)
-        articles = articles.filter(a => a.createdAt >= lastInTimelineDate)
+        articles = articles.filter(a => a.created_at >= lastInTimelineDate)
         articleReposts = articleReposts.filter(a => a.createdAt && a.createdAt >= lastInTimelineDate)
     }
 
@@ -241,6 +268,10 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
         ...articles.map(a => ({post: a.uri})),
         ...articleRepostsSkeleton
     ]
+
+    const t3 = Date.now()
+
+    logTimes("following sk all", [t1, t2, t3])
 
     return {
         skeleton,

@@ -15,6 +15,7 @@ import {CAHandler, CAHandlerOutput} from "#/utils/handler";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {articlesFeedPipeline} from "#/services/feed/inicio/articles";
 import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
+import {logTimes} from "#/utils/utils";
 
 
 export type FollowingFeedFilter = "Todos" | "Solo Cabildo Abierto"
@@ -69,6 +70,7 @@ export type GetFeedOutput = {
 export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAHandlerOutput<GetFeedOutput> => {
     const data = new Dataplane(ctx, agent)
 
+    const t1 = Date.now()
     let newCursor: string | undefined
     let skeleton: FeedSkeleton
     try {
@@ -83,8 +85,10 @@ export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAH
         }
         return {error: "Ocurrió un error al obtener el muro."}
     }
+    const t2 = Date.now()
 
     let feed: FeedViewContent[] = await hydrateFeed(skeleton, data)
+    const t3 = Date.now()
 
     if(pipeline.sortKey){
         feed = sortByKey(feed, pipeline.sortKey, listOrderDesc)
@@ -93,5 +97,8 @@ export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAH
     if(pipeline.filter){
         feed = pipeline.filter(feed)
     }
+    const t4 = Date.now()
+
+    logTimes("get feed", [t1, t2, t3, t4])
     return {data: {feed, cursor: newCursor}}
 }
