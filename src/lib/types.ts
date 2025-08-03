@@ -1,5 +1,6 @@
 import {EditorStatus} from "@prisma/client";
 import {ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+import {AlgorithmConfig} from "#/services/user/users";
 
 
 
@@ -40,6 +41,7 @@ export type Session = {
     did: string
     hasAccess: boolean
     validation: "persona" | "org" | null
+    algorithmConfig: AlgorithmConfig
 }
 
 

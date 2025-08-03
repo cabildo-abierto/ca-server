@@ -23,6 +23,7 @@ import {assignInviteCodesToUsers} from "#/services/user/access";
 import {updateContentsText} from "#/services/wiki/content";
 import {updateThreads} from "#/services/wiki/threads";
 import {restartLastContentInteractionsUpdate} from "#/services/wiki/interactions";
+import {updatePostLangs} from "#/services/admin/posts";
 
 const mins = 60 * 1000
 
@@ -120,6 +121,7 @@ export class CAWorker {
         this.registerJob("update-topic-mentions", (data) => updateTopicMentions(ctx, data.id as string))
         this.registerJob("update-contents-text", (data) => updateContentsText(ctx))
         this.registerJob("update-threads", (data) => updateThreads(ctx))
+        this.registerJob("update-post-langs", (data) => updatePostLangs(ctx))
 
         await this.removeAllRepeatingJobs()
         await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)

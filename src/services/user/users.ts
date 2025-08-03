@@ -9,7 +9,7 @@ import {unique} from "#/utils/arrays";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {getIronSession} from "iron-session";
 import {createCAUser} from "#/services/user/access";
-import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
+import {dbUserToProfileViewBasic, TimePeriod} from "#/services/wiki/topics";
 import {Record as FollowRecord} from "#/lex-api/types/app/bsky/graph/follow"
 import {processFollow} from "#/services/sync/process-event";
 import {
@@ -18,6 +18,8 @@ import {
 } from "#/lex-api/types/app/bsky/actor/profile"
 import {BlobRef} from "@atproto/lexicon";
 import {uploadBase64Blob} from "#/services/blob";
+import {EnDiscusionMetric, EnDiscusionTime, FeedFormatOption} from "#/services/feed/inicio/discusion";
+import {FollowingFeedFilter} from "#/services/feed/feed";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -231,6 +233,25 @@ export async function deleteSession(ctx: AppContext, agent: SessionAgent) {
 }
 
 
+export type TTOption = EnDiscusionTime | "Ediciones recientes"
+
+
+export type AlgorithmConfig = {
+    following?: {
+        filter?: FollowingFeedFilter
+        format?: FeedFormatOption
+    }
+    enDiscusion?: {
+        time?: EnDiscusionTime
+        metric?: EnDiscusionMetric
+        format?: FeedFormatOption
+    }
+    tt?: {
+        time?: TTOption
+    }
+}
+
+
 export const getSessionData = async (ctx: AppContext, agent: SessionAgent): Promise<Session | null> => {
     const data = await ctx.db.user.findUnique({
         select: {
@@ -245,7 +266,8 @@ export const getSessionData = async (ctx: AppContext, agent: SessionAgent): Prom
             avatar: true,
             hasAccess: true,
             userValidationHash: true,
-            orgValidation: true
+            orgValidation: true,
+            algorithmConfig: true
         },
         where: {
             did: agent.did
@@ -266,7 +288,8 @@ export const getSessionData = async (ctx: AppContext, agent: SessionAgent): Prom
         },
         editorStatus: data.editorStatus,
         platformAdmin: data.platformAdmin,
-        validation: getValidationState(data)
+        validation: getValidationState(data),
+        algorithmConfig: (data.algorithmConfig ?? {}) as AlgorithmConfig
     }
 }
 
@@ -522,6 +545,18 @@ export const clearFollows: CAHandler<{}, {}> = async (ctx, agent, {}) => {
     if (follows && follows.length == 1 && follows[0].did == bskyDid && follows[0].viewer?.following) {
         await unfollow(ctx, agent, {followUri: follows[0].viewer.following})
     }
+
+    return {data: {}}
+}
+
+
+export const updateAlgorithmConfig: CAHandler<AlgorithmConfig, {}> = async (ctx, agent, config) => {
+
+    await ctx.kysely
+        .updateTable("User")
+        .set("algorithmConfig", JSON.stringify(config))
+        .where("did", "=", agent.did)
+        .execute()
 
     return {data: {}}
 }

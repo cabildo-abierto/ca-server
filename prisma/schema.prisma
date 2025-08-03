@@ -30,32 +30,32 @@ enum MirrorStatus {
 }
 
 model User {
-  did                 String           @id @db.VarChar(255) // https://atproto.com/guides/identity
-  handle              String?
-  displayName         String?
-  avatar              String?
-  banner              String?
-  email               String?
-  description         String?
-  hasAccess           Boolean          @default(false) // si tiene o no acceso al período de prueba
-  inCA                Boolean          @default(false)
-  CAProfile           Record?          @relation("CAProfile", fields: [CAProfileUri], references: [uri])
-  CAProfileUri        String?          @unique
-  mirrorStatus        MirrorStatus     @default(Dirty) // estado del mirror, usado en atproto-sync
-  createdAt           DateTime         @default(now()) @map("created_at")
-  editorStatus        EditorStatus     @default(Beginner) // permisos de editor en la wiki
-  platformAdmin       Boolean          @default(false) // si tiene acceso o no a /admin
-  messagesSent        ChatMessage[]    @relation("messagesSent")
-  messagesReceived    ChatMessage[]    @relation("messagesReceived")
-  records             Record[]
-  blobs               Blob[]
-  followers           Follow[]
-  usedInviteCode      InviteCode?      @relation("invite-code-used")
-  recommendCodes      InviteCode[]     @relation("invite-codes-available") // los códigos de invitación que tiene disponibles para usar
-  seenTutorial        Boolean          @default(false)
-  seenTopicsTutorial  Boolean          @default(false)
-  seenTopicMinimizedTutorial Boolean   @default(false)
-  seenTopicMaximizedTutorial Boolean   @default(false)
+  did                        String        @id @db.VarChar(255) // https://atproto.com/guides/identity
+  handle                     String?
+  displayName                String?
+  avatar                     String?
+  banner                     String?
+  email                      String?
+  description                String?
+  hasAccess                  Boolean       @default(false) // si tiene o no acceso al período de prueba
+  inCA                       Boolean       @default(false)
+  CAProfile                  Record?       @relation("CAProfile", fields: [CAProfileUri], references: [uri])
+  CAProfileUri               String?       @unique
+  mirrorStatus               MirrorStatus  @default(Dirty) // estado del mirror, usado en atproto-sync
+  createdAt                  DateTime      @default(now()) @map("created_at")
+  editorStatus               EditorStatus  @default(Beginner) // permisos de editor en la wiki
+  platformAdmin              Boolean       @default(false) // si tiene acceso o no a /admin
+  messagesSent               ChatMessage[] @relation("messagesSent")
+  messagesReceived           ChatMessage[] @relation("messagesReceived")
+  records                    Record[]
+  blobs                      Blob[]
+  followers                  Follow[]
+  usedInviteCode             InviteCode?   @relation("invite-code-used")
+  recommendCodes             InviteCode[]  @relation("invite-codes-available") // los códigos de invitación que tiene disponibles para usar
+  seenTutorial               Boolean       @default(false)
+  seenTopicsTutorial         Boolean       @default(false)
+  seenTopicMinimizedTutorial Boolean       @default(false)
+  seenTopicMaximizedTutorial Boolean       @default(false)
 
   hasReacted HasReacted[]
 
@@ -64,11 +64,11 @@ model User {
 
   validationRequests ValidationRequest[]
 
-  readSessions ReadSession[] @relation("readUser")
+  readSessions         ReadSession[] @relation("readUser")
   readSessionsReceived ReadSession[] @relation("readAuthor")
 
   donations Donation[]
-  months UserMonth[]
+  months    UserMonth[]
 
   notifications Notification[]
 
@@ -77,6 +77,8 @@ model User {
   moderationState ModerationState @default(Ok)
 
   drafts Draft[]
+
+  algorithmConfig Json?
 }
 
 enum ModerationState {
@@ -96,10 +98,10 @@ enum ValidationRequestResult {
 }
 
 model ValidationRequest {
-  id            String         @id @default(cuid())
+  id            String                  @id @default(cuid())
   type          ValidationType
   userId        String
-  user          User           @relation(fields: [userId], references: [did])
+  user          User                    @relation(fields: [userId], references: [did])
   dniFrente     String?
   dniDorso      String?
   tipoOrg       String?
@@ -107,7 +109,7 @@ model ValidationRequest {
   comentarios   String?
   email         String?
   documentacion String[]
-  createdAt     DateTime    @default(now()) @map("created_at")
+  createdAt     DateTime                @default(now()) @map("created_at")
   result        ValidationRequestResult @default(Pendiente)
   rejectReason  String?
 
@@ -115,38 +117,38 @@ model ValidationRequest {
 }
 
 model InviteCode {
-  code          String    @id @default(cuid())
-  usedBy        User?     @relation("invite-code-used", fields: [usedByDid], references: [did])
-  usedByDid     String?   @unique
+  code          String         @id @default(cuid())
+  usedBy        User?          @relation("invite-code-used", fields: [usedByDid], references: [did])
+  usedByDid     String?        @unique
   usedAt        DateTime?
-  recommender   User?     @relation("invite-codes-available", fields: [recommenderId], references: [did])
+  recommender   User?          @relation("invite-codes-available", fields: [recommenderId], references: [did])
   recommenderId String?
   accessRequest AccessRequest?
-  createdAt     DateTime?  @default(now()) @map("created_at")
+  createdAt     DateTime?      @default(now()) @map("created_at")
 }
 
 model UserMonth {
-  id              String           @id @default(cuid())
-  userId          String
-  user            User            @relation(fields: [userId], references: [did])
-  monthStart      DateTime
-  monthEnd        DateTime
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [did])
+  monthStart DateTime
+  monthEnd   DateTime
 
-  wasActive       Boolean
-  value           Float
+  wasActive Boolean
+  value     Float
 
   paymentPromises PaymentPromise[]
-  promisesCreated Boolean       @default(false)
+  promisesCreated Boolean          @default(false)
 }
 
 model Donation {
-  id              String           @id @default(cuid())
-  createdAt       DateTime         @default(now()) @map("created_at")
-  userById        String?
-  userBy          User?            @relation(fields: [userById], references: [did])
-  transactionId   String?
-  amount          Int
-  mpPreferenceId  String?
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now()) @map("created_at")
+  userById       String?
+  userBy         User?    @relation(fields: [userById], references: [did])
+  transactionId  String?
+  amount         Int
+  mpPreferenceId String?
 
   @@unique([mpPreferenceId])
 }
@@ -158,47 +160,47 @@ enum PromiseStatus {
 }
 
 model PaymentPromise {
-  id             String        @id @default(cuid())
-  createdAt      DateTime      @default(now()) @map("created_at")
-  userMonth      UserMonth  @relation(fields: [userMonthId], references: [id])
+  id          String        @id @default(cuid())
+  createdAt   DateTime      @default(now()) @map("created_at")
+  userMonth   UserMonth     @relation(fields: [userMonthId], references: [id])
   userMonthId String
-  amount         Float
-  status         PromiseStatus @default(Pending)
-  contentId      String
-  content        Content     @relation(fields: [contentId], references: [uri])
+  amount      Float
+  status      PromiseStatus @default(Pending)
+  contentId   String
+  content     Content       @relation(fields: [contentId], references: [uri])
 
   @@unique([contentId, userMonthId])
 }
 
 model Topic {
-  id                 String            @id
-  protection         EditorStatus      @default(Beginner)
-  versions           TopicVersion[]
-  currentVersion     TopicVersion?     @relation("currentVersion", fields: [currentVersionId], references: [uri])
-  currentVersionId   String?           @unique
-  referencedBy       Reference[]
-  categories         TopicToCategory[]
-  lastSynonymsChange DateTime?
-  popularityScore    Int?              @default(1)
-  popularityScoreLastDay    Int              @default(0)
-  popularityScoreLastWeek    Int              @default(0)
-  popularityScoreLastMonth    Int              @default(0)
-  lastEdit           DateTime?         @updatedAt
-  readSessions       ReadSession[]
-  interactions       TopicInteraction[]
+  id                       String             @id
+  protection               EditorStatus       @default(Beginner)
+  versions                 TopicVersion[]
+  currentVersion           TopicVersion?      @relation("currentVersion", fields: [currentVersionId], references: [uri])
+  currentVersionId         String?            @unique
+  referencedBy             Reference[]
+  categories               TopicToCategory[]
+  lastSynonymsChange       DateTime?
+  popularityScore          Int?               @default(1)
+  popularityScoreLastDay   Int                @default(0)
+  popularityScoreLastWeek  Int                @default(0)
+  popularityScoreLastMonth Int                @default(0)
+  lastEdit                 DateTime?          @updatedAt
+  readSessions             ReadSession[]
+  interactions             TopicInteraction[]
 }
 
 model TopicVersion {
-  uri              String  @id
-  content          Content @relation(fields: [uri], references: [uri])
+  uri              String         @id
+  content          Content        @relation(fields: [uri], references: [uri])
   title            String?
-  topic            Topic   @relation(fields: [topicId], references: [id])
+  topic            Topic          @relation(fields: [topicId], references: [id])
   topicId          String
-  message          String  @default("")
+  message          String         @default("")
   synonyms         String?
   categories       String?
-  authorship       Boolean @default(true)
-  currentVersionOf Topic?  @relation("currentVersion")
+  authorship       Boolean        @default(true)
+  currentVersionOf Topic?         @relation("currentVersion")
   charsAdded       Int?
   charsDeleted     Int?
   accCharsAdded    Int?
@@ -268,18 +270,18 @@ model Record {
 
   notificationsGenerated Notification[]
 
-  CAIndexedAt           DateTime        @default(now())
-  lastUpdatedAt         DateTime        @default(now())
+  CAIndexedAt   DateTime @default(now())
+  lastUpdatedAt DateTime @default(now())
 
   topicInteractions TopicInteraction[]
 }
 
 model Content {
-  uri                  String        @id
-  record               Record        @relation(fields: [uri], references: [uri])
+  uri                  String           @id
+  record               Record           @relation(fields: [uri], references: [uri])
   text                 String?
   textBlobId           String?
-  textBlob             Blob?         @relation(fields: [textBlobId], references: [cid])
+  textBlob             Blob?            @relation(fields: [textBlobId], references: [cid])
   format               String?
   numWords             Int?
   topicVersion         TopicVersion?
@@ -295,38 +297,39 @@ model Content {
 }
 
 model TopicInteraction {
-  recordId  String
-  record    Record @relation(fields: [recordId], references: [uri])
-  topicId   String
-  topic     Topic  @relation(fields: [topicId], references: [id])
+  recordId String
+  record   Record @relation(fields: [recordId], references: [uri])
+  topicId  String
+  topic    Topic  @relation(fields: [topicId], references: [id])
 
   @@unique([recordId, topicId])
 }
 
 model ReadSession {
-  id     String        @id @default(uuid())
-  userId String
-  user User            @relation("readUser", fields: [userId], references: [did])
-  createdAt            DateTime        @default(now()) @map("created_at")
-  readChunks Json
-  readContentId String?
-  readContent Content? @relation(fields: [readContentId], references: [uri])
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation("readUser", fields: [userId], references: [did])
+  createdAt       DateTime @default(now()) @map("created_at")
+  readChunks      Json
+  readContentId   String?
+  readContent     Content? @relation(fields: [readContentId], references: [uri])
   contentAuthorId String
-  contentAuthor User   @relation("readAuthor", fields: [contentAuthorId], references: [did])
-  topicId String?
-  topic Topic?         @relation(fields: [topicId], references: [id])
+  contentAuthor   User     @relation("readAuthor", fields: [contentAuthorId], references: [did])
+  topicId         String?
+  topic           Topic?   @relation(fields: [topicId], references: [id])
 }
 
 model Post {
-  uri       String  @id
-  content   Content @relation(fields: [uri], references: [uri])
+  uri       String   @id
+  content   Content  @relation(fields: [uri], references: [uri])
   facets    String?
   embed     String?
   replyToId String?
-  replyTo   Record? @relation("reply", fields: [replyToId], references: [uri])
+  replyTo   Record?  @relation("reply", fields: [replyToId], references: [uri])
   quote     String?
   rootId    String?
-  root      Record? @relation("root", fields: [rootId], references: [uri])
+  root      Record?  @relation("root", fields: [rootId], references: [uri])
+  langs     String[]
 }
 
 model Follow {
@@ -439,43 +442,40 @@ model ChatMessage {
   seen       Boolean  @default(false)
 }
 
-
 model AccessRequest {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now()) @map("created_at")
-  email      String
-  comment    String
+  id           String      @id @default(cuid())
+  createdAt    DateTime    @default(now()) @map("created_at")
+  email        String
+  comment      String
   sentInviteAt DateTime?
-  inviteCodeId String? @unique
-  inviteCode InviteCode? @relation(fields: [inviteCodeId], references: [code])
+  inviteCodeId String?     @unique
+  inviteCode   InviteCode? @relation(fields: [inviteCodeId], references: [code])
 }
-
 
 model Draft {
-  id           String   @id @default(cuid())
-  createdAt    DateTime @default(now()) @map("created_at")
-  lastUpdate   DateTime @default(now())
-  collection   String
-  text         String
-  title        String?
-  embeds       Json?
-  author       User     @relation(fields: [authorId], references: [did])
-  authorId     String
-}
-
-
-model Notification {
   id         String   @id @default(cuid())
   createdAt  DateTime @default(now()) @map("created_at")
-  type       NotificationType
+  lastUpdate DateTime @default(now())
+  collection String
+  text       String
+  title      String?
+  embeds     Json?
+  author     User     @relation(fields: [authorId], references: [did])
+  authorId   String
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  createdAt DateTime         @default(now()) @map("created_at")
+  type      NotificationType
 
   userNotifiedId String
-  userNotified User @relation(fields: [userNotifiedId], references: [did])
+  userNotified   User   @relation(fields: [userNotifiedId], references: [did])
 
   causedByRecordId String // replies, edits, votes, mentions
-  causedByRecord Record @relation(fields: [causedByRecordId], references: [uri])
+  causedByRecord   Record @relation(fields: [causedByRecordId], references: [uri])
 
-  message String?
+  message     String?
   moreContext String?
 
   reasonSubject String?
@@ -483,23 +483,20 @@ model Notification {
   @@unique([causedByRecordId, userNotifiedId])
 }
 
-
 model Meeting {
   id          String   @id @default(cuid())
   date        DateTime
   title       String
   url         String
   description String
-  show        Boolean @default(false)
+  show        Boolean  @default(false)
 }
-
 
 enum EditorStatus {
   Beginner
   Editor
   Administrator
 }
-
 
 enum NotificationType {
   Reply

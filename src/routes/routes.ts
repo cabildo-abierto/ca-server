@@ -19,6 +19,7 @@ import {
     getProfile,
     getSession, setSeenTutorial,
     unfollow,
+    updateAlgorithmConfig,
     updateProfile
 } from "#/services/user/users";
 import {createPost} from "#/services/write/post";
@@ -384,6 +385,8 @@ export const createRouter = (ctx: AppContext) => {
     router.get("/invite-codes-to-share", makeHandler(ctx, getInviteCodesToShare))
 
     router.get("/content-metadata/:did/:collection/:rkey", makeHandlerNoAuth(ctx, getContentMetadata))
+
+    router.post("/algorithm-config", makeHandler(ctx, updateAlgorithmConfig))
 
     router.use(adminRoutes(ctx))
 

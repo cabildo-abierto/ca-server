@@ -180,6 +180,7 @@ export type Post = {
     replyToId: string | null;
     quote: string | null;
     rootId: string | null;
+    langs: string[];
 };
 export type Reaction = {
     uri: string;
@@ -277,6 +278,7 @@ export type User = {
     orgValidation: string | null;
     lastSeenNotifications: Generated<Timestamp>;
     moderationState: Generated<ModerationState>;
+    algorithmConfig: unknown | null;
 };
 export type UserMonth = {
     id: string;

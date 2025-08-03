@@ -287,10 +287,11 @@ function followingFeedOnlyCABaseQueryAll(ctx: AppContext, agent: SessionAgent, c
         .leftJoin("Record as followRecord", "Follow.uri", "followRecord.uri")
         .leftJoin("Reaction", "Reaction.uri", "Record.uri")
         .innerJoin("User as author", "Record.authorId", "author.did")
+        .leftJoin("Record as RepostedRecord", "RepostedRecord.uri", "Reaction.subjectId")
+        .leftJoin("User as RepostedRecordAuthor", "RepostedRecord.authorId", "RepostedRecordAuthor.did")
         .select(["Record.uri", "Reaction.subjectId", "Record.created_at"])
         .leftJoin("Post", "Post.uri", "Record.uri")
         .where("author.CAProfileUri", "is not", null)
-        .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.post", "app.bsky.feed.repost"])
         .where(eb =>
             eb.or([
                 eb("followRecord.authorId", "=", agent.did),
@@ -299,8 +300,15 @@ function followingFeedOnlyCABaseQueryAll(ctx: AppContext, agent: SessionAgent, c
         )
         .where(eb =>
             eb.or([
-                eb("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.repost"]),
-                eb("Post.replyToId", "is", null)
+                eb("Record.collection", "=", "ar.cabildoabierto.feed.article"),
+                eb.and([
+                    eb("Record.collection", "=", "app.bsky.feed.repost"),
+                    eb("RepostedRecordAuthor.inCA", "=", true)
+                ]),
+                eb.and([
+                    eb("Record.collection", "=", "app.bsky.feed.post"),
+                    eb("Post.replyToId", "is", null)
+                ]),
             ])
         )
 
