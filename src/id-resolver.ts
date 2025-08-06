@@ -1,4 +1,5 @@
 import {IdResolver, MemoryCache} from '@atproto/identity'
+import Redis from "ioredis"
 
 const HOUR = 60e3 * 60
 const DAY = HOUR * 24
@@ -18,13 +19,19 @@ export interface BidirectionalResolver {
     resolveDidsToHandles(dids: string[]): Promise<Record<string, string>>
 }
 
-export function createBidirectionalResolver(resolver: IdResolver) {
+export function createBidirectionalResolver(resolver: IdResolver, ioredis: Redis) {
     return {
         async resolveDidToHandle(did: string): Promise<string> {
-            const didDoc = await resolver.did.resolveAtprotoData(did)
-            const resolvedHandle = await resolver.handle.resolve(didDoc.handle)
-            if (resolvedHandle === did) {
-                return didDoc.handle
+            const handle = await ioredis.get(`did-handle:${did}`)
+            if(!handle){
+                const didDoc = await resolver.did.resolveAtprotoData(did)
+                const resolvedHandle = await resolver.handle.resolve(didDoc.handle)
+                if (resolvedHandle === did) {
+                    await ioredis.set(`did-handle:${did}`, didDoc.handle, 'EX', 3600)
+                    return didDoc.handle
+                }
+            } else {
+                return handle
             }
             return did
         },
@@ -43,9 +50,17 @@ export function createBidirectionalResolver(resolver: IdResolver) {
         },
 
         async resolveHandleToDid(handle: string): Promise<string | null> {
-            let did = await resolver.handle.resolveDns(handle)
+            let did: string | null | undefined = await ioredis.get(`handle-did:${handle}`)
             if(!did){
-                did = await resolver.handle.resolveHttp(handle)
+                did = await resolver.handle.resolveDns(handle)
+                if(!did){
+                    did = await resolver.handle.resolveHttp(handle)
+                }
+                if(did){
+                    await ioredis.set(`handle-did:${handle}`, did, 'EX', 3600)
+                }
+            } else {
+                return did
             }
             return did ?? null
         }

@@ -21,6 +21,7 @@ import {handleToDid} from "#/services/user/users";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {ThreadViewPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
+import {prettyPrintJSON} from "#/utils/strings";
 
 function threadViewPostToThreadSkeleton(thread: ThreadViewPost, isAncestor: boolean = false): ThreadSkeleton {
     return {
@@ -41,6 +42,12 @@ async function getThreadRepliesSkeletonForPostFromBsky(ctx: AppContext, agent: S
         const thread = isThreadViewPost(data.thread) ? data.thread : null
 
         if(thread){
+            console.log("got thread with replies", thread.replies?.length)
+            if(thread.replies){
+                for(let i = 0; i < thread.replies.length; i++){
+                    console.log("reply", i, thread.replies[i].$type)
+                }
+            }
             dataplane.saveDataFromPostThread(thread, true)
         }
 
@@ -127,6 +134,8 @@ export const getThread: CAHandler<{params: {handleOrDid: string, collection: str
 
     const uri = getUri(did, collection, rkey)
     const skeleton = await getThreadSkeleton(ctx, agent, uri, data)
+    console.log("thread skeleton")
+    prettyPrintJSON(skeleton)
 
     await data.fetchThreadHydrationData(skeleton)
 

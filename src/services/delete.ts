@@ -144,13 +144,6 @@ export function deleteRecordsDB(ctx: AppContext, uris: string[]){
                 }
             }
         }),
-        ctx.db.visualization.deleteMany({
-            where: {
-                uri: {
-                    in: uris
-                }
-            }
-        }),
         ctx.db.dataBlock.deleteMany({
             where: {
                 datasetId: {

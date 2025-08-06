@@ -62,7 +62,7 @@ export async function setupAppContext(useWorker: boolean) {
     const oauthClient = await createClient(ioredis)
 
     const baseIdResolver = createIdResolver()
-    const resolver = createBidirectionalResolver(baseIdResolver)
+    const resolver = createBidirectionalResolver(baseIdResolver, ioredis)
     const xrpc = createServer()
 
     let worker: CAWorker | undefined = undefined

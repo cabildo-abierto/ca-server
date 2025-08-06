@@ -79,14 +79,6 @@ export type CategoryLink = {
     idCategoryA: string;
     idCategoryB: string;
 };
-export type ChatMessage = {
-    id: string;
-    created_at: Generated<Timestamp>;
-    fromUserId: string;
-    toUserId: string;
-    text: string;
-    seen: Generated<boolean>;
-};
 export type Content = {
     uri: string;
     text: string | null;
@@ -304,12 +296,6 @@ export type ValidationRequest = {
     result: Generated<ValidationRequestResult>;
     rejectReason: string | null;
 };
-export type Visualization = {
-    uri: string;
-    spec: string;
-    datasetId: string | null;
-    previewBlobCid: string | null;
-};
 export type VoteReject = {
     uri: string;
     message: string | null;
@@ -323,7 +309,6 @@ export type DB = {
     AuthState: AuthState;
     Blob: Blob;
     CategoryLink: CategoryLink;
-    ChatMessage: ChatMessage;
     Content: Content;
     DataBlock: DataBlock;
     Dataset: Dataset;
@@ -348,6 +333,5 @@ export type DB = {
     User: User;
     UserMonth: UserMonth;
     ValidationRequest: ValidationRequest;
-    Visualization: Visualization;
     VoteReject: VoteReject;
 };

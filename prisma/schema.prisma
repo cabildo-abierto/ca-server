@@ -30,32 +30,30 @@ enum MirrorStatus {
 }
 
 model User {
-  did                        String        @id @db.VarChar(255) // https://atproto.com/guides/identity
+  did                        String       @id @db.VarChar(255) // https://atproto.com/guides/identity
   handle                     String?
   displayName                String?
   avatar                     String?
   banner                     String?
   email                      String?
   description                String?
-  hasAccess                  Boolean       @default(false) // si tiene o no acceso al período de prueba
-  inCA                       Boolean       @default(false)
-  CAProfile                  Record?       @relation("CAProfile", fields: [CAProfileUri], references: [uri])
-  CAProfileUri               String?       @unique
-  mirrorStatus               MirrorStatus  @default(Dirty) // estado del mirror, usado en atproto-sync
-  createdAt                  DateTime      @default(now()) @map("created_at")
-  editorStatus               EditorStatus  @default(Beginner) // permisos de editor en la wiki
-  platformAdmin              Boolean       @default(false) // si tiene acceso o no a /admin
-  messagesSent               ChatMessage[] @relation("messagesSent")
-  messagesReceived           ChatMessage[] @relation("messagesReceived")
+  hasAccess                  Boolean      @default(false) // si tiene o no acceso al período de prueba
+  inCA                       Boolean      @default(false)
+  CAProfile                  Record?      @relation("CAProfile", fields: [CAProfileUri], references: [uri])
+  CAProfileUri               String?      @unique
+  mirrorStatus               MirrorStatus @default(Dirty) // estado del mirror, usado en atproto-sync
+  createdAt                  DateTime     @default(now()) @map("created_at")
+  editorStatus               EditorStatus @default(Beginner) // permisos de editor en la wiki
+  platformAdmin              Boolean      @default(false) // si tiene acceso o no a /admin
   records                    Record[]
   blobs                      Blob[]
   followers                  Follow[]
-  usedInviteCode             InviteCode?   @relation("invite-code-used")
-  recommendCodes             InviteCode[]  @relation("invite-codes-available") // los códigos de invitación que tiene disponibles para usar
-  seenTutorial               Boolean       @default(false)
-  seenTopicsTutorial         Boolean       @default(false)
-  seenTopicMinimizedTutorial Boolean       @default(false)
-  seenTopicMaximizedTutorial Boolean       @default(false)
+  usedInviteCode             InviteCode?  @relation("invite-code-used")
+  recommendCodes             InviteCode[] @relation("invite-codes-available") // los códigos de invitación que tiene disponibles para usar
+  seenTutorial               Boolean      @default(false)
+  seenTopicsTutorial         Boolean      @default(false)
+  seenTopicMinimizedTutorial Boolean      @default(false)
+  seenTopicMaximizedTutorial Boolean      @default(false)
 
   hasReacted HasReacted[]
 
@@ -79,6 +77,10 @@ model User {
   drafts Draft[]
 
   algorithmConfig Json?
+
+  @@index([handle])
+  @@index([inCA])
+  @@index([CAProfileUri])
 }
 
 enum ModerationState {
@@ -125,6 +127,9 @@ model InviteCode {
   recommenderId String?
   accessRequest AccessRequest?
   createdAt     DateTime?      @default(now()) @map("created_at")
+
+  @@index([usedByDid])
+  @@index([recommenderId])
 }
 
 model UserMonth {
@@ -139,6 +144,8 @@ model UserMonth {
 
   paymentPromises PaymentPromise[]
   promisesCreated Boolean          @default(false)
+
+  @@index([userId])
 }
 
 model Donation {
@@ -151,6 +158,7 @@ model Donation {
   mpPreferenceId String?
 
   @@unique([mpPreferenceId])
+  @@index([userById])
 }
 
 enum PromiseStatus {
@@ -170,6 +178,8 @@ model PaymentPromise {
   content     Content       @relation(fields: [contentId], references: [uri])
 
   @@unique([contentId, userMonthId])
+  @@index([userMonthId])
+  @@index([contentId])
 }
 
 model Topic {
@@ -188,6 +198,11 @@ model Topic {
   lastEdit                 DateTime?          @updatedAt
   readSessions             ReadSession[]
   interactions             TopicInteraction[]
+
+  @@index([popularityScoreLastDay(sort: Desc)])
+  @@index([popularityScoreLastWeek(sort: Desc)])
+  @@index([popularityScoreLastMonth(sort: Desc)])
+  @@index([lastEdit(sort: Desc)])
 }
 
 model TopicVersion {
@@ -210,6 +225,8 @@ model TopicVersion {
   prevAcceptedUri  String?
   prevAccepted     TopicVersion?  @relation("prevAccepted", fields: [prevAcceptedUri], references: [uri])
   nextVersions     TopicVersion[] @relation("prevAccepted")
+
+  @@index([topicId])
 }
 
 model TopicCategory {
@@ -238,21 +255,19 @@ model TopicToCategory {
 }
 
 model Record {
-  uri                 String          @id @unique
-  cid                 String?
-  collection          String
-  rkey                String
-  author              User            @relation(fields: [authorId], references: [did])
-  authorId            String
-  createdAt           DateTime        @default(now()) @map("created_at")
-  content             Content?
-  follow              Follow?
-  dataset             Dataset?
-  visualization       Visualization?
-  visualizationsUsing Visualization[] @relation("visualizationUsesDataset")
-  embeddedIn          Record?         @relation("embeddings", fields: [uri], references: [uri])
-  embeddedRecords     Record[]        @relation("embeddings")
-  record              String?
+  uri             String   @id @unique
+  cid             String?
+  collection      String
+  rkey            String
+  author          User     @relation(fields: [authorId], references: [did])
+  authorId        String
+  createdAt       DateTime @default(now()) @map("created_at")
+  content         Content?
+  follow          Follow?
+  dataset         Dataset?
+  embeddedIn      Record?  @relation("embeddings", fields: [uri], references: [uri])
+  embeddedRecords Record[] @relation("embeddings")
+  record          String?
 
   reaction        Reaction?
   reactions       Reaction[]   @relation("reactions")
@@ -274,6 +289,10 @@ model Record {
   lastUpdatedAt DateTime @default(now())
 
   topicInteractions TopicInteraction[]
+
+  @@index([authorId, createdAt(sort: Desc)])
+  @@index([collection, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
 }
 
 model Content {
@@ -317,6 +336,9 @@ model ReadSession {
   contentAuthor   User     @relation("readAuthor", fields: [contentAuthorId], references: [did])
   topicId         String?
   topic           Topic?   @relation(fields: [topicId], references: [id])
+
+  @@index([readContentId])
+  @@index([userId])
 }
 
 model Post {
@@ -330,6 +352,9 @@ model Post {
   rootId    String?
   root      Record?  @relation("root", fields: [rootId], references: [uri])
   langs     String[]
+
+  @@index([replyToId])
+  @@index([rootId])
 }
 
 model Follow {
@@ -337,6 +362,8 @@ model Follow {
   record         Record  @relation(fields: [uri], references: [uri])
   userFollowedId String?
   userFollowed   User?   @relation(fields: [userFollowedId], references: [did])
+
+  @@index([userFollowedId])
 }
 
 model Reaction {
@@ -346,6 +373,8 @@ model Reaction {
   subject   Record? @relation("reactions", fields: [subjectId], references: [uri])
 
   voteReject VoteReject?
+
+  @@index([subjectId])
 }
 
 model HasReacted {
@@ -359,6 +388,7 @@ model HasReacted {
   reactionType String
 
   @@unique([userId, recordId, reactionType])
+  @@index([recordId])
 }
 
 model VoteReject {
@@ -401,17 +431,6 @@ model Blob {
   authorId String
 
   contentOf Content[]
-  previewOf Visualization[]
-}
-
-model Visualization {
-  uri            String  @id
-  record         Record  @relation(fields: [uri], references: [uri])
-  spec           String
-  dataset        Record? @relation("visualizationUsesDataset", fields: [datasetId], references: [uri])
-  datasetId      String?
-  previewBlobCid String?
-  previewBlob    Blob?   @relation(fields: [previewBlobCid], references: [cid])
 }
 
 model Reference {
@@ -424,22 +443,13 @@ model Reference {
   referencingContent   Content       @relation(fields: [referencingContentId], references: [uri])
 
   @@unique([referencingContentId, referencedTopicId])
+  @@index([referencingContentId])
+  @@index([referencedTopicId])
 }
 
 enum ReferenceType {
   Strong
   Weak
-}
-
-model ChatMessage {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now()) @map("created_at")
-  fromUser   User     @relation("messagesSent", fields: [fromUserId], references: [did])
-  fromUserId String
-  toUser     User     @relation("messagesReceived", fields: [toUserId], references: [did])
-  toUserId   String
-  text       String
-  seen       Boolean  @default(false)
 }
 
 model AccessRequest {
@@ -450,6 +460,8 @@ model AccessRequest {
   sentInviteAt DateTime?
   inviteCodeId String?     @unique
   inviteCode   InviteCode? @relation(fields: [inviteCodeId], references: [code])
+
+  @@index([inviteCodeId])
 }
 
 model Draft {
@@ -462,6 +474,8 @@ model Draft {
   embeds     Json?
   author     User     @relation(fields: [authorId], references: [did])
   authorId   String
+
+  @@index([authorId])
 }
 
 model Notification {
@@ -481,6 +495,7 @@ model Notification {
   reasonSubject String?
 
   @@unique([causedByRecordId, userNotifiedId])
+  @@index([userNotifiedId])
 }
 
 model Meeting {
@@ -490,6 +505,8 @@ model Meeting {
   url         String
   description String
   show        Boolean  @default(false)
+
+  @@index([show])
 }
 
 enum EditorStatus {

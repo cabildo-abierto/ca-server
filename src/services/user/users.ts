@@ -1,5 +1,5 @@
 import {AppContext} from "#/index";
-import {Account, Profile, Session, ValidationState} from "#/lib/types";
+import {Account, CAProfile, Profile, Session, ValidationState} from "#/lib/types";
 import {cookieOptions, SessionAgent} from "#/utils/session-agent";
 import {deleteRecords} from "#/services/delete";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
@@ -9,7 +9,7 @@ import {unique} from "#/utils/arrays";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {getIronSession} from "iron-session";
 import {createCAUser} from "#/services/user/access";
-import {dbUserToProfileViewBasic, TimePeriod} from "#/services/wiki/topics";
+import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {Record as FollowRecord} from "#/lex-api/types/app/bsky/graph/follow"
 import {processFollow} from "#/services/sync/process-event";
 import {
@@ -20,6 +20,7 @@ import {BlobRef} from "@atproto/lexicon";
 import {uploadBase64Blob} from "#/services/blob";
 import {EnDiscusionMetric, EnDiscusionTime, FeedFormatOption} from "#/services/feed/inicio/discusion";
 import {FollowingFeedFilter} from "#/services/feed/feed";
+import {logTimes} from "#/utils/utils";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -171,49 +172,95 @@ export const unfollow: CAHandler<{ followUri: string }> = async (ctx, agent, {fo
 }
 
 
+async function getCAProfile(ctx: AppContext, agent: SessionAgent, handleOrDid: string): Promise<CAProfile | null> {
+    const t1 = Date.now()
+    const did = await handleToDid(ctx, agent, handleOrDid)
+    if(!did) return null
+
+    const t2 = Date.now()
+    const profiles = await ctx.kysely
+        .selectFrom("User")
+        .select([
+            "inCA",
+            "editorStatus",
+            "userValidationHash",
+            "orgValidation",
+            (eb) =>
+                eb
+                    .selectFrom("Follow")
+                    .innerJoin("Record", "Record.uri", "Follow.uri")
+                    .select(eb.fn.countAll<number>().as("count"))
+                    .where("Follow.userFollowedId", "=", did)
+                    .as("followersCount"),
+            (eb) =>
+                eb
+                    .selectFrom("Record")
+                    .where("Record.authorId", "=", did)
+                    .innerJoin("Follow", "Follow.uri", "Record.uri")
+                    .innerJoin("User as UserFollowed", "UserFollowed.did", "Follow.userFollowedId")
+                    .where("UserFollowed.inCA", "=", true)
+                    .select(eb.fn.countAll<number>().as("count"))
+                    .as("followsCount"),
+            (eb) =>
+                eb
+                    .selectFrom("Record")
+                    .innerJoin("Article", "Article.uri", "Record.uri")
+                    .select(eb.fn.countAll<number>().as("count"))
+                    .where("Record.authorId", "=", did)
+                    .where("Record.collection", "=", "ar.cabildoabierto.feed.article")
+                    .as("articlesCount"),
+            (eb) =>
+                eb
+                    .selectFrom("Record")
+                    .innerJoin("TopicVersion", "TopicVersion.uri", "Record.uri")
+                    .select(eb.fn.countAll<number>().as("count"))
+                    .where("Record.authorId", "=", did)
+                    .where("Record.collection", "=", "ar.cabildoabierto.wiki.topicVersion")
+                    .as("editsCount"),
+        ])
+        .where(eb => eb.or([
+            eb("User.did", "=", handleOrDid),
+            eb("User.handle", "=", handleOrDid)
+        ]))
+        .execute()
+    const t3 = Date.now()
+
+    if(profiles.length == 0) return null
+
+    const profile = profiles[0]
+
+    logTimes("ca profile", [t1, t2, t3])
+
+    return {
+        editorStatus: profile.editorStatus,
+        inCA: profile.inCA ?? null,
+        followsCount: profile.followsCount ?? 0,
+        followersCount: profile.followersCount ?? 0,
+        articlesCount: profile.articlesCount ?? 0,
+        editsCount: profile.editsCount ?? 0,
+        validation: getValidationState(profile)
+    }
+}
+
+
 export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile> = async (ctx, agent, {params}) => {
-    const did = await handleToDid(ctx, agent, params.handleOrDid)
-    if (!did) return {error: "No se encontró el usuario."}
 
     try {
-        const [bskyProfile, caProfile, caFollowsCount, caFollowersCount] = await Promise.all([
-            agent.bsky.getProfile({actor: did}),
-            ctx.db.user.findUnique({
-                select: {
-                    inCA: true,
-                    editorStatus: true,
-                    userValidationHash: true,
-                    orgValidation: true
-                },
-                where: {did}
-            }),
-            ctx.db.follow.count({
-                where: {
-                    record: {
-                        authorId: did
-                    },
-                    userFollowed: {
-                        inCA: true
-                    }
-                }
-            }),
-            ctx.db.follow.count({
-                where: {
-                    userFollowedId: did
-                }
-            })
+        const t1 = Date.now()
+
+        const [bskyProfile, caProfile] = await Promise.all([
+            agent.bsky.getProfile({actor: params.handleOrDid}),
+            getCAProfile(ctx, agent, params.handleOrDid)
         ])
+
+        const t2 = Date.now()
 
         const profile: Profile = {
             bsky: bskyProfile.data,
-            ca: {
-                ...caProfile,
-                inCA: caProfile?.inCA ?? false,
-                followsCount: caFollowsCount,
-                followersCount: caFollowersCount,
-                validation: caProfile ? getValidationState(caProfile) : null
-            }
+            ca: caProfile
         }
+
+        logTimes("perfil", [t1, t2])
 
         return {
             data: profile

@@ -49,6 +49,7 @@ import {
     isColumnFilter
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {getUrisFromThreadSkeleton} from "#/services/thread/thread";
+import {prettyPrintJSON} from "#/utils/strings";
 
 export function getUriFromEmbed(embed: PostView["embed"]): string | null {
     if (isEmbedRecordView(embed)) {
@@ -584,13 +585,15 @@ export class Dataplane {
         for (let i = 0; i < postsList.length; i += 25) {
             batches.push(postsList.slice(i, i + 25))
         }
-        let postViews: PostView[]
+        let postViews: PostView[] = []
         try {
             const t1 = Date.now()
-            const results = await Promise.all(batches.map(b => agent.bsky.getPosts({uris: b})))
+            for(const b of batches) {
+                const res = await agent.bsky.getPosts({uris: b})
+                postViews.push(...res.data.posts)
+            }
             const t2 = Date.now()
             logTimes("fetch bsky posts", [t1, t2])
-            postViews = results.map(r => r.data.posts).reduce((acc, cur) => [...acc, ...cur])
         } catch (err) {
             console.log("Error fetching posts", err)
             console.log("uris", uris)
@@ -602,8 +605,20 @@ export class Dataplane {
         )
 
         m = this.addEmbedsToPostsMap(m)
+        this.addAuthorsFromPostViews(Array.from(m.values()))
 
         this.bskyPosts = joinMaps(this.bskyPosts, m)
+    }
+
+    addAuthorsFromPostViews(posts: PostView[]) {
+        posts.forEach(p => {
+            if(!this.bskyUsers.has(p.author.did)){
+                this.bskyUsers.set(p.author.did, {
+                    ...p.author,
+                    $type: "app.bsky.actor.defs#profileViewBasic"
+                })
+            }
+        })
     }
 
     getFetchedBlob(blob: BlobRef): string | null {
@@ -702,13 +717,7 @@ export class Dataplane {
         })
 
         this.bskyPosts = joinMaps(this.bskyPosts, m)
-
-        Array.from(this.bskyPosts.entries()).forEach(([uri, p]) => {
-            this.bskyUsers.set(p.author.did, {
-                ...p.author,
-                $type: "app.bsky.actor.defs#profileViewBasic"
-            })
-        })
+        this.addAuthorsFromPostViews(Array.from(m.values()))
     }
 
     async fetchDatasetsHydrationData(uris: string[]) {
@@ -965,12 +974,9 @@ export class Dataplane {
     }
 
     saveDataFromPostThread(thread: ThreadViewPost, includeParents: boolean, excludeChild?: string) {
-        if(isPostView(thread.post)){
+        if(thread.post){
             this.bskyPosts.set(thread.post.uri, thread.post)
-            this.bskyUsers.set(thread.post.author.did, {
-                ...thread.post.author,
-                $type: "app.bsky.actor.defs#profileViewBasic"
-            })
+            this.addAuthorsFromPostViews([thread.post])
 
             if(includeParents && thread.parent && isThreadViewPost(thread.parent)){
                 this.saveDataFromPostThread(thread.parent, true, thread.post.uri)
@@ -978,13 +984,19 @@ export class Dataplane {
 
             if(thread.replies){
                 thread.replies.forEach(r => {
-                    if(isThreadViewPost(r) && isPostView(r.post)){
+                    if(isThreadViewPost(r)){
                         if(r.post.uri != excludeChild){
                             this.saveDataFromPostThread(r, true)
                         }
+                    } else {
+                        console.log("reply is not post view")
+                        prettyPrintJSON(r)
                     }
                 })
             }
+        } else {
+            console.log("thread->post no es postView:")
+            prettyPrintJSON(thread.post)
         }
     }
 }

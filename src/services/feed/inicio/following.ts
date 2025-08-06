@@ -26,7 +26,7 @@ export type RepostQueryResult = {
 
 
 function skeletonFromArticleReposts(p: RepostQueryResult): SkeletonFeedPost | null {
-    if(p.reaction && p.reaction.subjectId){
+    if (p.reaction && p.reaction.subjectId) {
         return {
             $type: "app.bsky.feed.defs#skeletonFeedPost",
             post: p.reaction.subjectId,
@@ -149,7 +149,7 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: 
         .innerJoin("Follow", "Follow.userFollowedId", "Record.authorId")
         .innerJoin("Record as FollowRecord", "Follow.uri", "FollowRecord.uri")
         .select(["Record.uri as repostUri", "Record.created_at as repostCreatedAt", "RepostedRecord.uri as recordUri"])
-        .where("Record.collection", "=","app.bsky.feed.repost")
+        .where("Record.collection", "=", "app.bsky.feed.repost")
         .where("RepostedRecord.collection", "=", "ar.cabildoabierto.feed.article")
         .where("FollowRecord.authorId", "=", agent.did)
         .orderBy("Record.created_at", "desc")
@@ -179,12 +179,12 @@ async function retry<X, Y>(x: X, f: (params: X) => Promise<Y>, attempts: number,
         return await f(x)
     } catch (err) {
         console.log("Got errro!", attempts)
-        if(attempts > 0){
-            console.log(`Retrying after error. Attempts remaining ${attempts-1}. Error:`, err)
+        if (attempts > 0) {
+            console.log(`Retrying after error. Attempts remaining ${attempts - 1}. Error:`, err)
             await new Promise(r => setTimeout(r, delay))
-            return retry(x, f, attempts-1)
+            return retry(x, f, attempts - 1)
         } else {
-            throw(err)
+            throw (err)
         }
     }
 
@@ -193,7 +193,8 @@ async function retry<X, Y>(x: X, f: (params: X) => Promise<Y>, attempts: number,
 
 export async function getBskyTimeline(agent: SessionAgent, limit: number, data: Dataplane, cursor?: string): Promise<{
     feed: $Typed<FeedViewPost>[],
-    cursor: string | undefined}> {
+    cursor: string | undefined
+}> {
 
     const t1 = Date.now()
     const res = await retry({limit, cursor}, agent.bsky.getTimeline, 3)
@@ -240,7 +241,7 @@ async function getFollowingFeedSkeletonAllCASide(ctx: AppContext, agent: Session
 
 
 const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, cursor) => {
-    if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
+    if (!agent.hasSession()) return {skeleton: [], cursor: undefined}
 
     const timelineQuery = getBskyTimeline(agent, 25, data, cursor)
 
@@ -281,87 +282,147 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
 
 
 function followingFeedOnlyCABaseQueryAll(ctx: AppContext, agent: SessionAgent, cursor?: string) {
-    const baseQuery = ctx.kysely
-        .selectFrom("Record")
-        .leftJoin("Follow", "Follow.userFollowedId", "Record.authorId")
-        .leftJoin("Record as followRecord", "Follow.uri", "followRecord.uri")
-        .leftJoin("Reaction", "Reaction.uri", "Record.uri")
-        .innerJoin("User as author", "Record.authorId", "author.did")
-        .leftJoin("Record as RepostedRecord", "RepostedRecord.uri", "Reaction.subjectId")
-        .leftJoin("User as RepostedRecordAuthor", "RepostedRecord.authorId", "RepostedRecordAuthor.did")
-        .select(["Record.uri", "Reaction.subjectId", "Record.created_at"])
-        .leftJoin("Post", "Post.uri", "Record.uri")
-        .where("author.CAProfileUri", "is not", null)
-        .where(eb =>
-            eb.or([
-                eb("followRecord.authorId", "=", agent.did),
-                eb("Record.authorId", "=", agent.did)
-            ])
+    return ctx.kysely
+        .with("follows", eb => eb
+            .selectFrom("User")
+            .select(["User.did"])
+            .where("User.inCA", "=", true)
+            .where(eb => eb.or([
+                eb("User.did", "=", agent.did),
+                eb.exists(
+                    eb.selectFrom("Follow")
+                        .innerJoin("Record", "Follow.uri", "Record.uri")
+                        .where("Record.authorId", "=", agent.did)
+                        .whereRef("Follow.userFollowedId", "=", "User.did")
+                )
+            ]))
         )
-        .where(eb =>
+        .with("filteredRecords", (eb) =>
+            eb
+                .selectFrom("Record")
+                .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.post", "app.bsky.feed.repost"])
+                .where(eb => eb.exists(
+                        eb
+                            .selectFrom("follows")
+                            .whereRef("follows.did", "=", "Record.authorId")
+                    )
+                )
+                .$if(cursor != null, (qb) => qb.where("Record.created_at", "<", new Date(cursor!)))
+                .select(["Record.uri", "Record.collection", "Record.created_at"])
+        )
+        .selectFrom("filteredRecords as Record")
+        .leftJoin("Post", (join) =>
+            join
+                .onRef("Post.uri", "=", "Record.uri")
+                .on("Record.collection", "=", "app.bsky.feed.post")
+        )
+        .leftJoin("Reaction as Repost", (join) =>
+            join
+                .onRef("Repost.uri", "=", "Record.uri")
+                .on("Record.collection", "=", "app.bsky.feed.repost")
+        )
+        .leftJoin("Record as RepostedRecord", "Repost.subjectId", "RepostedRecord.uri")
+        .select([
+            "Record.uri as uri",
+            "Record.created_at as createdAt",
+            "RepostedRecord.uri as repostedRecordUri"
+        ])
+        .where((eb) =>
             eb.or([
-                eb("Record.collection", "=", "ar.cabildoabierto.feed.article"),
-                eb.and([
-                    eb("Record.collection", "=", "app.bsky.feed.repost"),
-                    eb("RepostedRecordAuthor.inCA", "=", true)
-                ]),
                 eb.and([
                     eb("Record.collection", "=", "app.bsky.feed.post"),
                     eb("Post.replyToId", "is", null)
                 ]),
+                eb("Record.collection", "=", "ar.cabildoabierto.feed.article"),
+                eb.and([
+                    eb("Record.collection", "=", "app.bsky.feed.repost"),
+                    eb.exists(
+                        eb.selectFrom("follows")
+                            .whereRef("follows.did", "=", "RepostedRecord.authorId")
+                    ),
+                ]),
             ])
         )
-
-    return (cursor != null ? baseQuery.where("Record.created_at", "<", new Date(cursor)) : baseQuery)
-        .orderBy("Record.created_at", "desc")
+        .orderBy("createdAt", "desc");
 }
 
 
 function followingFeedOnlyCABaseQueryArticles(ctx: AppContext, agent: SessionAgent, cursor?: string) {
-    const baseQuery = ctx.kysely
-        .selectFrom("Record")
-        .leftJoin("Follow", "Follow.userFollowedId", "Record.authorId")
-        .leftJoin("Record as followRecord", "Follow.uri", "followRecord.uri")
-        .leftJoin("Reaction", "Reaction.uri", "Record.uri")
-        .innerJoin("User as author", "Record.authorId", "author.did")
-        .leftJoin("Article", "Article.uri", "Record.uri")
-        .select(["Record.uri", "Reaction.subjectId", "Record.created_at"])
-        .where("author.CAProfileUri", "is not", null)
-        .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.repost"])
-        .where(eb =>
+    return ctx.kysely
+        .with("follows", eb => eb
+            .selectFrom("User")
+            .where("User.inCA", "=", true)
+            .select(["User.did"])
+            .where(eb => eb.or([
+                eb("User.did", "=", agent.did),
+                eb.exists(
+                    eb.selectFrom("Follow")
+                        .innerJoin("Record", "Follow.uri", "Record.uri")
+                        .where("Record.authorId", "=", agent.did)
+                        .whereRef("Follow.userFollowedId", "=", "User.did")
+                )
+            ]))
+        )
+        .with("filteredRecords", (eb) =>
+            eb
+                .selectFrom("Record")
+                .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.repost"])
+                .where(eb => eb.exists(
+                        eb
+                            .selectFrom("follows")
+                            .whereRef("follows.did", "=", "Record.authorId")
+                    )
+                )
+                .$if(cursor != null, (qb) => qb.where("Record.created_at", "<", new Date(cursor!)))
+                .select(["Record.uri", "Record.collection", "Record.created_at"])
+        )
+        .selectFrom("filteredRecords as Record")
+        .leftJoin("Reaction as Repost", (join) =>
+            join
+                .onRef("Repost.uri", "=", "Record.uri")
+                .on("Record.collection", "=", "app.bsky.feed.repost")
+        )
+        .leftJoin("Record as RepostedRecord", "Repost.subjectId", "RepostedRecord.uri")
+        .select([
+            "Record.uri as uri",
+            "Record.created_at as createdAt",
+            "RepostedRecord.uri as repostedRecordUri"
+        ])
+        .where((eb) =>
             eb.or([
-                eb("followRecord.authorId", "=", agent.did),
-                eb("Record.authorId", "=", agent.did)
+                eb("Record.collection", "=", "ar.cabildoabierto.feed.article"),
+                eb.exists(
+                    eb.selectFrom("follows")
+                        .whereRef("follows.did", "=", "RepostedRecord.authorId")
+                )
             ])
         )
-        .where(eb =>
-            eb.or([
-                eb.and([
-                    eb("Record.collection", "=", "ar.cabildoabierto.feed.article"),
-                    eb("Article.uri", "is not", null)
-                ]),
-                eb('Reaction.subjectId', 'like', `%ar.cabildoabierto.feed.article%`)
-            ])
-        )
-
-    return (cursor != null ? baseQuery.where("Record.created_at", "<", new Date(cursor)) : baseQuery)
-        .orderBy("Record.created_at", "desc")
+        .orderBy("createdAt", "desc");
 }
 
 
 const getFollowingFeedSkeletonOnlyCA: (format: FeedFormatOption) => GetSkeletonProps = (format) => async (ctx, agent, data, cursor) => {
-    if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
+    if (!agent.hasSession()) return {skeleton: [], cursor: undefined}
 
-    const query = format == "Todos" ? followingFeedOnlyCABaseQueryAll(ctx, agent, cursor) : followingFeedOnlyCABaseQueryArticles(ctx, agent, cursor)
+    const query = format == "Todos" ?
+        followingFeedOnlyCABaseQueryAll(ctx, agent, cursor) :
+        followingFeedOnlyCABaseQueryArticles(ctx, agent, cursor)
 
     const limit = 25
 
+    const t1 = Date.now()
     const posts = await query
         .limit(limit)
         .execute()
+    const t2 = Date.now()
+    logTimes("posts for skeleton only ca", [t1, t2])
 
-    function queryToSkeletonElement(e: {uri: string, subjectId: string | null}): SkeletonFeedPost {
-        if(!e.subjectId){
+    function queryToSkeletonElement(e: {
+        uri: string,
+        repostedRecordUri: string | null,
+        createdAt: Date
+    }): SkeletonFeedPost {
+        if (!e.repostedRecordUri) {
             return {
                 $type: "app.bsky.feed.defs#skeletonFeedPost",
                 post: e.uri
@@ -369,7 +430,7 @@ const getFollowingFeedSkeletonOnlyCA: (format: FeedFormatOption) => GetSkeletonP
         } else {
             return {
                 $type: "app.bsky.feed.defs#skeletonFeedPost",
-                post: e.subjectId,
+                post: e.repostedRecordUri,
                 reason: {
                     $type: "app.bsky.feed.defs#skeletonReasonRepost",
                     repost: e.uri
@@ -380,7 +441,7 @@ const getFollowingFeedSkeletonOnlyCA: (format: FeedFormatOption) => GetSkeletonP
 
     const skeleton = posts.map(queryToSkeletonElement)
 
-    const newCursor = posts.length < limit ? undefined : min(posts, p => new Date(p.created_at).getTime())?.created_at.toISOString()
+    const newCursor = posts.length < limit ? undefined : min(posts, p => p.createdAt.getTime())?.createdAt.toISOString()
 
     return {
         skeleton,
@@ -390,7 +451,7 @@ const getFollowingFeedSkeletonOnlyCA: (format: FeedFormatOption) => GetSkeletonP
 
 
 export const getFollowingFeedSkeleton: (filter: FollowingFeedFilter, format: FeedFormatOption) => GetSkeletonProps = (filter, format) => async (ctx, agent, data, cursor) => {
-    if(filter == "Todos" && format == "Todos"){
+    if (filter == "Todos" && format == "Todos") {
         return getFollowingFeedSkeletonAll(ctx, agent, data, cursor)
     } else {
         return getFollowingFeedSkeletonOnlyCA(format)(ctx, agent, data, cursor)
@@ -423,8 +484,8 @@ export function filterFeed(feed: FeedViewContent[], allowTopicVersions: boolean 
             roots.add(rootUri)
         } else if (!rootUri) {
             const rootTopic = getRootTopicIdFromPost(a)
-            if(rootTopic){
-               res.push(a)
+            if (rootTopic) {
+                res.push(a)
             }
             console.log("Warning: Filtrando porque no se encontró el root.")
         }
@@ -434,7 +495,7 @@ export function filterFeed(feed: FeedViewContent[], allowTopicVersions: boolean 
 }
 
 
-export const getFollowingFeedPipeline: (filter?: FollowingFeedFilter, format?: FeedFormatOption) => FeedPipelineProps = (filter="Todos", format="Todos") => ({
+export const getFollowingFeedPipeline: (filter?: FollowingFeedFilter, format?: FeedFormatOption) => FeedPipelineProps = (filter = "Todos", format = "Todos") => ({
     getSkeleton: getFollowingFeedSkeleton(filter, format),
     sortKey: rootCreationDateSortKey,
     filter: filterFeed
