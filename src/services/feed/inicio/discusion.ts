@@ -31,47 +31,53 @@ export type FeedFormatOption = "Todos" | "Artículos"
 
 export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption) => GetSkeletonProps = (metric, time, format) => async (ctx, agent, data, cursor) => {
     const startDate = getEnDiscusionStartDate(time)
-    // Me gustas: usamos uniqueLikesCount.
+    // Me gustas: usamos uniqueLikesCount - autolikes.
     // Interacciones: usamos uniqueLikesCount + uniqueRepliesCount + uniqueRepostsCount
     // Popularidad relativa: usamos Interacciones / Cantidad de seguidores del autor en Bsky
 
     const collections = format == "Artículos" ? ["ar.cabildoabierto.feed.article"] : ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
 
     if(metric == "Me gustas"){
-        let skeleton = await ctx.kysely
-            .selectFrom("Record")
+        const label = 'ca:en discusión'
+
+        let skeleton = await ctx.kysely.with('Autolikes', (db) =>
+            db.selectFrom('Reaction')
+                .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
+                .leftJoin('Record as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
+                .where('ReactionRecord.collection', '=', 'app.bsky.feed.like')
+                .where('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
+                .select(['Reaction.uri', 'Reaction.subjectId'])
+            )
+            .selectFrom('Record')
+            .leftJoin('Autolikes', 'Record.uri', 'Autolikes.subjectId')
+            .where('Record.collection', 'in', collections)
+            .innerJoin('Content', 'Record.uri', 'Content.uri')
+            .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
             .select([
-                "Record.uri",
-                "Record.uniqueLikesCount",
-                "Record.created_at",
-                (eb) => eb
-                    .selectFrom("Reaction")
-                    .whereRef("Reaction.subjectId", "=", "Record.uri")
-                    .leftJoin("Record as ReactionRecord", "Reaction.uri", "ReactionRecord.uri")
-                    .where("ReactionRecord.collection", "=", "app.bsky.feed.like")
-                    .whereRef("ReactionRecord.authorId", "=", "Record.authorId")
-                    .select(eb.fn.countAll().as("count"))
-                    .as("reactionsCount")
+                'Record.uri',
+                'Record.uniqueLikesCount',
+                'Record.created_at',
+                'Autolikes.uri as autolikes_uri',
             ])
-            .innerJoin("Content", "Record.uri", "Content.uri")
-            .where("Record.collection", "in", collections)
-            .where(sql`Content.selfLabels @> ARRAY['ca: en discusión']::text[]`)
-            .execute()
-        
-        console.log("en discusion skeleton", skeleton)
+            .execute();
+
+        console.log("--------------------------------------------------------------------------------------------------")
+        console.log("En discusión skeleton", skeleton.filter(e => e.autolikes_uri != null))
 
         skeleton = sortByKey(skeleton, e => {
             return [
                 e.created_at > startDate ? 1 : 0,
-                e.uniqueLikesCount ?? 0,
+                e.uniqueLikesCount ?? 0 - (e.autolikes_uri ? 1:0),
                 e.created_at.getTime()
-            ]
-        }, listOrderDesc)
+            ];
+        }, listOrderDesc);
+
+        //console.log("getEnDiscusionSkeleton OUTPUT", { metric, time, format, skeleton });
+
         return {
-            skeleton: skeleton
-                .map(e => ({post: e.uri})),
+            skeleton: skeleton.map(e => ({ post: e.uri })),
             cursor: undefined
-        }
+        };
     } else if(metric == "Interacciones"){
         let skeleton = await ctx.db.record.findMany({
             select: {
@@ -153,6 +159,10 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
                 .map(e => ({post: e.uri})),
             cursor: undefined
         }
+    }
+    return {
+        skeleton: [],
+        cursor: undefined
     }
 }
 
