@@ -45,7 +45,7 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
                 .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
                 .leftJoin('Record as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
                 .where('ReactionRecord.collection', '=', 'app.bsky.feed.like')
-                .where('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
+                .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
                 .select(['Reaction.uri', 'Reaction.subjectId'])
             )
             .selectFrom('Record')
@@ -67,7 +67,7 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
         skeleton = sortByKey(skeleton, e => {
             return [
                 e.created_at > startDate ? 1 : 0,
-                e.uniqueLikesCount ?? 0 - (e.autolikes_uri ? 1:0),
+                (e.uniqueLikesCount ?? 0) - (e.autolikes_uri ? 1 : 0),
                 e.created_at.getTime()
             ];
         }, listOrderDesc);
