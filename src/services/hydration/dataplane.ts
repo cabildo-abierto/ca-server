@@ -19,8 +19,7 @@ import {
     postUris,
     topicVersionUris
 } from "#/utils/uri";
-import {$Typed, AppBskyEmbedRecord} from "@atproto/api";
-import {ViewRecord} from "@atproto/api/src/client/types/app/bsky/embed/record";
+import {$Typed} from "@atproto/api";
 import {TopicQueryResultBasic} from "#/services/wiki/topics";
 import {logTimes, reactionsQuery, recordQuery} from "#/utils/utils";
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
@@ -39,7 +38,7 @@ import {isView as isEmbedRecordView} from "#/lex-api/types/app/bsky/embed/record
 import {isView as isEmbedRecordWithMediaView} from "#/lex-api/types/app/bsky/embed/recordWithMedia"
 import {isViewNotFound, isViewRecord} from "#/lex-api/types/app/bsky/embed/record";
 import {NotificationQueryResult, NotificationsSkeleton} from "#/services/notifications/notifications";
-import {stringListIncludes} from "#/services/dataset/read";
+import {equalFilterCond, inFilterCond, stringListIncludes} from "#/services/dataset/read";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
@@ -133,15 +132,6 @@ export type TopicMentionedProps = {
         } | null
     }
     count: number
-}
-
-
-function recordViewToPostView({value, ...r}: ViewRecord): PostView {
-    return {
-        ...r,
-        record: value,
-        $type: "app.bsky.feed.defs#postView",
-    }
 }
 
 
@@ -551,10 +541,24 @@ export class Dataplane {
         const posts = Array.from(m.values())
 
         posts.forEach(post => {
-            if (post.embed && post.embed.$type == "app.bsky.embed.record#view") {
-                const embed = post.embed as AppBskyEmbedRecord.View
-                if (embed.record.$type == "app.bsky.embed.record#viewRecord") {
-                    const record = embed.record as ViewRecord
+            if (post.embed && isEmbedRecordView(post.embed) && isViewRecord(post.embed.record)) {
+                const record = post.embed.record
+                m.set(record.uri, {
+                    ...record,
+                    uri: record.uri,
+                    cid: record.cid,
+                    $type: "app.bsky.feed.defs#postView",
+                    author: {
+                        ...record.author
+                    },
+                    indexedAt: record.indexedAt,
+                    record: record.value,
+                    embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
+                })
+            } else if(post.embed && isEmbedRecordWithMediaView(post.embed)){
+                const recordView = post.embed.record
+                if(isEmbedRecordView(recordView) && isViewRecord(recordView.record)){
+                    const record = recordView.record
                     m.set(record.uri, {
                         ...record,
                         uri: record.uri,
@@ -564,7 +568,8 @@ export class Dataplane {
                             ...record.author
                         },
                         indexedAt: record.indexedAt,
-                        record: record.value
+                        record: record.value,
+                        embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
                     })
                 }
             }
@@ -696,14 +701,6 @@ export class Dataplane {
                     m.set(f.reply.root.uri, f.reply.root)
                 }
             }
-            if (f.post.embed) {
-                const embedUri = getUriFromEmbed(f.post.embed)
-                if(embedUri && isEmbedRecordView(f.post.embed) && isViewRecord(f.post.embed.record)){
-                    this.bskyPosts.set(embedUri, recordViewToPostView(f.post.embed.record))
-                } else if (embedUri) {
-                    this.requires.set(f.post.uri, [...(this.requires.get(f.post.uri) ?? []), embedUri])
-                }
-            }
             if (f.reason) {
                 if (isReasonRepost(f.reason) && f.post.uri) {
                     this.reposts.set(f.post.uri, {
@@ -715,7 +712,7 @@ export class Dataplane {
                 }
             }
         })
-
+        this.addEmbedsToPostsMap(m)
         this.bskyPosts = joinMaps(this.bskyPosts, m)
         this.addAuthorsFromPostViews(Array.from(m.values()))
     }
@@ -952,24 +949,52 @@ export class Dataplane {
     async fetchFilteredTopics(manyFilters: $Typed<ColumnFilter>[][]){
         const datasets = await Promise.all(manyFilters.map(async filters => {
 
-            const includesFilters: {name: string, value: string}[] = []
+            const filtersByOperator = new Map<string, {column: string, operands: string[]}[]>()
+
             filters.forEach(f => {
-                if(f.operator == "includes" && f.operands && f.operands.length > 0) {
-                    includesFilters.push({name: f.column, value: f.operands[0]})
+                if(["includes", "=", "in"].includes(f.operator) && f.operands && f.operands.length > 0){
+                    const cur = filtersByOperator.get(f.operator) ?? []
+                    filtersByOperator.set(f.operator, [...cur, {column: f.column, operands: f.operands}])
                 }
             })
-            return await this.ctx.kysely
-                .selectFrom('Topic')
-                .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
-                .select(['id', 'TopicVersion.props'])
-                .where((eb) =>
-                    eb.and(includesFilters.map(f => stringListIncludes(f.name, f.value)))
-                )
-                .execute() as {id: string, props: TopicProp[]}[]
+            if(filtersByOperator.size > 0){
+                let query = this.ctx.kysely
+                    .selectFrom('Topic')
+                    .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
+                    .select(['id', 'TopicVersion.props'])
+
+                const includesFilters = filtersByOperator.get("includes")
+                if(includesFilters){
+                    query = query.where((eb) =>
+                        eb.and(includesFilters.map(f => stringListIncludes(f.column, f.operands[0])))
+                    )
+                }
+
+                const equalFilters = filtersByOperator.get("=")
+                if(equalFilters){
+                    query = query.where((eb) =>
+                        eb.and(equalFilters.map(f => equalFilterCond(f.column, f.operands[0])))
+                    )
+                }
+
+                const inFilters = filtersByOperator.get("in")
+                if(inFilters){
+                    query = query.where((eb) =>
+                        eb.and(inFilters.map(f => inFilterCond(f.column, f.operands)))
+                    )
+                }
+
+                return await query
+                    .execute() as {id: string, props: TopicProp[]}[]
+            } else {
+                return null
+            }
         }))
 
         datasets.forEach((d, index) => {
-            this.topicsDatasets.set(getObjectKey(manyFilters[index]), d)
+            if(d){
+                this.topicsDatasets.set(getObjectKey(manyFilters[index]), d)
+            }
         })
     }
 

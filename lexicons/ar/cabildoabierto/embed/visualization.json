@@ -122,6 +122,14 @@
             "type": "ref",
             "ref": "#axisConfig"
           }
+        },
+        "colors": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#axisConfig"
+          },
+          "maxLength": 1
         }
       }
     },

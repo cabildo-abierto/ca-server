@@ -261,7 +261,8 @@ export const processPostsBatch: BatchRecordProcessor<Post.Record> = async (ctx, 
                 embed: r.embed ? JSON.stringify(r.embed) : null,
                 uri: ref.uri,
                 replyToId: r.reply ? r.reply.parent.uri as string : null,
-                rootId: r.reply && r.reply.root ? r.reply.root.uri : null
+                rootId: r.reply && r.reply.root ? r.reply.root.uri : null,
+                langs: r.langs ?? []
             }
         })
 

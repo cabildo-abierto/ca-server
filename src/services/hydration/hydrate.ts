@@ -213,8 +213,6 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
 function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedContent: string, data: Dataplane): $Typed<SelectionQuoteEmbedView> | null {
     const caData = data.caContents?.get(quotedContent)
 
-    console.log("looking for quoted content", quotedContent, caData != null)
-
     if (caData && caData.content && caData.content) {
         const authorId = getDidFromUri(caData.uri)
         const author = hydrateProfileViewBasic(authorId, data)

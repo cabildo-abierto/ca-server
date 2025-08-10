@@ -179,8 +179,6 @@ type CreateDraftParams = {
 export const saveDraft: CAHandler<CreateDraftParams, {id: string}> = async (ctx, agent, params) => {
     const id = params.id ? params.id : uuidv4()
 
-    prettyPrintJSON(params.embeds)
-
     let embeds: string | undefined = undefined
     if(params.embeds){
         if(!params.embedContexts || params.embedContexts.length != params.embeds.length){

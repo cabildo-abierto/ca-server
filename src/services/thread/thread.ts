@@ -134,8 +134,6 @@ export const getThread: CAHandler<{params: {handleOrDid: string, collection: str
 
     const uri = getUri(did, collection, rkey)
     const skeleton = await getThreadSkeleton(ctx, agent, uri, data)
-    console.log("thread skeleton")
-    prettyPrintJSON(skeleton)
 
     await data.fetchThreadHydrationData(skeleton)
 

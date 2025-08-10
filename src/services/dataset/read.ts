@@ -30,21 +30,25 @@ export function hydrateTopicsDatasetView(filters: $Typed<ColumnFilter>[], datapl
         data = JSON.stringify([])
     } else {
         const props = topics[0].props as TopicProp[]
-        columns = [{name: "Tema"}, ...props.map(p => ({
+        console.log("topics", topics.slice(0, 5))
+        columns = [{name: "Tema"}, ...(props ? props.map(p => ({
             name: p.name
-        }))]
+        })) : [])]
         const rows = topics.map(t => {
-            const props = t.props as TopicProp[]
+            const props = t.props as TopicProp[] | undefined
 
             const row: Record<string, any> = {
                 "Tema": t.id
             }
-            props.forEach(p => {
-                const valid = validateTopicProp(p)
-                if(valid.success && "value" in valid.value.value){
-                    row[p.name] = valid.value.value.value
-                }
-            })
+
+            if(props){
+                props.forEach(p => {
+                    const valid = validateTopicProp(p)
+                    if(valid.success && "value" in valid.value.value){
+                        row[p.name] = valid.value.value.value
+                    }
+                })
+            }
 
             return row
         })
@@ -85,11 +89,11 @@ export function stringListIsEmpty(name: string) {
     const existsPath = `$[*] ? (@.name == "${name}")`
 
     return sql<boolean>`
-        "TopicVersion"."props" IS NULL
+        "props" IS NULL
         OR (
-            NOT jsonb_path_exists("TopicVersion"."props", ${existsPath}::jsonpath)
-        OR jsonb_path_exists("TopicVersion"."props", ${wrongTypePath}::jsonpath)
-        OR jsonb_path_exists("TopicVersion"."props", ${emptyPath}::jsonpath)
+            NOT jsonb_path_exists("props", ${existsPath}::jsonpath)
+        OR jsonb_path_exists("props", ${wrongTypePath}::jsonpath)
+        OR jsonb_path_exists("props", ${emptyPath}::jsonpath)
         )
     `;
 }
@@ -98,9 +102,33 @@ export function stringListIncludes(name: string, value: string) {
     const type = `ar.cabildoabierto.wiki.topicVersion#stringListProp`
     const path = `$[*] ? (@.name == "${name}" && @.value."$type" == "${type}" && exists(@.value.value[*] ? (@ == "${value}")))`;
     return sql<boolean>`
-        jsonb_path_exists("TopicVersion"."props", ${path}::jsonpath)
+        jsonb_path_exists("props", ${path}::jsonpath)
     `;
 }
+
+
+export function equalFilterCond(name: string, value: string) {
+    const isNumber = !isNaN(Number(value))
+    let path: string
+    if(isNumber){
+        path = `$[*] ? (@.name == "${name}" && (@.value.value == ${value} || @.value.value == "${value}"))`
+    } else {
+        path = `$[*] ? (@.name == "${name}" && @.value.value == "${value}")`
+    }
+    console.log("path", path)
+    return sql<boolean>`
+        jsonb_path_exists("props", ${path}::jsonpath)
+        `;
+}
+
+
+export function inFilterCond(name: string, values: string[]) {
+    const path = `$[*] ? (@.name == "${name}" && (${values.map(v => `@.value.value == "${v}"`).join(" || ")}))`;
+    return sql<boolean>`
+        jsonb_path_exists("props", ${path}::jsonpath)
+    `;
+}
+
 
 
 export const getTopicsDatasetHandler: CAHandler<TopicDatasetSpec, TopicsDatasetView> = async (ctx, agent, params) => {
@@ -115,7 +143,9 @@ export const getTopicsDatasetHandler: CAHandler<TopicDatasetSpec, TopicsDatasetV
 
     return dataset ? {
         data: dataset
-    } : {error: "Ocurrió un error al obtener el dataset."}
+    } : {
+        error: "Ocurrió un error al obtener el dataset."
+    }
 }
 
 

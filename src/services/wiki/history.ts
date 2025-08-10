@@ -1,11 +1,10 @@
-
-import {CAHandler} from "#/utils/handler";
-import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {SessionAgent} from "#/utils/session-agent";
-import {PrismaTransactionClient} from "#/services/sync/sync-update";
+import {CAHandler} from "#/utils/handler"
+import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+import {SessionAgent} from "#/utils/session-agent"
+import {PrismaTransactionClient} from "#/services/sync/sync-update"
 import {CategoryVotes, TopicHistory, TopicVersionStatus, VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-import {getCollectionFromUri} from "#/utils/uri";
-import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
+import {getCollectionFromUri} from "#/utils/uri"
+import {dbUserToProfileViewBasic} from "#/services/wiki/topics"
 
 
 function getViewerForTopicVersionInHistory(reactions: {uri: string, subjectId: string | null}[]): VersionInHistory["viewer"] {
@@ -157,7 +156,6 @@ export const getTopicHistoryHandler: CAHandler<{
     const {id} = params
     try {
         const topicHistory = await getTopicHistory(ctx.db, id, agent)
-
         return {data: topicHistory}
     } catch (e) {
         console.error("Error getting topic " + id)

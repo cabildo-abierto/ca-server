@@ -78,10 +78,10 @@ export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAH
         newCursor = res.cursor
         skeleton = res.skeleton
     } catch (err) {
-        console.log("Error getting feed skeleton", err)
+        console.error("Error getting feed skeleton", err)
         if(err instanceof Error){
-            console.log("name", err.name)
-            console.log("message", err.message)
+            console.error("name", err.name)
+            console.error("message", err.message)
         }
         return {error: "Ocurrió un error al obtener el muro."}
     }

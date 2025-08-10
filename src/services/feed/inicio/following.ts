@@ -47,7 +47,7 @@ function getRootUriFromPost(e: FeedViewPost | FeedViewContent): string | null {
         } else if (isFeedViewContent(e) && isKnownContent(e.content)) {
             return e.content.uri
         } else {
-            console.log("Warning: No se encontró el root del post", e)
+            console.warn("Warning: No se encontró el root del post", e)
             return null
         }
     } else if (e.reply.root && "uri" in e.reply.root) {
@@ -68,7 +68,7 @@ function getRootTopicIdFromPost(e: FeedViewPost | FeedViewContent): string | nul
         } else if (isFeedViewContent(e) && isKnownContent(e.content)) {
             return e.content.uri
         } else {
-            console.log("Warning: No se encontró el root del post", e)
+            console.warn("Warning: No se encontró el root del post", e)
             return null
         }
     } else if (e.reply.root) {
@@ -101,7 +101,9 @@ export const getSkeletonFromTimeline = (timeline: FeedViewPost[], following?: st
     let filtered = following ? timeline.filter(t => {
         if (t.reason && isReasonRepost(t.reason)) return true
         const rootUri = getRootUriFromPost(t)
-        if (!rootUri) return false
+        if (!rootUri) {
+            return false
+        }
         const rootAuthor = getDidFromUri(rootUri)
         return following.includes(rootAuthor)
     }) : timeline
@@ -174,11 +176,9 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: 
 
 
 async function retry<X, Y>(x: X, f: (params: X) => Promise<Y>, attempts: number, delay: number = 200): Promise<Y> {
-    console.log("Trying function with attempts", attempts)
     try {
         return await f(x)
     } catch (err) {
-        console.log("Got errro!", attempts)
         if (attempts > 0) {
             console.log(`Retrying after error. Attempts remaining ${attempts - 1}. Error:`, err)
             await new Promise(r => setTimeout(r, delay))
@@ -487,7 +487,7 @@ export function filterFeed(feed: FeedViewContent[], allowTopicVersions: boolean 
             if (rootTopic) {
                 res.push(a)
             }
-            console.log("Warning: Filtrando porque no se encontró el root.")
+            console.warn("Warning: Filtrando porque no se encontró el root.")
         }
     })
 
