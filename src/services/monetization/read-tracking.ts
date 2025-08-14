@@ -2,10 +2,18 @@ import {CAHandler} from "#/utils/handler";
 import {getDidFromUri, getUri, isTopicVersion} from "#/utils/uri";
 import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
 
-export type ReadChunks = {
+
+export type ReadChunk = {
     chunk: number
     duration: number
-}[]
+}
+
+export type ReadChunks = ReadChunk[]
+
+export type ReadChunksAttr = {
+    chunks: ReadChunks,
+    totalChunks: number
+}
 
 export const storeReadSession: CAHandler<{
     chunks: ReadChunks

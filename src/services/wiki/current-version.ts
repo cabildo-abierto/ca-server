@@ -38,13 +38,16 @@ export async function processDeleteTopicVersion(ctx: AppContext, uri: string) {
     const topicHistory = await getTopicHistory(ctx.db, id)
     if (!topicHistory) return {error: "Ocurrió un error al borrar la versión."}
 
-    const currentVersion = getTopicCurrentVersion(topicHistory.versions)
+    const currentVersion = getTopicCurrentVersion(
+        topicHistory.protection,
+        topicHistory.versions
+    )
     if (currentVersion == null) return {error: "Ocurrió un error al borrar la versión."}
 
     const index = topicHistory.versions.findIndex(v => v.uri == uri)
 
     const spliced = topicHistory.versions.toSpliced(index, 1)
-    const newCurrentVersionIndex = getTopicCurrentVersion(spliced)
+    const newCurrentVersionIndex = getTopicCurrentVersion(topicHistory.protection, spliced)
 
     const currentVersionId = newCurrentVersionIndex != null ? spliced[newCurrentVersionIndex].uri : undefined
 
@@ -127,29 +130,52 @@ export async function updateTopicsLastEdit(ctx: AppContext) {
 }
 
 
-export function isVersionMonetized(version: any) {
-    return true // TO DO
-}
+function getStatusWithAuthorVote(authorStatus: string, status?: TopicVersionStatus): TopicVersionStatus {
+    if (status) {
+        const idx = status.voteCounts
+            .findIndex(c => c.category == authorStatus)
 
-
-export function isVersionAccepted(status?: TopicVersionStatus) {
-    if (!status) return true
-
-    function catToNumber(cat: string) {
-        return 0 // TO DO
+        if (idx != -1) {
+            status.voteCounts[idx].accepts += 1
+        } else {
+            status.voteCounts.push({
+                category: authorStatus,
+                accepts: 1,
+                rejects: 0
+            })
+        }
+        return status
+    } else {
+        return {
+            voteCounts: [{
+                category: authorStatus,
+                accepts: 1,
+                rejects: 0
+            }]
+        }
     }
-
-    const relevantVotes = max(status.voteCounts, x => catToNumber(x.category))
-
-    if (relevantVotes == undefined) return true
-
-    return relevantVotes.rejects == 0 // TO DO: && relevantVotes.accepts > 0
 }
 
 
-export function getTopicCurrentVersion(versions: { status?: TopicVersionStatus }[]): number | null {
+function catToNumber(cat: string) {
+    const res = ["Beginner", "Editor", "Administrator"].indexOf(cat)
+    const resEs = ["Editor principiante", "Editor", "Administrador"].indexOf(cat)
+    if (res == -1 && resEs == -1) throw Error(`Categoría de editor desconocida: ${cat}`)
+    return res != -1 ? res : resEs
+}
+
+
+export function isVersionAccepted(authorStatus: string, protection: string, status?: TopicVersionStatus) {
+    const statusWithAuthor = getStatusWithAuthorVote(authorStatus, status)
+    const relevantVotes = max(statusWithAuthor.voteCounts, x => catToNumber(x.category))
+    if(!relevantVotes) throw Error("No hubo ningún voto incluyendo al autor!")
+    return relevantVotes.rejects == 0 && relevantVotes.accepts > 0
+}
+
+
+export function getTopicCurrentVersion(protection: string = "Beginner", versions: { author: {editorStatus?: string}, status?: TopicVersionStatus }[]): number | null {
     for (let i = versions.length - 1; i >= 0; i--) {
-        if (isVersionAccepted(versions[i].status)) {
+        if (isVersionAccepted(versions[i].author.editorStatus ?? "Beginner", protection, versions[i].status)) {
             return i
         }
     }
@@ -160,7 +186,7 @@ export function getTopicCurrentVersion(versions: { status?: TopicVersionStatus }
 export async function updateTopicCurrentVersion(db: PrismaTransactionClient, id: string) {
     const topicHistory = await getTopicHistory(db, id)
 
-    const currentVersion = getTopicCurrentVersion(topicHistory.versions)
+    const currentVersion = getTopicCurrentVersion(topicHistory.protection, topicHistory.versions)
 
     const uri = currentVersion != null ? topicHistory.versions[currentVersion].uri : null
 
@@ -194,7 +220,7 @@ export const getTopicTitleHandler: CAHandlerNoAuth<{ params: { id: string } }, {
             id: params.id,
         }
     })
-    if(!topic) {
+    if (!topic) {
         return {error: "No se encontró el tema"}
     }
     return {

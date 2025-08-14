@@ -61,6 +61,7 @@ import {
 } from "#/services/messaging/conversations";
 import {getDraft, getDrafts, saveDraft } from '#/services/write/drafts';
 import { getNextMeeting } from '#/services/admin/meetings';
+import { getAuthorDashboardHandler } from '#/services/monetization/author-dashboard';
 
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
@@ -387,6 +388,8 @@ export const createRouter = (ctx: AppContext) => {
     router.get("/content-metadata/:did/:collection/:rkey", makeHandlerNoAuth(ctx, getContentMetadata))
 
     router.post("/algorithm-config", makeHandler(ctx, updateAlgorithmConfig))
+
+    router.get("/author-dashboard", makeHandler(ctx, getAuthorDashboardHandler))
 
     router.use(adminRoutes(ctx))
 

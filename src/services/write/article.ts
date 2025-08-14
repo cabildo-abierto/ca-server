@@ -91,7 +91,8 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
     try {
         await Promise.all([
             processArticle(ctx, ref, record, afterTransaction),
-            article.draftId ? ctx.kysely.deleteFrom("Draft").where("id", "=", article.draftId).execute() : null
+            article.draftId ? ctx.kysely.deleteFrom("Draft").where("id", "=", article.draftId).execute() : null,
+            await ctx.worker?.addJob("update-author-status", {did: agent.did})
         ])
     } catch (err) {
         console.error(err)

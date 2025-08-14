@@ -30,7 +30,6 @@ export function hydrateTopicsDatasetView(filters: $Typed<ColumnFilter>[], datapl
         data = JSON.stringify([])
     } else {
         const props = topics[0].props as TopicProp[]
-        console.log("topics", topics.slice(0, 5))
         columns = [{name: "Tema"}, ...(props ? props.map(p => ({
             name: p.name
         })) : [])]

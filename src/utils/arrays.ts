@@ -152,10 +152,10 @@ export const orderDateAsc = (a: Date, b: Date) => {
 }
 
 export const orderNumberAsc = (a: number, b: number) => {
-    return b - a
+    return a - b
 }
 
 
 export const orderNumberDesc = (a: number, b: number) => {
-    return a - b
+    return b - a
 }

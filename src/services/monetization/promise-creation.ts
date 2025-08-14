@@ -1,14 +1,91 @@
 import {AppContext} from "#/index";
-import {getChunksReadByContent, getValidatedReadSessions} from "#/services/monetization/user-months";
+import {getChunksReadByContent} from "#/services/monetization/user-months";
 import {sum} from "#/utils/arrays";
 import {getMonthlyValue} from "#/services/monetization/donations";
-import {getCollectionFromUri, isArticle, splitUri} from "#/utils/uri";
-import {getTopicIdFromTopicVersionUri, isVersionAccepted, isVersionMonetized} from "#/services/wiki/current-version";
+import {getCollectionFromUri, isArticle, isTopicVersion, splitUri} from "#/utils/uri";
+import {getTopicIdFromTopicVersionUri, isVersionAccepted} from "#/services/wiki/current-version";
 import {getTopicHistory} from "#/services/wiki/history";
+import {ReadChunksAttr} from "#/services/monetization/read-tracking";
+import {v4 as uuidv4} from "uuid";
+
+
+type ReadSessionData = {
+    readContentId: string | null
+    readChunks: ReadChunksAttr
+}
+
+
+async function createPaymentPromisesForArticles(ctx: AppContext, value: number, readSessions: ReadSessionData[], monthId: string): Promise<PaymentPromiseCreation[]> {
+    const articleReads = readSessions
+        .filter(x => x.readContentId && isArticle(getCollectionFromUri(x.readContentId)))
+
+    const chunksRead = getChunksReadByContent(articleReads)
+    const totalChunksRead = sum(Array.from(chunksRead.values()), x => x)
+
+    const promises: PaymentPromiseCreation[] = []
+    if (totalChunksRead > 0) {
+        const chunkValue = value / totalChunksRead
+        console.log("articles chunk reads", {totalChunksRead, chunkValue})
+
+        const contents = Array.from(chunksRead.entries())
+        for (let i = 0; i < contents.length; i++) {
+            const [uri, chunks] = contents[i]
+            console.log("creating payment promises for content", uri)
+            const promiseValue = chunks * chunkValue
+            promises.push({
+                id: uuidv4(),
+                userMonthId: monthId,
+                amount: promiseValue,
+                contentId: uri
+            })
+        }
+    }
+    return promises
+}
+
+
+async function createPaymentPromisesForTopicVersions(ctx: AppContext, value: number, readSessions: ReadSessionData[], monthId: string): Promise<PaymentPromiseCreation[]> {
+    const tvReads = readSessions
+        .filter(x => x.readContentId && isTopicVersion(getCollectionFromUri(x.readContentId)))
+
+    const chunksRead = getChunksReadByContent(tvReads)
+    const totalChunksRead = sum(Array.from(chunksRead.values()), x => x)
+
+    const promises = new Map<string, PaymentPromiseCreation>()
+    if (totalChunksRead > 0) {
+        const chunkValue = value / totalChunksRead
+        console.log("tv chunk reads", {totalChunksRead, chunkValue})
+
+        const contents = Array.from(chunksRead.entries())
+        for (let i = 0; i < contents.length; i++) {
+            const [uri, chunks] = contents[i]
+            console.log("creating payment promises for content", uri)
+            const promiseValue = chunks * chunkValue
+            const tvPromises = await createPaymentPromisesForTopicVersion(ctx, uri, promiseValue, monthId)
+
+            tvPromises.forEach(p => {
+                const key = `${p.userMonthId}:${p.contentId}`
+                const cur = promises.get(key)
+                if(!cur){
+                    promises.set(key, p)
+                } else {
+                    // unificamos promesas del mismo mes-usuario-contenido
+                    promises.set(key, {
+                        ...cur,
+                        amount: cur.amount + p.amount
+                    })
+                }
+            })
+        }
+    }
+    return Array.from(promises.values())
+}
 
 
 export async function createPaymentPromises(ctx: AppContext) {
-    // tomamos todos los meses de usuarios activos terminados que no tengan payment promises y creamos las promesas correspondientes
+    await ctx.kysely
+        .deleteFrom("PaymentPromise")
+        .execute()
 
     let months = await ctx.db.userMonth.findMany({
         select: {
@@ -30,96 +107,124 @@ export async function createPaymentPromises(ctx: AppContext) {
 
     const value = getMonthlyValue()
 
-    for(let i = 0; i < months.length; i++){
+    const promises: PaymentPromiseCreation[] = []
+    for (let i = 0; i < months.length; i++) {
         const m = months[i]
-        if(m.monthEnd > new Date()) {
+        if (m.monthEnd > new Date()) {
             continue
         }
         console.log("Creating payment promises for month", months[i].monthStart, "of user", m.user.handle)
 
-        const readSessions = await ctx.db.readSession.findMany({
-            select: {
-                readContentId: true,
-                readChunks: true,
-                createdAt: true
-            },
-            where: {
-                userId: m.user.did,
-                createdAt: {
-                    gte: m.monthStart,
-                    lte: m.monthEnd
-                }
-            }
-        })
+        const readSessions = await ctx.kysely
+            .selectFrom("ReadSession")
+            .select(["readContentId", "readChunks"])
+            .leftJoin("Record", "Record.uri", "readContentId")
+            .where("userId", "=", m.user.did)
+            .where("ReadSession.created_at", ">", m.monthStart)
+            .where("ReadSession.created_at", "<", m.monthEnd)
+            .where("Record.authorId", "!=", m.user.did)
+            .execute()
 
-        const validatedReadSessions = getValidatedReadSessions(readSessions)
-        const chunksRead = getChunksReadByContent(validatedReadSessions)
-        const totalChunksRead = sum(Array.from(chunksRead.values()), x => x)
-        const chunkValue = value / totalChunksRead
+        console.log(`Found ${readSessions.length} read sessions`)
+        const validatedReadSessions = readSessions
+            .map(r => ({
+                ...r,
+                readChunks: r.readChunks as ReadChunksAttr
+            }))
 
-        const contents = Array.from(chunksRead.entries())
-        for(let i = 0; i < contents.length; i++){
-            const [uri, chunks] = contents[i]
-            await createPaymentPromisesForContent(ctx, uri, chunks * chunkValue, m.id)
-        }
+        const articlePromises = await createPaymentPromisesForArticles(
+            ctx,
+            value * 0.7 * 0.5,
+            validatedReadSessions,
+            m.id
+        )
+        promises.push(...articlePromises)
+
+        const topicVersionPromises = await createPaymentPromisesForTopicVersions(
+            ctx,
+            value * 0.7 * 0.5,
+            validatedReadSessions,
+            m.id
+        )
+        promises.push(...topicVersionPromises)
     }
+
+    console.log(`Inserting ${promises.length} new promises.`)
+
+    promises.forEach((p, index) => {
+        if (promises.slice(0, index).some(p2 => p2.contentId == p.contentId && p2.userMonthId == p.userMonthId)) {
+            console.log("Repeated promises!")
+            console.log("p1", p)
+            console.log("p2", p)
+        }
+    })
+
+    await ctx.kysely
+        .insertInto("PaymentPromise")
+        .values(promises)
+        .onConflict(oc => oc.columns(["userMonthId", "contentId"]).doNothing())
+        .execute()
 }
 
 
-async function createPaymentPromisesForContent(ctx: AppContext, uri: string, value: number, monthId: string){
-    const collection = getCollectionFromUri(uri)
-    if(isArticle(collection)){
-        await ctx.db.paymentPromise.create({
-            data: {
-                userMonthId: monthId,
-                amount: value,
-                contentId: uri
-            }
-        })
-    } else {
-        const {did, rkey} = splitUri(uri)
-        const id = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey)
-        if(!id){
-            throw Error(`No se encontró el tema asociado a ${uri}`)
+type PaymentPromiseCreation = {
+    id: string
+    userMonthId: string
+    amount: number
+    contentId: string
+}
+
+
+async function createPaymentPromisesForTopicVersion(ctx: AppContext, uri: string, value: number, monthId: string): Promise<PaymentPromiseCreation[]> {
+    const {did, rkey} = splitUri(uri)
+    const id = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey)
+    if (!id) {
+        throw Error(`No se encontró el tema asociado a ${uri}`)
+    }
+    const history = await getTopicHistory(ctx.db, id)
+    const idx = history.versions.findIndex(v => v.uri == uri)
+    if (idx == -1) {
+        throw Error(`No se encontró la versión en el tema ${uri} ${id}`)
+    }
+    let monetizedCharsTotal = 0
+    const authorsVersionsCount = new Map<string, number>()
+    for (let i = 0; i <= idx; i++) {
+        const v = history.versions[i]
+        if (v.addedChars == undefined) {
+            throw Error(`Diff sin calcular para la versión ${uri}`)
         }
-        const history = await getTopicHistory(ctx.db, id)
-        const idx = history.versions.findIndex(v => v.uri == uri)
-        if(idx == -1){
-            throw Error(`No se encontró la versión en el tema ${uri} ${id}`)
+        if (v.claimsAuthorship) {
+            monetizedCharsTotal += v.addedChars
         }
-        let monetizedCharsTotal = 0
-        const authorsVersionsCount = new Map<string, number>()
-        for(let i = 0; i <= idx; i++){
-            const v = history.versions[i]
-            if(v.addedChars == undefined){
-                throw Error(`Diff sin calcular para la versión ${uri}`)
-            }
-            if(isVersionMonetized(v)){
-                monetizedCharsTotal += v.addedChars
-            }
-            if(isVersionAccepted(v.status)){
-                authorsVersionsCount.set(v.author.did, (authorsVersionsCount.get(v.author.did) ?? 0) + 1)
-            }
-        }
-        for(let i = 0; i <= idx; i++){
-            const v = history.versions[i]
-            if(v.addedChars == undefined){
-                throw Error(`Diff sin calcular para la versión ${uri}`)
-            }
-            let weight = 0
-            if(isVersionMonetized(v)){
-                weight += v.addedChars / monetizedCharsTotal * 0.9
-            }
-            if(isVersionAccepted(v.status)){
-                weight += 1 / (idx+1) * 0.1
-            }
-            await ctx.db.paymentPromise.create({
-                data: {
-                    userMonthId: monthId,
-                    amount: value * weight,
-                    contentId: uri
-                }
-            })
+        if (isVersionAccepted(v.author.editorStatus ?? "Beginner", history.protection ?? "Beginner", v.status)) {
+            authorsVersionsCount.set(v.author.did, (authorsVersionsCount.get(v.author.did) ?? 0) + 1)
         }
     }
+    const promises: PaymentPromiseCreation[] = []
+    for (let i = 0; i <= idx; i++) {
+        const v = history.versions[i]
+        if (v.addedChars == undefined) {
+            throw Error(`Diff sin calcular para la versión ${uri}`)
+        }
+        let weight = 0
+        if (v.claimsAuthorship && monetizedCharsTotal > 0) {
+            weight += v.addedChars / monetizedCharsTotal * 0.9
+        }
+        if (isVersionAccepted(
+            v.author.editorStatus ?? "Beginner",
+            history.protection ?? "Beginner",
+            v.status
+        )) {
+            weight += 1 / (idx + 1) * (monetizedCharsTotal > 0 ? 0.1 : 1.0)
+        }
+        console.log("creating payment promise", {value, weight, amount: value * weight})
+
+        promises.push({
+            id: uuidv4(),
+            userMonthId: monthId,
+            amount: value * weight,
+            contentId: uri
+        })
+    }
+    return promises
 }

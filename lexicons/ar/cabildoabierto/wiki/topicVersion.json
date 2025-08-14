@@ -126,6 +126,9 @@
               "type": "ref",
               "ref": "#versionInHistory"
             }
+          },
+          "protection": {
+            "type": "string"
           }
         }
       },

@@ -2,7 +2,7 @@ import {updateCategoriesGraph} from "#/services/wiki/graph";
 import {Worker} from 'bullmq';
 import {AppContext} from "#/index";
 import {syncAllUsers, syncUser} from "#/services/sync/sync-user";
-import {dbHandleToDid} from "#/services/user/users";
+import {dbHandleToDid, updateAuthorStatus} from "#/services/user/users";
 import {
     cleanNotCAReferences,
     restartReferenceLastUpdate,
@@ -13,7 +13,11 @@ import {updateEngagementCounts} from "#/services/feed/getUserEngagement";
 import {deleteCollection} from "#/services/delete";
 import {updateTopicPopularityScores} from "#/services/wiki/popularity";
 import {updateTopicsCategories} from "#/services/wiki/categories";
-import {updateTopicContributions} from "#/services/wiki/contributions";
+import {
+    updateAllTopicContributions,
+    updateTopicContributions,
+    updateTopicContributionsRequired
+} from "#/services/wiki/contributions";
 import {createUserMonths} from "#/services/monetization/user-months";
 import {Queue} from "bullmq";
 import Redis from "ioredis";
@@ -24,6 +28,7 @@ import {updateContentsText} from "#/services/wiki/content";
 import {updateThreads} from "#/services/wiki/threads";
 import {restartLastContentInteractionsUpdate} from "#/services/wiki/interactions";
 import {updatePostLangs} from "#/services/admin/posts";
+import {createPaymentPromises} from "#/services/monetization/promise-creation";
 
 const mins = 60 * 1000
 
@@ -108,7 +113,9 @@ export class CAWorker {
         this.registerJob("sync-all-users", (data) => syncAllUsers(ctx, (data as { mustUpdateCollections: string[] }).mustUpdateCollections))
         this.registerJob("delete-collection", (data) => deleteCollection(ctx, (data as { collection: string }).collection))
         this.registerJob("update-topics-categories", () => updateTopicsCategories(ctx))
-        this.registerJob("update-topic-contributions", (data) => updateTopicContributions(ctx, data as string[]))
+        this.registerJob("update-topic-contributions", (data) => updateTopicContributions(ctx, data.topicIds as string[]))
+        this.registerJob("update-all-topic-contributions", (data) => updateAllTopicContributions(ctx))
+        this.registerJob("required-update-topic-contributions", (data) => updateTopicContributionsRequired(ctx))
         this.registerJob("create-user-months", () => createUserMonths(ctx))
         this.registerJob("create-notification", (data) => createNotificationJob(ctx, data))
         this.registerJob("batch-create-notifications", (data) => createNotificationsBatchJob(ctx, data))
@@ -122,6 +129,9 @@ export class CAWorker {
         this.registerJob("update-contents-text", (data) => updateContentsText(ctx))
         this.registerJob("update-threads", (data) => updateThreads(ctx))
         this.registerJob("update-post-langs", (data) => updatePostLangs(ctx))
+        this.registerJob("update-author-status-all", (data) => updateAuthorStatus(ctx))
+        this.registerJob("update-author-status", (data) => updateAuthorStatus(ctx, [data.did]))
+        this.registerJob("create-payment-promises", (data) => createPaymentPromises(ctx))
 
         await this.removeAllRepeatingJobs()
         await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)
@@ -213,7 +223,7 @@ export class CAWorker {
             for (let i = 0; i < topicIds.length; i += batchSize) {
                 const batchIds = topicIds.slice(i, i + batchSize)
                 console.log(`Adding update-topic-contributions job with ${batchIds.length} topics.`)
-                await this.addJob('update-topic-contributions', batchIds);
+                await this.addJob('update-topic-contributions', {topicIds: batchIds})
             }
 
             console.log(`Done after ${Date.now()-t1}s`)

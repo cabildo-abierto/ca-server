@@ -1,7 +1,6 @@
 import {AppContext} from "#/index";
 import {getContentsText} from "#/services/wiki/references";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
-import {getRkeyFromUri} from "#/utils/uri";
 
 
 export async function updateContentsText(ctx: AppContext) {
@@ -12,7 +11,10 @@ export async function updateContentsText(ctx: AppContext) {
             .selectFrom("Content")
             .innerJoin("Record", "Record.uri", "Content.uri")
             .select(["Content.uri", "textBlobId", "format", "Record.record"])
-            .where("Record.collection", "in", ["ar.cabildoabierto.wiki.topicVersion", "ar.cabildoabierto.feed.article"])
+            .where("Record.collection", "in", [
+                "ar.cabildoabierto.wiki.topicVersion",
+                "ar.cabildoabierto.feed.article"
+            ])
             .where("text", "is", null)
             .limit(batchSize)
             .offset(offset)
@@ -27,22 +29,16 @@ export async function updateContentsText(ctx: AppContext) {
             embeds: any[]
             text: string
         }[] = texts.map((t, idx) => {
-            if(t == null) return null
+            if(!t) t = ""
             try {
                 const content = contents[idx]
                 const format = content.record ? JSON.parse(content.record).format : null
-                console.log("format", format)
-                console.log("text", t)
                 if(!format) return null
 
                 const res = anyEditorStateToMarkdownOrLexical(
                     t,
                     format
                 )
-                console.log("res", res.format, typeof res.text, res.text)
-                if(getRkeyFromUri(contents[idx].uri) == "3lszjnbrkrz24"){
-                    console.log(res.format, res.text, contents[idx].format)
-                }
                 return {
                     uri: contents[idx].uri,
                     selfLabels: [],

@@ -55,6 +55,14 @@
             "person",
             "org"
           ]
+        },
+        "editorStatus": {
+          "type": "string",
+          "knownValues": [
+            "Editor principiante",
+            "Editor",
+            "Administrador"
+          ]
         }
       }
     }

@@ -266,6 +266,7 @@ export type User = {
     seenTopicsTutorial: Generated<boolean>;
     seenTopicMinimizedTutorial: Generated<boolean>;
     seenTopicMaximizedTutorial: Generated<boolean>;
+    authorStatus: unknown | null;
     userValidationHash: string | null;
     orgValidation: string | null;
     lastSeenNotifications: Generated<Timestamp>;

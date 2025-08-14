@@ -1,5 +1,5 @@
 import {AppContext} from "#/index";
-import {Account, CAProfile, Profile, Session, ValidationState} from "#/lib/types";
+import {Account, AuthorStatus, CAProfile, Profile, Session, ValidationState} from "#/lib/types";
 import {cookieOptions, SessionAgent} from "#/utils/session-agent";
 import {deleteRecords} from "#/services/delete";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
@@ -175,7 +175,7 @@ export const unfollow: CAHandler<{ followUri: string }> = async (ctx, agent, {fo
 async function getCAProfile(ctx: AppContext, agent: SessionAgent, handleOrDid: string): Promise<CAProfile | null> {
     const t1 = Date.now()
     const did = await handleToDid(ctx, agent, handleOrDid)
-    if(!did) return null
+    if (!did) return null
 
     const t2 = Date.now()
     const profiles = await ctx.kysely
@@ -225,7 +225,7 @@ async function getCAProfile(ctx: AppContext, agent: SessionAgent, handleOrDid: s
         .execute()
     const t3 = Date.now()
 
-    if(profiles.length == 0) return null
+    if (profiles.length == 0) return null
 
     const profile = profiles[0]
 
@@ -299,30 +299,36 @@ export type AlgorithmConfig = {
 }
 
 
-export const getSessionData = async (ctx: AppContext, agent: SessionAgent): Promise<Session | null> => {
-    const data = await ctx.db.user.findUnique({
-        select: {
-            platformAdmin: true,
-            editorStatus: true,
-            seenTutorial: true,
-            seenTopicMaximizedTutorial: true,
-            seenTopicMinimizedTutorial: true,
-            seenTopicsTutorial: true,
-            handle: true,
-            displayName: true,
-            avatar: true,
-            hasAccess: true,
-            userValidationHash: true,
-            orgValidation: true,
-            algorithmConfig: true
-        },
-        where: {
-            did: agent.did
-        }
-    })
-    if (!data || !data.handle) return null
+export const getSessionData = async (ctx: AppContext, did: string): Promise<Session | null> => {
+    const res = await ctx.kysely
+        .selectFrom("User")
+        .select([
+            "platformAdmin",
+            "editorStatus",
+            "seenTutorial",
+            "seenTopicMaximizedTutorial",
+            "seenTopicMinimizedTutorial",
+            "seenTopicsTutorial",
+            "handle",
+            "displayName",
+            "avatar",
+            "hasAccess",
+            "userValidationHash",
+            "orgValidation",
+            "algorithmConfig",
+            "authorStatus",
+        ])
+        .where("did", "=", did)
+        .execute()
+
+    if (res.length == 0) return null
+
+    const data = res[0]
+    if (!data.handle) return null
+
     return {
-        did: agent.did,
+        authorStatus: data.authorStatus as AuthorStatus | null,
+        did: did,
         handle: data.handle,
         displayName: data.displayName,
         avatar: data.avatar,
@@ -354,7 +360,7 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
         return {error: "No session."}
     }
 
-    const data = await getSessionData(ctx, agent)
+    const data = await getSessionData(ctx, agent.did)
     if (data) {
         return {data}
     }
@@ -367,7 +373,7 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
             return {error}
         }
 
-        const newUserData = await getSessionData(ctx, agent)
+        const newUserData = await getSessionData(ctx, agent.did)
         if (newUserData) {
             return {data: newUserData}
         }
@@ -392,13 +398,13 @@ export const getAccount: CAHandler<{}, Account> = async (ctx, agent) => {
         agent.bsky.com.atproto.server.getSession()
     ])
 
-    if(!caData){
+    if (!caData) {
         return {error: "No se encontró el usuario"}
     }
 
     const bskyEmail = bskySession.data.email
 
-    if(bskyEmail && (!caData.email || caData.email != bskyEmail)){
+    if (bskyEmail && (!caData.email || caData.email != bskyEmail)) {
         await ctx.db.user.update({
             data: {
                 email: bskyEmail
@@ -420,18 +426,28 @@ export const getAccount: CAHandler<{}, Account> = async (ctx, agent) => {
 type Tutorial = "topic-minimized" | "topic-normal" | "home" | "topics"
 
 
-export const setSeenTutorial: CAHandler<{params: {tutorial: Tutorial}}, {}> = async (ctx, agent, {params}) => {
+export const setSeenTutorial: CAHandler<{ params: { tutorial: Tutorial } }, {}> = async (ctx, agent, {params}) => {
     const {tutorial} = params
     const did = agent.did
     console.log("setting seen tutorial", tutorial)
-    if(tutorial == "topic-minimized"){
+    if (tutorial == "topic-minimized") {
         await ctx.db.user.update({data: {seenTopicMinimizedTutorial: true}, where: {did}})
-    } else if(tutorial == "home"){
+    } else if (tutorial == "home") {
         await ctx.db.user.update({data: {seenTutorial: true}, where: {did}})
-    } else if(tutorial == "topics"){
+    } else if (tutorial == "topics") {
         await ctx.db.user.update({data: {seenTopicsTutorial: true}, where: {did}})
-    } else if(tutorial == "topic-normal"){
+    } else if (tutorial == "topic-normal") {
         await ctx.db.user.update({data: {seenTopicMaximizedTutorial: true}, where: {did}})
+    } else if (tutorial == "panel-de-autor") {
+        await ctx.db.user.update({
+            data: {
+                authorStatus: {
+                    isAuthor: true,
+                    seenAuthorTutorial: true
+                }
+            },
+            where: {did}
+        })
     } else {
         console.log("Unknown tutorial", tutorial)
     }
@@ -606,4 +622,57 @@ export const updateAlgorithmConfig: CAHandler<AlgorithmConfig, {}> = async (ctx,
         .execute()
 
     return {data: {}}
+}
+
+
+export async function updateAuthorStatus(ctx: AppContext, dids?: string[]) {
+    const query = ctx.kysely
+        .selectFrom("User")
+        .select([
+            "did",
+            "authorStatus",
+            (eb) =>
+                eb
+                    .selectFrom("Record")
+                    .select(eb => eb.fn.count<number>("uri").as("articlesCount"))
+                    .whereRef("Record.authorId", "=", "User.did")
+                    .where("Record.collection", "=", "ar.cabildoabierto.feed.article")
+                    .as("articlesCount"),
+            (eb) =>
+                eb
+                    .selectFrom("Record")
+                    .select(eb => eb.fn.count<number>("uri").as("topicVersionsCount"))
+                    .whereRef("Record.authorId", "=", "User.did")
+                    .where("Record.collection", "=", "ar.cabildoabierto.wiki.topicVersion")
+                    .as("topicVersionsCount")
+        ])
+        .where("inCA", "=", true)
+
+    const users = dids ? await query.where("did", "in", dids).execute() : await query.execute()
+
+    const values: {
+        did: string,
+        authorStatus: string
+    }[] = users.map(u => {
+
+        const authorStatus  = u.authorStatus as AuthorStatus | null
+
+        const newAuthorStatus = {
+            isAuthor: authorStatus && authorStatus.isAuthor || u.articlesCount && u.articlesCount > 0 || u.topicVersionsCount && u.topicVersionsCount > 0,
+            seenAuthorTutorial: authorStatus && authorStatus.seenAuthorTutorial
+        }
+
+        return {
+            did: u.did,
+            authorStatus: JSON.stringify(newAuthorStatus)
+        }
+    })
+
+    await ctx.kysely
+        .insertInto("User")
+        .values(values)
+        .onConflict(oc => oc.column("did").doUpdateSet(eb => ({
+            authorStatus: eb.ref("excluded.authorStatus")
+        })))
+        .execute()
 }

@@ -32,7 +32,7 @@ export const getMonthlyValueHandler: CAHandler<{}, number> = async (ctx, agent, 
 
 
 export function getMonthlyValue() {
-    return 1200
+    return 1500
 }
 
 

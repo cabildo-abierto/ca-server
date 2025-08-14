@@ -54,6 +54,7 @@ model User {
   seenTopicsTutorial         Boolean      @default(false)
   seenTopicMinimizedTutorial Boolean      @default(false)
   seenTopicMaximizedTutorial Boolean      @default(false)
+  authorStatus               Json?
 
   hasReacted HasReacted[]
 

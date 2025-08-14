@@ -16,7 +16,7 @@ import {
     isMain as isVisualizationEmbed,
     isDatasetDataSource
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
-import {ExpressionBuilder, OnConflictDatabase, OnConflictTables, Transaction} from "kysely";
+import {ExpressionBuilder, OnConflictDatabase, OnConflictTables, sql, Transaction} from "kysely";
 import {DB} from "../../../prisma/generated/types";
 import {ValidationResult} from "@atproto/lexicon";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
@@ -389,6 +389,8 @@ function getTopicCurrentVersionFromCounts(versions: {
 }
 
 export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB>, topicIds: string[]) {
+    topicIds = unique(topicIds)
+
     type VersionWithVotes = {
         topicId: string
         uri: string
@@ -619,6 +621,22 @@ export const processArticlesBatch: BatchRecordProcessor<Article.Record> = async 
 }
 
 
+function getUniqueTopicUpdates(records: {ref: ATProtoStrongRef, record: TopicVersion.Record}[]) {
+    const topics = new Map<string, {id: string, lastEdit: Date}>()
+    records.forEach(r => {
+        const id = r.record.id
+        const cur = topics.get(id)
+        const date = new Date(r.record.createdAt)
+        if(!cur){
+            topics.set(id, {id, lastEdit: date})
+        } else {
+            topics.set(id, {id, lastEdit: cur.lastEdit > date ? cur.lastEdit : date})
+        }
+    })
+    return Array.from(topics.values())
+}
+
+
 export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record> = async (ctx, records) => {
     const contents: { ref: ATProtoStrongRef, record: SyncContentProps }[] = records.map(r => ({
         record: {
@@ -632,10 +650,7 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
         ref: r.ref
     }))
 
-    const topics = records.map(r => ({
-        id: r.record.id,
-        lastEdit: new Date()
-    }))
+    const topics = getUniqueTopicUpdates(records)
 
     const topicVersions = records.map(r => ({
         uri: r.ref.uri,
@@ -654,7 +669,7 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
                 .insertInto("Topic")
                 .values(topics)
                 .onConflict((oc) => oc.column("id").doUpdateSet({
-                    lastEdit: (eb) => (eb.ref("excluded.lastEdit"))
+                    lastEdit: sql`GREATEST("Topic"."lastEdit", excluded."lastEdit")`
                 }))
                 .execute()
         } catch (err) {
@@ -699,7 +714,7 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
 export async function addUpdateContributionsJobForTopics(ctx: AppContext, ids: string[]){
     await ctx.worker?.addJob(
         "update-topic-contributions",
-        ids
+        {topicIds: ids}
     )
 }
 

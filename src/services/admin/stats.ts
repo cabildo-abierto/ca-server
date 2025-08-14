@@ -242,6 +242,7 @@ export const getActivityStats: CAHandler<{}, ActivityStats[]> = async (ctx, agen
         .selectFrom('User')
         .leftJoin('Record', 'Record.authorId', 'User.did')
         .innerJoin("Content", "Content.uri", "Record.uri")
+        .leftJoin("PaymentPromise", "PaymentPromise.contentId", "Record.uri")
         .select([
             'User.did',
             'User.handle',
@@ -253,7 +254,10 @@ export const getActivityStats: CAHandler<{}, ActivityStats[]> = async (ctx, agen
                 .as('articles'),
             ctx.kysely.fn
                 .count<number>(sql`case when "Record".collection = 'ar.cabildoabierto.wiki.topicVersion' then 1 end`)
-                .as('topicVersions')
+                .as('topicVersions'),
+            ctx.kysely.fn
+                .sum<number>("PaymentPromise.amount")
+                .as('income')
         ])
         .where('User.inCA', '=', true)
         .groupBy(['User.did', 'User.handle'])
