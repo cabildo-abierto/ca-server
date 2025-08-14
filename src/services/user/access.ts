@@ -1,4 +1,3 @@
-import {getCAUsersHandles} from "#/services/user/users";
 import {SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/index";
 import {isValidHandle} from "@atproto/syntax";
@@ -10,6 +9,17 @@ import {v4 as uuidv4} from "uuid";
 import {range} from "#/utils/arrays";
 
 
+async function isCAUser(ctx: AppContext, did: string): Promise<boolean> {
+    const res = await ctx.kysely
+        .selectFrom("User")
+        .select("did")
+        .where("did", "=", did)
+        .where("inCA", "=", true)
+        .executeTakeFirst()
+    return res != undefined
+}
+
+
 export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (ctx, agent, {handle, code}) => {
 
     if (!handle || !isValidHandle(handle.trim())) {
@@ -18,20 +28,23 @@ export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (c
 
     handle = handle.trim()
 
-    const caUsers = await getCAUsersHandles(ctx)
-    if(!code){
-        if(!caUsers.includes(handle)){
-            return {error: "Necesitás un código de invitación para crear un usuario nuevo."}
-        }
-    } else {
-        // tiene un código
-        if(!caUsers.includes(handle)){
-            const {error} = await checkValidCode(ctx, code)
+    const did = await ctx.resolver.resolveHandleToDid(handle)
+    if(!did) return {error: "No se encontró el usuario."}
+
+    const inCA = await isCAUser(ctx, did)
+
+    if(code){
+        if(!inCA){
+            const {error} = await checkValidCode(ctx, code, did)
             if(error){
                 return {error}
             } else {
                 // continuamos con el login y usamos el código si el login termina bien
             }
+        }
+    } else {
+        if(!inCA){
+            return {error: "Necesitás un código de invitación para crear un usuario nuevo."}
         }
     }
 
@@ -47,7 +60,7 @@ export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (c
 }
 
 
-export async function checkValidCode(ctx: AppContext, code: string){
+export async function checkValidCode(ctx: AppContext, code: string, did: string){
     const res = await ctx.db.inviteCode.findUnique({
         select: {
             code: true,
@@ -58,12 +71,12 @@ export async function checkValidCode(ctx: AppContext, code: string){
         }
     })
     if(!res) return {error: "El código de invitación es inválido."}
-    if(res.usedByDid) return {error: "El código de invitación ya fue usado."}
+    if(res.usedByDid && res.usedByDid != did) return {error: "El código de invitación ya fue usado."}
     return {}
 }
 
 
-export async function createCAUser(ctx: AppContext, agent: SessionAgent, code: string) {
+export async function createCAUser(ctx: AppContext, agent: SessionAgent, code?: string) {
     const did = agent.did
 
     await ctx.db.user.upsert({
@@ -78,8 +91,10 @@ export async function createCAUser(ctx: AppContext, agent: SessionAgent, code: s
         }
     })
 
-    const {error} = await assignInviteCode(ctx, agent, code)
-    if(error) return {error}
+    if(code){
+        const {error} = await assignInviteCode(ctx, agent, code)
+        if(error) return {error}
+    }
 
     const caProfileRecord: CAProfileRecord = {
         $type: "ar.cabildoabierto.actor.caProfile",
@@ -152,7 +167,11 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
         }),
         ctx.db.user.findUnique({
             select: {
-                usedInviteCode: true
+                usedInviteCode: {
+                    select: {
+                        code: true
+                    }
+                }
             },
             where: {
                 did
@@ -162,7 +181,7 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
     if(!code) return {error: "No se encontró el código"}
     if(!user) return {error: "No se encontró el usuario"}
 
-    if(user.usedInviteCode){
+    if(user.usedInviteCode != null){
         return {}
     }
 
@@ -192,8 +211,6 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
     ]
 
     await ctx.db.$transaction(updates)
-
-    // revalidateTag("user:"+did)
 
     return {}
 }

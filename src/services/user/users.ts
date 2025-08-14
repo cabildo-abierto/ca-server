@@ -298,8 +298,9 @@ export type AlgorithmConfig = {
     }
 }
 
+type SessionData = Omit<Session, "handle"> & {handle: string | null}
 
-export const getSessionData = async (ctx: AppContext, did: string): Promise<Session | null> => {
+export const getSessionData = async (ctx: AppContext, did: string): Promise<SessionData | null> => {
     const res = await ctx.kysely
         .selectFrom("User")
         .select([
@@ -319,12 +320,11 @@ export const getSessionData = async (ctx: AppContext, did: string): Promise<Sess
             "authorStatus",
         ])
         .where("did", "=", did)
-        .execute()
+        .executeTakeFirst()
 
-    if (res.length == 0) return null
+    if(!res) return null
 
-    const data = res[0]
-    if (!data.handle) return null
+    const data = res
 
     return {
         authorStatus: data.authorStatus as AuthorStatus | null,
@@ -355,32 +355,49 @@ export function getValidationState(user: {
 }
 
 
+function isFullSessionData(data: SessionData | null): data is Session {
+    return data != null && data.handle != null
+}
+
+
 export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session> = async (ctx, agent, {params}) => {
     if (!agent.hasSession()) {
         return {error: "No session."}
     }
 
     const data = await getSessionData(ctx, agent.did)
-    if (data) {
+    if (isFullSessionData(data)) {
         return {data}
     }
 
-    // el usuario no está en la db pero logró iniciar sesión, creamos un nuevo usuario de CA
     const code = params?.code
-    if (code) {
+
+    if(data && data.hasAccess) {
+        // está en le DB y tiene acceso pero no está sincronizado (sin handle)
+        const {error} = await createCAUser(ctx, agent)
+        if (error) {
+            return {error}
+        }
+
+        const newUserData = await getSessionData(ctx, agent.did)
+        if (isFullSessionData(newUserData)) {
+            return {data: newUserData}
+        }
+    } else if (code) {
+        // el usuario no está en la db (o está pero no tiene acceso) y logró iniciar sesión, creamos un nuevo usuario de CA
         const {error} = await createCAUser(ctx, agent, code)
         if (error) {
             return {error}
         }
 
         const newUserData = await getSessionData(ctx, agent.did)
-        if (newUserData) {
+        if (isFullSessionData(newUserData)) {
             return {data: newUserData}
         }
     }
 
     await deleteSession(ctx, agent)
-    return {error: "Ocurrió un error al crear el usuario."} // no debería pasar (!)
+    return {error: "Ocurrió un error al crear el usuario."}
 }
 
 
