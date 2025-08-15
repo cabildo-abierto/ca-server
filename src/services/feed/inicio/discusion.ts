@@ -36,9 +36,9 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
     // Popularidad relativa: usamos Interacciones / Cantidad de seguidores del autor en Bsky
 
     const collections = format == "Artículos" ? ["ar.cabildoabierto.feed.article"] : ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
+    const label = 'ca:en discusión'
 
     if(metric == "Me gustas"){
-        const label = 'ca:en discusión'
 
         let skeleton = await ctx.kysely.with('Autolikes', (db) =>
             db.selectFrom('Reaction')
@@ -79,41 +79,80 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
             cursor: undefined
         };
     } else if(metric == "Interacciones"){
-        let skeleton = await ctx.db.record.findMany({
-            select: {
-                uri: true,
-                uniqueLikesCount: true,
-                uniqueRepostsCount: true,
-                _count: {
-                    select: {
-                        replies: true
-                    }
-                },
-                createdAt: true
-            },
-            where: {
-                content: {
-                    selfLabels: {
-                        has: "ca:en discusión"
-                    }
-                },
-                collection: {
-                    in: collections
-                }
-            }
-        })
+
+        // Contamos cantidad de likes, reposts y respuestas. Pendiente: contar citas
+
+        let skeleton = await ctx.kysely
+            .with('Autolikes', (db) =>
+                db.selectFrom('Reaction')
+                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
+                    .leftJoin('Record as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
+                    .where('ReactionRecord.collection', 'in', [
+                        'app.bsky.feed.like'
+                    ])
+                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
+                    .select(['Reaction.uri', 'Reaction.subjectId'])
+            )
+            .with('Autoreposts', (db) =>
+                db.selectFrom('Reaction')
+                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
+                    .leftJoin('Record as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
+                    .where('ReactionRecord.collection', 'in', [
+                        'app.bsky.feed.repost',
+                    ])
+                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
+                    .select(['Reaction.uri', 'Reaction.subjectId'])
+            )
+            .with('RepliesFromOthers', (db) =>
+                db.selectFrom('Record')
+                    .leftJoin('Post', 'Record.uri', 'Post.replyToId')
+                    .innerJoin('Record as ReplyRecord', 'Post.uri', 'ReplyRecord.uri')
+                    .whereRef('ReplyRecord.authorId', '!=', 'Record.authorId')
+                    .select(['Record.uri as reply_to_uri',
+                            (eb) => eb.fn.count<number>('Post.uri').as('reply_count')
+                            ])
+                    .groupBy(['Record.uri'])
+            )
+            .selectFrom('Record')
+            .leftJoin('Autolikes', 'Record.uri', 'Autolikes.subjectId')
+            .leftJoin('Autoreposts', 'Record.uri', 'Autoreposts.subjectId')
+            .leftJoin('RepliesFromOthers', 'Record.uri', 'RepliesFromOthers.reply_to_uri')
+            .where('Record.collection', 'in', collections)
+            .innerJoin('Content', 'Record.uri', 'Content.uri')
+            .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
+            .select([
+                'Record.uri',
+                'Record.uniqueLikesCount',
+                'Record.uniqueRepostsCount',
+                'Record.created_at',
+                'Autolikes.uri as autolikes_uri',
+                'Autoreposts.uri as autoreposts_uri',
+                'RepliesFromOthers.reply_count as replies_from_others_count'
+            ])
+            .execute();
+
+
+        console.log("--------------------------------------------------------------------------------------------------")
+        console.log("En discusión skeleton", skeleton.filter(e => (e.autolikes_uri != null) || (e.autoreposts_uri != null) || (e.replies_from_others_count != null) ))
+
         skeleton = sortByKey(skeleton, e => {
             return [
-                e.createdAt > startDate ? 1 : 0,
-                (e.uniqueLikesCount ?? 0) + (e.uniqueRepostsCount ?? 0) + e._count.replies,
-                e.createdAt.getTime()
-            ]
-        }, listOrderDesc)
+                e.created_at > startDate ? 1 : 0,
+                (e.uniqueLikesCount ?? 0) +
+                (e.uniqueRepostsCount ?? 0) +
+                (e.replies_from_others_count ?? 0) -
+                (e.autolikes_uri ? 1 : 0) -
+                (e.autoreposts_uri ? 1 : 0),
+                e.created_at.getTime()
+            ];
+        }, listOrderDesc);
+
+        //console.log("getEnDiscusionSkeleton OUTPUT", { metric, time, format, skeleton });
+
         return {
-            skeleton: skeleton
-                .map(e => ({post: e.uri})),
+            skeleton: skeleton.map(e => ({ post: e.uri })),
             cursor: undefined
-        }
+        };
     } else if(metric == "Popularidad relativa") {
         let skeleton = await ctx.db.record.findMany({
             select: {
