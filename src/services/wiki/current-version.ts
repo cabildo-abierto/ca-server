@@ -183,26 +183,6 @@ export function getTopicCurrentVersion(protection: string = "Beginner", versions
 }
 
 
-export async function updateTopicCurrentVersion(db: PrismaTransactionClient, id: string) {
-    const topicHistory = await getTopicHistory(db, id)
-
-    const currentVersion = getTopicCurrentVersion(topicHistory.protection, topicHistory.versions)
-
-    const uri = currentVersion != null ? topicHistory.versions[currentVersion].uri : null
-
-    await db.topic.update({
-        data: {
-            currentVersionId: uri
-        },
-        where: {
-            id
-        }
-    })
-
-    return {}
-}
-
-
 // TO DO: Estaría bueno cachear esto...
 export const getTopicTitleHandler: CAHandlerNoAuth<{ params: { id: string } }, {
     title: string

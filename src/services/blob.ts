@@ -67,7 +67,15 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
     if(blobs.length == 0) return []
     const keys: string[] = blobs.map(b => getBlobKey(b))
 
-    const blobContents: (string | null)[] = await ctx.ioredis.mget(keys)
+    let blobContents: (string | null)[]
+    try {
+        blobContents = await ctx.ioredis.mget(keys)
+    } catch (err) {
+        if(err instanceof Error){
+            console.log("Error fetching text blobs from redis", err.message)
+        }
+        blobContents = keys.map(k => null)
+    }
 
     const pending: {i: number, blob: BlobRef}[] = []
     for(let i = 0; i < blobContents.length; i++){
@@ -78,14 +86,15 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
 
     const res = await Promise.all(pending.map(p => fetchTextBlob(p.blob, retries)))
 
-    for(let i = 0; i < pending.length; i++){
+    for(let i = 0; i < pending.length; i++) {
         const r = res[i]
-        if(r){
+        if (r) {
             blobContents[pending[i].i] = r
         } else {
             console.log("Warning: Couldn't find blob:", pending[i].blob)
         }
     }
+
 
     const pipeline = ctx.ioredis.pipeline()
     for(let i = 0; i < pending.length; i++){

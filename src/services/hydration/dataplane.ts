@@ -82,6 +82,7 @@ export type FeedElementQueryResult = {
         text: string | null
         textBlobId?: string | null
         format?: string | null
+        dbFormat?: string | null
         selfLabels: string[]
         article?: {
             title: string
@@ -167,7 +168,6 @@ export class Dataplane {
     bskyUsers: Map<string, $Typed<ProfileViewBasic> | $Typed<ProfileViewDetailed>> = new Map()
     caUsers: Map<string, CAProfileViewBasic> = new Map()
     topicsByUri: Map<string, TopicQueryResultBasic> = new Map()
-    topicsById: Map<string, TopicQueryResultBasic> = new Map()
     textBlobs: Map<string, string> = new Map()
     datasets: Map<string, DatasetQueryResult> = new Map()
     datasetContents: Map<string, string[]> = new Map()
@@ -279,6 +279,7 @@ export class Dataplane {
                         select: {
                             text: true,
                             format: true,
+                            dbFormat: true,
                             textBlobId: true,
                             selfLabels: true,
                             embeds: true,
@@ -310,6 +311,7 @@ export class Dataplane {
                         select: {
                             text: true,
                             format: true,
+                            dbFormat: true,
                             selfLabels: true,
                             textBlobId: true,
                             embeds: true,
@@ -360,7 +362,12 @@ export class Dataplane {
     }
 
     async fetchTextBlobs(blobs: BlobRef[]) {
-        const texts = await fetchTextBlobs(this.ctx, blobs)
+        const batchSize = 100
+        let texts: (string | null)[] = []
+        for(let i = 0; i < blobs.length; i+=batchSize) {
+            const batchTexts = await fetchTextBlobs(this.ctx, blobs.slice(i, i+batchSize))
+            texts.push(...batchTexts)
+        }
         const keys = blobs.map(b => getBlobKey(b))
 
         const entries: [string, string | null][] = texts.map((t, i) => [keys[i], t])
@@ -398,11 +405,6 @@ export class Dataplane {
                         popularityScoreLastWeek: true,
                         popularityScoreLastMonth: true,
                         lastEdit: true,
-                        categories: {
-                            select: {
-                                categoryId: true,
-                            }
-                        },
                         currentVersion: {
                             select: {
                                 props: true,
@@ -410,6 +412,11 @@ export class Dataplane {
                                 categories: true
                             }
                         }
+                    }
+                },
+                content: {
+                    select: {
+                        numWords: true
                     }
                 }
             },
@@ -425,15 +432,16 @@ export class Dataplane {
         data.forEach(item => {
             queryResults.push({
                 uri: item.uri,
-                topic: item.topic
+                topic: {
+                    ...item.topic,
+                    numWords: item.content.numWords
+                }
             })
         })
 
         const mapByUri = new Map(queryResults.map(item => [item.uri, item.topic]))
-        const mapById = new Map(queryResults.map(item => [item.topic.id, item.topic]))
 
         this.topicsByUri = joinMaps(this.topicsByUri, mapByUri)
-        this.topicsById = joinMaps(this.topicsById, mapById)
     }
 
     async expandUrisWithRepliesAndReposts(skeleton: FeedSkeleton): Promise<string[]> {

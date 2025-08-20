@@ -83,11 +83,8 @@ async function createPaymentPromisesForTopicVersions(ctx: AppContext, value: num
 
 
 export async function createPaymentPromises(ctx: AppContext) {
-    await ctx.kysely
-        .deleteFrom("PaymentPromise")
-        .execute()
 
-    let months = await ctx.db.userMonth.findMany({
+    let months = (await ctx.db.userMonth.findMany({
         select: {
             id: true,
             user: {
@@ -98,12 +95,17 @@ export async function createPaymentPromises(ctx: AppContext) {
             },
             monthStart: true,
             monthEnd: true,
+            _count: {
+                select: {
+                    paymentPromises: true
+                }
+            }
         },
         where: {
             wasActive: true,
             promisesCreated: false
         }
-    })
+    })).filter(m => m._count.paymentPromises == 0)
 
     const value = getMonthlyValue()
 
@@ -159,11 +161,13 @@ export async function createPaymentPromises(ctx: AppContext) {
         }
     })
 
-    await ctx.kysely
-        .insertInto("PaymentPromise")
-        .values(promises)
-        .onConflict(oc => oc.columns(["userMonthId", "contentId"]).doNothing())
-        .execute()
+    if(promises.length > 0){
+        await ctx.kysely
+            .insertInto("PaymentPromise")
+            .values(promises)
+            .onConflict(oc => oc.columns(["userMonthId", "contentId"]).doNothing())
+            .execute()
+    }
 }
 
 

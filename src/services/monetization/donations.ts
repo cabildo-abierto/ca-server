@@ -44,12 +44,20 @@ export function isWeeklyActiveUser(u: {handle: string, readSessions: {createdAt:
 }
 
 
+export function isMonthlyActiveUser(u: {handle: string, readSessions: {createdAt: Date, readContentId: string | null}[]}, at: Date = new Date()): boolean {
+    const lastMonthStart = new Date(at.getTime() - 1000*3600*24*30)
+    const recentSessions = u.readSessions
+        .filter(x => x.createdAt > lastMonthStart && x.createdAt < at)
+    return recentSessions.length > 0
+}
+
+
 export async function getMonthlyActiveUsers(ctx: AppContext) {
     // Se consideran usuarios activos todos los usuarios que:
     //  - Sean cuenta de persona verificada
     //  - Hayan tenido al menos una read session en la última semana
     const users = await getUsersWithReadSessions(ctx)
-    return count(users, isWeeklyActiveUser)
+    return count(users, isMonthlyActiveUser)
 }
 
 export async function getGrossIncome(ctx: AppContext): Promise<number> {

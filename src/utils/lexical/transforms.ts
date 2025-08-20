@@ -48,6 +48,8 @@ export function anyEditorStateToMarkdownOrLexical(text: string | null, format?: 
         return anyEditorStateToMarkdownOrLexical(htmlToMarkdown(text), "markdown")
     } else if (format == "html-compressed") {
         return anyEditorStateToMarkdownOrLexical(decompress(text), "html")
+    } else if(format == "plain-text"){
+        return {text: text, format: "markdown"}
     } else if (!format) {
         return anyEditorStateToMarkdownOrLexical(text, "lexical-compressed")
     } else {

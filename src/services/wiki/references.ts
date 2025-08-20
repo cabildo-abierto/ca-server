@@ -64,6 +64,7 @@ export async function updateReferencesForNewContents(ctx: AppContext) {
                 'Content.text',
                 'Content.textBlobId',
                 'Content.format',
+                'Content.dbFormat',
                 'Article.title'
             ])
             .where('Record.CAIndexedAt', '>=', lastUpdate)
@@ -89,7 +90,7 @@ async function updateReferencesForContentsAndTopics(ctx: AppContext, contents: C
         try {
             const texts = await getContentsText(ctx, contents.slice(i, i+batchSize), 10)
             console.log("Apply references update")
-            const referencesToInsert = getReferencesToInsert(contents, texts, synonymsMap)
+            const referencesToInsert = getReferencesToInsert(contents, texts.map(t => t ? t.text : null), synonymsMap)
             await applyReferencesUpdate(ctx, referencesToInsert, contents.slice(i, i+batchSize).map(c => c.uri), topicIds)
         } catch (err) {
             console.log("error updating references", err)
@@ -209,6 +210,7 @@ type ContentProps = {
     text: string | null
     textBlobId?: string | null
     format: string | null
+    dbFormat: string | null
     title: string | null
 }
 
@@ -218,15 +220,31 @@ function isCompressed(format: string | null){
     return ["lexical-compressed", "markdown-compressed"].includes(format)
 }
 
+export type TextAndFormat = {text: string, format: string | null}
 
-export async function getContentsText(ctx: AppContext, contents: Omit<ContentProps, "title" | "CAIndexedAt">[], retries: number = 10, decompressed: boolean = true){
-    const texts: (string | null)[] = contents.map(_ => "")
+
+function formatToDecompressed(format: string){
+    return format.replace("compressed", "").replace("-", "")
+}
+
+
+type MaybeContent = {
+    text?: string | null
+    textBlobId?: string | null
+    format?: string | null
+    dbFormat?: string | null
+    uri: string
+}
+
+
+export async function getContentsText(ctx: AppContext, contents: MaybeContent[], retries: number = 10, decompressed: boolean = true): Promise<(TextAndFormat | null)[]>{
+    const texts: (TextAndFormat | null)[] = contents.map(_ => null)
 
     const blobRefs: {i: number, blob: BlobRef}[] = []
     for(let i = 0; i < contents.length; i++){
         const c = contents[i]
         if(c.text != null){
-            texts[i] = c.text
+            texts[i] = {text: c.text, format: c.dbFormat ?? null}
         } else if(c.textBlobId){
             blobRefs.push({i, blob: {cid: c.textBlobId, authorId: getDidFromUri(c.uri)}})
         }
@@ -234,16 +252,26 @@ export async function getContentsText(ctx: AppContext, contents: Omit<ContentPro
 
     const blobTexts = await fetchTextBlobs(ctx, blobRefs.map(x => x.blob), retries)
 
+    console.log("blob texts", blobTexts.map(x => x ? x.slice(0, 50) : x))
+
     for(let i = 0; i < blobRefs.length; i++){
-        texts[blobRefs[i].i] = blobTexts[i]
+        const text = blobTexts[i]
+        const format = contents[blobRefs[i].i].format
+        texts[blobRefs[i].i] = text != null ? {
+            text,
+            format: format ?? null
+        } : null
     }
 
     if(decompressed){
         for(let i = 0; i < texts.length; i++){
             const text = texts[i]
-            if(text != null && text.length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(contents[i].format ?? null)){
+            if(text != null && text.text.length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(contents[i].format ?? null)){
                 try {
-                    texts[i] = decompress(text)
+                    texts[i] = {
+                        text: decompress(text.text),
+                        format: formatToDecompressed(text.format ?? "lexical-compressed")
+                    }
                 } catch {
                     console.log(`Error decompressing text ${contents[i].uri}`)
                     texts[i] = null

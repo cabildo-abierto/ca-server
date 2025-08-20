@@ -90,6 +90,7 @@ export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | s
         .with('topics_with_titles', (eb) =>
             eb.selectFrom('Topic')
                 .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
+                .innerJoin("Content", "Content.uri", "TopicVersion.uri")
                 .select([
                     'Topic.id',
                     'Topic.lastEdit',
@@ -97,6 +98,16 @@ export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | s
                     'Topic.popularityScoreLastWeek',
                     'Topic.popularityScoreLastMonth',
                     'TopicVersion.props',
+                    "Content.numWords",
+                    eb => (
+                        eb
+                            .selectFrom("ReadSession")
+                            .select(
+                                [eb => eb.fn.max("ReadSession.created_at").as("lastRead")
+                                ])
+                            .where("ReadSession.userId", "=", agent.did)
+                            .whereRef("ReadSession.readContentId", "=", "TopicVersion.uri").as("lastRead")
+                    ),
                     eb => eb.fn.coalesce(
                         eb.cast<string>(eb.fn('jsonb_path_query_first', [
                             eb.ref('TopicVersion.props'),
@@ -140,7 +151,9 @@ export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | s
             lastEdit: t.lastEdit,
             currentVersion: {
                 props: t.props as JsonValue
-            }
+            },
+            numWords: t.numWords,
+            lastRead: t.lastRead
         }))
     };
 };

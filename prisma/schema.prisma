@@ -197,6 +197,7 @@ model Topic {
   popularityScoreLastWeek  Int                @default(0)
   popularityScoreLastMonth Int                @default(0)
   lastEdit                 DateTime?          @updatedAt
+  lastContentChange        DateTime?
   readSessions             ReadSession[]
   interactions             TopicInteraction[]
 
@@ -303,6 +304,7 @@ model Content {
   textBlobId           String?
   textBlob             Blob?            @relation(fields: [textBlobId], references: [cid])
   format               String?
+  dbFormat             String?
   numWords             Int?
   topicVersion         TopicVersion?
   article              Article?

@@ -34,6 +34,8 @@ import {deleteRecordsDB} from "#/services/delete";
 import {unique} from "#/utils/arrays";
 import {NotificationBatchData, NotificationJobData} from "#/services/notifications/notifications";
 import {isReactionCollection} from "#/utils/type-utils";
+import {getTopicCurrentVersion} from "#/services/wiki/current-version";
+import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard";
 
 
 export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: ATProtoStrongRef, record: any }[]) {
@@ -90,7 +92,7 @@ export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: 
 
 
 export async function processUsersBatch(trx: Transaction<DB>, dids: string[]) {
-    if(dids.length == 0) return
+    if (dids.length == 0) return
     await trx
         .insertInto("User")
         .values(dids.map(did => ({did})))
@@ -100,7 +102,7 @@ export async function processUsersBatch(trx: Transaction<DB>, dids: string[]) {
 
 
 export async function processDirtyRecordsBatch(trx: Transaction<DB>, refs: ATProtoStrongRef[]) {
-    if(refs.length == 0) return
+    if (refs.length == 0) return
 
     const users = refs.map(r => getDidFromUri(r.uri))
     await processUsersBatch(trx, users)
@@ -289,13 +291,13 @@ export const processPostsBatch: BatchRecordProcessor<Post.Record> = async (ctx, 
         return posts.filter(p => !existingSet.has(p.uri))
     })
 
-    if(insertedPosts){
+    if (insertedPosts) {
         insertedPosts.forEach(p => {
-            if(p.replyToId){
+            if (p.replyToId) {
                 const replyToDid = getDidFromUri(p.replyToId)
-                if(replyToDid != getDidFromUri(p.uri)){
+                if (replyToDid != getDidFromUri(p.uri)) {
                     const c = getCollectionFromUri(p.replyToId)
-                    if(isArticle(c) || isTopicVersion(c)){
+                    if (isArticle(c) || isTopicVersion(c)) {
                         const data: NotificationJobData = {
                             userNotifiedId: getDidFromUri(p.replyToId),
                             type: "Reply",
@@ -331,7 +333,7 @@ export async function batchIncrementReactionCounter(
         throw new Error(`Unknown reaction type: ${type}`)
     }
 
-    if(recordIds.length == 0) return
+    if (recordIds.length == 0) return
 
     await trx
         .updateTable('Record')
@@ -354,7 +356,7 @@ export async function batchDecrementReactionCounter(
         throw new Error(`Unknown reaction type: ${type}`)
     }
 
-    if(recordIds.length == 0) return
+    if (recordIds.length == 0) return
 
     await trx
         .updateTable('Record')
@@ -375,27 +377,18 @@ function isReactionType(collection: string): collection is ReactionType {
     ].includes(collection)
 }
 
-
-function getTopicCurrentVersionFromCounts(versions: {
-    uri: string,
-    uniqueAcceptsCount: number,
-    uniqueRejectsCount: number
-}[]) {
-    if(!versions) return null
-    for (let i = versions.length - 1; i >= 0; i--) {
-        if (versions[i].uniqueRejectsCount == 0) return i
-    }
-    return null
-}
-
-export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB>, topicIds: string[]) {
+export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB> | AppContext["kysely"], topicIds: string[]) {
     topicIds = unique(topicIds)
 
     type VersionWithVotes = {
         topicId: string
         uri: string
-        uniqueAcceptsCount: number
-        uniqueRejectsCount: number
+        reactions: { uri: string, editorStatus: string }[] | null
+        protection: string
+        editorStatus: string
+        currentVersionId: string | null
+        accCharsAdded: number | null
+        created_at: Date
     }
 
     let allVersions: VersionWithVotes[]
@@ -405,14 +398,34 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB>, topi
             .selectFrom('Record')
             .innerJoin('Content', 'Content.uri', 'Record.uri')
             .innerJoin('TopicVersion', 'TopicVersion.uri', 'Content.uri')
+            .innerJoin("User", "Record.authorId", "User.did")
+            .innerJoin("Topic", "Topic.id", "TopicVersion.topicId")
+            .leftJoin("Reaction", "Reaction.subjectId", "TopicVersion.uri")
+            .leftJoin("Record as ReactionRecord", "Reaction.uri", "ReactionRecord.uri")
+            .leftJoin("User as ReactionAuthor", "ReactionAuthor.did", "ReactionRecord.authorId")
             .select([
+                "Record.created_at",
                 'TopicVersion.topicId',
+                "Topic.currentVersionId",
                 'Record.uri',
-                'Record.uniqueAcceptsCount',
-                'Record.uniqueRejectsCount'
+                "Topic.protection",
+                "User.editorStatus",
+                "accCharsAdded",
+                eb => eb.fn.jsonAgg(
+                    sql<{ uri: string; editorStatus: string }>`json_build_object('uri', "Reaction"."uri", 'editorStatus', "ReactionAuthor"."editorStatus")`
+                ).filterWhere("Reaction.uri", "is not", null).as("reactions")
             ])
             .where('TopicVersion.topicId', 'in', topicIds)
             .where('Record.cid', 'is not', null)
+            .groupBy([
+                "Record.created_at",
+                'TopicVersion.topicId',
+                "Topic.currentVersionId",
+                'Record.uri',
+                "Topic.protection",
+                "User.editorStatus",
+                "accCharsAdded",
+            ])
             .orderBy('Record.created_at', 'asc')
             .execute();
     } catch (err) {
@@ -434,16 +447,50 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB>, topi
     for (let i = 0; i < topicIds.length; i++) {
         const id = topicIds[i]
         const versions = versionsByTopic.get(id)
-        if(!versions) continue
-        const currentVersion = getTopicCurrentVersionFromCounts(versions)
-        updates.push({
-            id,
-            currentVersionId: currentVersion != null ? versions[currentVersion].uri : null,
-            lastEdit
-        })
+        if (!versions) continue
+
+        if(versions.length == 0){
+            updates.push({
+                id,
+                currentVersionId: null,
+                lastEdit
+            })
+        } else {
+            const status = versions
+                .map(v => ({
+                        author: {
+                            editorStatus: v.editorStatus
+                        },
+                        status: getTopicVersionStatusFromReactions(v.reactions ?? [])
+                    })
+                )
+
+            const currentVersion = getTopicCurrentVersion(
+                versions[0].protection,
+                status
+            )
+            if(currentVersion == null){
+                updates.push({
+                    id,
+                    currentVersionId: null,
+                    lastEdit
+                })
+            } else {
+                const newCurrentVersion = versions[currentVersion].uri
+                const currentCurrentVersion = versions[0].currentVersionId
+
+                if(newCurrentVersion != currentCurrentVersion){
+                    updates.push({
+                        id,
+                        currentVersionId: newCurrentVersion,
+                        lastEdit
+                    })
+                }
+            }
+        }
     }
 
-    if(updates.length == 0){
+    if (updates.length == 0) {
         return
     }
 
@@ -454,7 +501,7 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB>, topi
             .onConflict((oc) =>
                 oc.column("id").doUpdateSet({
                     currentVersionId: (eb) => eb.ref('excluded.currentVersionId'),
-                    lastEdit: (eb) => eb.ref('excluded.lastEdit'),
+                    lastEdit: (eb) => eb.ref('excluded.lastEdit')
                 })
             )
             .execute()
@@ -546,7 +593,7 @@ export const processReactionsBatch: BatchRecordProcessor<ReactionRecord> = async
         }
     })
 
-    if(res){
+    if (res) {
         const data: NotificationBatchData = {
             type: "TopicVersionVote",
             uris: res.topicVotes.map(t => t.reactionUri),
@@ -614,20 +661,20 @@ export const processArticlesBatch: BatchRecordProcessor<Article.Record> = async 
             )
             .execute()
 
-        if(afterTransaction){
+        if (afterTransaction) {
             await afterTransaction(trx)
         }
     })
 }
 
 
-function getUniqueTopicUpdates(records: {ref: ATProtoStrongRef, record: TopicVersion.Record}[]) {
-    const topics = new Map<string, {id: string, lastEdit: Date}>()
+function getUniqueTopicUpdates(records: { ref: ATProtoStrongRef, record: TopicVersion.Record }[]) {
+    const topics = new Map<string, { id: string, lastEdit: Date }>()
     records.forEach(r => {
         const id = r.record.id
         const cur = topics.get(id)
         const date = new Date(r.record.createdAt)
-        if(!cur){
+        if (!cur) {
             topics.set(id, {id, lastEdit: date})
         } else {
             topics.set(id, {id, lastEdit: cur.lastEdit > date ? cur.lastEdit : date})
@@ -669,7 +716,8 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
                 .insertInto("Topic")
                 .values(topics)
                 .onConflict((oc) => oc.column("id").doUpdateSet({
-                    lastEdit: sql`GREATEST("Topic"."lastEdit", excluded."lastEdit")`
+                    lastEdit: sql`GREATEST
+                    ("Topic"."lastEdit", excluded."lastEdit")`
                 }))
                 .execute()
         } catch (err) {
@@ -698,7 +746,7 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
 
     })
 
-    if(inserted){
+    if (inserted) {
         const data: NotificationBatchData = {
             uris: inserted.map(i => i.uri),
             topics: inserted.map(i => i.topicId),
@@ -711,7 +759,7 @@ export const processTopicVersionsBatch: BatchRecordProcessor<TopicVersion.Record
 }
 
 
-export async function addUpdateContributionsJobForTopics(ctx: AppContext, ids: string[]){
+export async function addUpdateContributionsJobForTopics(ctx: AppContext, ids: string[]) {
     await ctx.worker?.addJob(
         "update-topic-contributions",
         {topicIds: ids}
@@ -772,8 +820,8 @@ export const processDatasetsBatch: BatchRecordProcessor<Dataset.Record> = async 
 }
 
 
-export async function processDeleteReactionsBatch(ctx: AppContext, uris: string[]){
-    if(uris.length == 0) return
+export async function processDeleteReactionsBatch(ctx: AppContext, uris: string[]) {
+    if (uris.length == 0) return
     const type = getCollectionFromUri(uris[0])
     if (!isReactionCollection(type)) return
 
@@ -786,7 +834,7 @@ export async function processDeleteReactionsBatch(ctx: AppContext, uris: string[
             .map(e => e.subjectId != null ? {...e, subjectId: e.subjectId} : null)
             .filter(x => x != null)
 
-        if(subjectIds.length == 0) return
+        if (subjectIds.length == 0) return
 
         try {
             const deletedSubjects = await db
@@ -820,7 +868,7 @@ export async function processDeleteReactionsBatch(ctx: AppContext, uris: string[
             )
             .execute()).map(u => u.uri)
 
-        if(sameSubjectUris.length > 0) {
+        if (sameSubjectUris.length > 0) {
             if (type == "ar.cabildoabierto.wiki.voteReject") {
                 await db
                     .deleteFrom("VoteReject")
@@ -834,7 +882,7 @@ export async function processDeleteReactionsBatch(ctx: AppContext, uris: string[
 
             await db.deleteFrom("Reaction").where("uri", "in", sameSubjectUris).execute()
 
-            for(const u of sameSubjectUris){
+            for (const u of sameSubjectUris) {
                 await db.deleteFrom("Record").where("uri", "in", [u]).execute()
             }
             //await db.deleteFrom("Record").where("uri", "in", sameSubjectUris).execute()
@@ -847,7 +895,7 @@ export async function processDeleteReactionsBatch(ctx: AppContext, uris: string[
                 .where("uri", "in", subjectIds.map(s => s.subjectId))
                 .execute()).map(t => t.topicId)
 
-            if(topicIds.length > 0){
+            if (topicIds.length > 0) {
                 await updateTopicsCurrentVersionBatch(db, topicIds)
                 return topicIds
             }
@@ -859,7 +907,7 @@ export async function processDeleteReactionsBatch(ctx: AppContext, uris: string[
 }
 
 
-export async function processDeleteTopicVersionsBatch(ctx: AppContext, uris: string[]){
+export async function processDeleteTopicVersionsBatch(ctx: AppContext, uris: string[]) {
     console.log("Deleting topic versions batch", uris.length)
     console.log(uris)
 
@@ -921,23 +969,22 @@ export async function processDeleteTopicVersionsBatch(ctx: AppContext, uris: str
 }
 
 
-
-export async function processDeleteBatch(ctx: AppContext, uris: string[]){
+export async function processDeleteBatch(ctx: AppContext, uris: string[]) {
     const byCollections = new Map<string, string[]>()
     uris.forEach(r => {
         const c = getCollectionFromUri(r)
         byCollections.set(c, [...(byCollections.get(c) ?? []), r])
     })
     const entries = Array.from(byCollections.entries())
-    for (let i = 0; i < entries.length; i++){
+    for (let i = 0; i < entries.length; i++) {
         const [c, uris] = entries[i]
         const batch_size = 500
-        for(let j = 0; j < uris.length; j += batch_size){
+        for (let j = 0; j < uris.length; j += batch_size) {
             console.log(`deleting batch ${j} of ${uris.length} entries of type ${c}`)
-            const batchUris = uris.slice(j, j+batch_size)
-            if(isReactionType(c)){
+            const batchUris = uris.slice(j, j + batch_size)
+            if (isReactionType(c)) {
                 await processDeleteReactionsBatch(ctx, batchUris)
-            } else if(isTopicVersion(c)){
+            } else if (isTopicVersion(c)) {
                 await processDeleteTopicVersionsBatch(ctx, batchUris)
             } else {
                 const su = deleteRecordsDB(ctx, batchUris)
@@ -953,10 +1000,10 @@ export async function processDeleteBatch(ctx: AppContext, uris: string[]){
 export async function processCreateBatch(ctx: AppContext, records: UserRepoElement[], collection: string) {
     if (collection == "app.bsky.graph.follow") {
         const parsedRecords = parseRecords<Follow.Record>(records, Follow.validateRecord)
-        if(parsedRecords.length > 0) await processFollowsBatch(ctx, parsedRecords)
+        if (parsedRecords.length > 0) await processFollowsBatch(ctx, parsedRecords)
     } else if (collection == "app.bsky.feed.post") {
         const parsedRecords = parseRecords<Post.Record>(records, Post.validateRecord)
-        if(parsedRecords.length > 0) await processPostsBatch(ctx, parsedRecords)
+        if (parsedRecords.length > 0) await processPostsBatch(ctx, parsedRecords)
     } else if (collection == "app.bsky.actor.profile") {
         const parsedRecord = parseRecord(records[0].record)
         const res = BskyProfile.validateRecord<BskyProfile.Record>(parsedRecord)
@@ -973,26 +1020,41 @@ export async function processCreateBatch(ctx: AppContext, records: UserRepoEleme
         }
     } else if (collection == "app.bsky.feed.like") {
         const parsedRecords = parseRecords<Like.Record>(records, Like.validateRecord)
-        if(parsedRecords.length > 0) await processReactionsBatch(ctx, parsedRecords)
+        if (parsedRecords.length > 0) await processReactionsBatch(ctx, parsedRecords)
     } else if (collection == "app.bsky.feed.repost") {
         const parsedRecords = parseRecords<Repost.Record>(records, Repost.validateRecord)
-        if(parsedRecords.length > 0) await processReactionsBatch(ctx, parsedRecords)
+        if (parsedRecords.length > 0) await processReactionsBatch(ctx, parsedRecords)
     } else if (collection == "ar.cabildoabierto.wiki.voteAccept") {
         const parsedRecords = parseRecords<VoteAccept.Record>(records, VoteAccept.validateRecord)
-        if(parsedRecords.length > 0) await processReactionsBatch(ctx, parsedRecords)
+        if (parsedRecords.length > 0) await processReactionsBatch(ctx, parsedRecords)
     } else if (collection == "ar.cabildoabierto.wiki.voteReject") {
         const parsedRecords = parseRecords<VoteReject.Record>(records, VoteReject.validateRecord)
-        if(parsedRecords.length > 0) await processReactionsBatch(ctx, parsedRecords)
+        if (parsedRecords.length > 0) await processReactionsBatch(ctx, parsedRecords)
     } else if (collection == "ar.cabildoabierto.feed.article") {
         const parsedRecords = parseRecords<Article.Record>(records, Article.validateRecord)
-        if(parsedRecords.length > 0) await processArticlesBatch(ctx, parsedRecords)
+        if (parsedRecords.length > 0) await processArticlesBatch(ctx, parsedRecords)
     } else if (collection == "ar.cabildoabierto.wiki.topicVersion") {
         const parsedRecords = parseRecords<TopicVersion.Record>(records, TopicVersion.validateRecord)
-        if(parsedRecords.length > 0) await processTopicVersionsBatch(ctx, parsedRecords)
+        if (parsedRecords.length > 0) await processTopicVersionsBatch(ctx, parsedRecords)
     } else if (collection == "ar.cabildoabierto.data.dataset") {
         const parsedRecords = parseRecords<Dataset.Record>(records, Dataset.validateRecord)
-        if(parsedRecords.length > 0) await processDatasetsBatch(ctx, parsedRecords)
+        if (parsedRecords.length > 0) await processDatasetsBatch(ctx, parsedRecords)
     } else {
         console.log(`Batch update not implemented for ${collection}!`)
+    }
+}
+
+
+export async function updateAllTopicsCurrentVersions(ctx: AppContext){
+    const topics = await ctx.kysely.selectFrom("Topic").select("id").execute()
+
+    const batchSize = 500
+
+    for(let i = 0; i < topics.length; i+=batchSize) {
+        console.log("Updating all topics current version", i)
+        await updateTopicsCurrentVersionBatch(
+            ctx.kysely,
+            topics.slice(i, i+batchSize).map(x => x.id)
+        )
     }
 }

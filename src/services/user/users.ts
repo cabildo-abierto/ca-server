@@ -1,6 +1,6 @@
 import {AppContext} from "#/index";
 import {Account, AuthorStatus, CAProfile, Profile, Session, ValidationState} from "#/lib/types";
-import {cookieOptions, SessionAgent} from "#/utils/session-agent";
+import {Agent, cookieOptions, SessionAgent} from "#/utils/session-agent";
 import {deleteRecords} from "#/services/delete";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
@@ -58,7 +58,7 @@ export async function dbHandleToDid(ctx: AppContext, handleOrDid: string): Promi
 }
 
 
-export async function handleToDid(ctx: AppContext, agent: SessionAgent, handleOrDid: string): Promise<string | null> {
+export async function handleToDid(ctx: AppContext, agent: Agent, handleOrDid: string): Promise<string | null> {
     if (handleOrDid.startsWith("did")) {
         return handleOrDid
     } else {
@@ -172,7 +172,7 @@ export const unfollow: CAHandler<{ followUri: string }> = async (ctx, agent, {fo
 }
 
 
-async function getCAProfile(ctx: AppContext, agent: SessionAgent, handleOrDid: string): Promise<CAProfile | null> {
+async function getCAProfile(ctx: AppContext, agent: Agent, handleOrDid: string): Promise<CAProfile | null> {
     const t1 = Date.now()
     const did = await handleToDid(ctx, agent, handleOrDid)
     if (!did) return null
@@ -265,7 +265,8 @@ export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile>
         return {
             data: profile
         }
-    } catch {
+    } catch (err) {
+        console.log("Error getting profile", err)
         return {error: "No se encontró el usuario."}
     }
 }

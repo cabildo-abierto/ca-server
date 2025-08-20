@@ -83,16 +83,16 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
     let format: string | null = null
     if(e.content?.text != null){
         text = e.content.text
-        format = e.content.format ?? null
+        format = e.content.dbFormat ?? null
     } else if (e.content?.textBlobId) {
         text = data.getFetchedBlob({cid: e.content?.textBlobId, authorId})
-        format = record?.format ?? null
+        format = e.content?.format ?? null
     }
 
     if (text == null || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
 
     const embeds = hydrateEmbedViews(author.did, record?.embeds ?? [])
-    const {summary, summaryFormat} = getArticleSummary(text, e.content?.format ?? undefined)
+    const {summary, summaryFormat} = getArticleSummary(text, format ?? undefined)
 
     return {
         data: {
@@ -141,7 +141,13 @@ export function markdownToPlainText(md: string){
 }
 
 
-export function getArticleSummary(text: string, format?: string) {
+export function getArticleSummary(text: string | null, format?: string) {
+    if(text == null){
+        return {
+            summary: "Contenido no encontrado.",
+            summaryFormat: "plain-text"
+        }
+    }
     let summary = ""
     if (format == "markdown") {
         summary = markdownToPlainText(text)
@@ -170,20 +176,18 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
     const author = hydrateProfileViewBasic(authorId, data)
     if (!author) return {error: "No se encontró el autor del contenido."}
 
-    const record = e.record ? JSON.parse(e.record) as ArticleRecord : undefined
-
     let text: string | null = null
     let format: string | null = null
     if(e.content?.text != null){
         text = e.content.text
-        format = e.content.format ?? null
+        format = e.content.dbFormat ?? null
     } else if (e.content?.textBlobId) {
         text = data.getFetchedBlob({cid: e.content?.textBlobId, authorId})
-        format = record?.format ?? null
+        format = e.content?.format ?? null
     }
 
-    if (text == null || !e.content || !e.content.article || !e.content.article.title) {
-        console.log(`No se encontraron los datos para hidratar el artículo (contenidos): ${uri}`, !text || !e.content || !e.content.article || !e.content.article.title)
+    if (!e.content?.article?.title) {
+        console.log(`No se encontraron los datos para hidratar el artículo (título): ${uri}`, !text || !e.content || !e.content.article || !e.content.article.title)
         return {error: "Ocurrió un error al cargar el artículo."}
     }
 

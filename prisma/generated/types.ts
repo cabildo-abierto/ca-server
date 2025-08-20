@@ -84,6 +84,7 @@ export type Content = {
     text: string | null;
     textBlobId: string | null;
     format: string | null;
+    dbFormat: string | null;
     numWords: number | null;
     lastReferencesUpdate: Timestamp | null;
     selfLabels: string[];
@@ -219,6 +220,7 @@ export type Topic = {
     popularityScoreLastWeek: Generated<number>;
     popularityScoreLastMonth: Generated<number>;
     lastEdit: Timestamp | null;
+    lastContentChange: Timestamp | null;
 };
 export type TopicCategory = {
     id: string;

@@ -24,11 +24,12 @@ import Redis from "ioredis";
 import {createNotificationJob, createNotificationsBatchJob} from "#/services/notifications/notifications";
 import {CAHandler} from "#/utils/handler";
 import {assignInviteCodesToUsers} from "#/services/user/access";
-import {updateContentsText} from "#/services/wiki/content";
+import {resetContentsFormat, updateContentsNumWords, updateContentsText} from "#/services/wiki/content";
 import {updateThreads} from "#/services/wiki/threads";
 import {restartLastContentInteractionsUpdate} from "#/services/wiki/interactions";
 import {updatePostLangs} from "#/services/admin/posts";
 import {createPaymentPromises} from "#/services/monetization/promise-creation";
+import {updateAllTopicsCurrentVersions} from "#/services/sync/process-batch";
 
 const mins = 60 * 1000
 
@@ -127,11 +128,14 @@ export class CAWorker {
         this.registerJob("assign-invite-codes", () => assignInviteCodesToUsers(ctx))
         this.registerJob("update-topic-mentions", (data) => updateTopicMentions(ctx, data.id as string))
         this.registerJob("update-contents-text", (data) => updateContentsText(ctx))
+        this.registerJob("update-num-words", (data) => updateContentsNumWords(ctx))
+        this.registerJob("reset-contents-format", (data) => resetContentsFormat(ctx))
         this.registerJob("update-threads", (data) => updateThreads(ctx))
         this.registerJob("update-post-langs", (data) => updatePostLangs(ctx))
         this.registerJob("update-author-status-all", (data) => updateAuthorStatus(ctx))
         this.registerJob("update-author-status", (data) => updateAuthorStatus(ctx, [data.did]))
         this.registerJob("create-payment-promises", (data) => createPaymentPromises(ctx))
+        this.registerJob("update-topics-current-versions", (data) => updateAllTopicsCurrentVersions(ctx))
 
         await this.removeAllRepeatingJobs()
         await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)

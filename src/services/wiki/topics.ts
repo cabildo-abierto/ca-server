@@ -1,5 +1,5 @@
 import {fetchTextBlobs} from "../blob";
-import {getUri} from "#/utils/uri";
+import {getDidFromUri, getUri} from "#/utils/uri";
 import {AppContext} from "#/index";
 import {CAHandler, CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
 import {TopicProp, TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
@@ -28,7 +28,7 @@ import {cleanText} from "#/utils/strings";
 export type TimePeriod = "day" | "week" | "month" | "all"
 
 export const getTrendingTopics: CAHandler<{params: {time: TimePeriod}}, TopicViewBasic[]> = async (ctx, agent, {params}) => {
-    return await getTopics(ctx, [], "popular", params.time, 10)
+    return await getTopics(ctx, [], "popular", params.time, 10, agent.did)
 }
 
 
@@ -41,6 +41,9 @@ export type TopicQueryResultBasic = {
     currentVersion: {
         props: Prisma.JsonValue
     } | null
+    numWords: number | null
+    lastRead?: Date | null
+    created_at?: Date
 }
 
 
@@ -76,7 +79,10 @@ export function topicQueryResultToTopicViewBasic(t: TopicQueryResultBasic): $Typ
             lastWeek: [t.popularityScoreLastWeek],
             lastMonth: [t.popularityScoreLastMonth]
         },
-        props
+        props,
+        numWords: t.numWords != null ? t.numWords : undefined,
+        lastSeen: t.lastRead?.toISOString(),
+        currentVersionCreatedAt: t.created_at?.toISOString()
     }
 }
 
@@ -86,18 +92,37 @@ export async function getTopics(
     categories: string[],
     sortedBy: "popular" | "recent",
     time: TimePeriod,
-    limit?: number): CAHandlerOutput<TopicViewBasic[]> {
+    limit?: number,
+    did?: string
+): CAHandlerOutput<TopicViewBasic[]> {
 
     let baseQuery = ctx.kysely
         .selectFrom('Topic')
         .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
+        .innerJoin("Record", "TopicVersion.uri", "Record.uri")
+        .innerJoin("Content", "Content.uri", "TopicVersion.uri")
         .select([
             "id",
             "lastEdit",
             "Topic.popularityScoreLastDay",
             "Topic.popularityScoreLastWeek",
             "Topic.popularityScoreLastMonth",
-            "TopicVersion.props"
+            "TopicVersion.props",
+            "TopicVersion.uri",
+            "Record.created_at",
+            "TopicVersion.charsAdded",
+            "TopicVersion.charsDeleted",
+            "Topic.lastContentChange",
+            "Content.numWords",
+            eb => (
+                eb
+                .selectFrom("ReadSession")
+                .select(
+                    [eb => eb.fn.max("ReadSession.created_at").as("lastRead")
+                ])
+                .where("ReadSession.userId", "=", did ?? "sin did")
+                .whereRef("ReadSession.readContentId", "=", "TopicVersion.uri").as("lastRead")
+            )
         ])
         .where(categories.includes("Sin categoría") ?
             stringListIsEmpty("Categorías") :
@@ -133,10 +158,13 @@ export async function getTopics(
             popularityScoreLastMonth: t.popularityScoreLastMonth,
             popularityScoreLastWeek: t.popularityScoreLastWeek,
             popularityScoreLastDay: t.popularityScoreLastDay,
-            lastEdit: t.lastEdit,
+            lastEdit: t.lastContentChange,
+            created_at: t.created_at,
             currentVersion: {
                 props: t.props as JsonValue
-            }
+            },
+            numWords: t.numWords,
+            lastRead: getDidFromUri(t.uri) == did ? t.lastEdit : t.lastRead
         }))
     }
 }
@@ -156,7 +184,14 @@ export const getTopicsHandler: CAHandler<{
         return {error: `Período de tiempo inválido: ${time}`}
     }
 
-    return await getTopics(ctx, categories, sort, time as TimePeriod, 50)
+    return await getTopics(
+        ctx,
+        categories,
+        sort,
+        time as TimePeriod,
+        50,
+        agent.did
+    )
 }
 
 
@@ -303,7 +338,7 @@ export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?:
             return {error: "No se encontró el tema " + id + "."}
         }
 
-        const index = getTopicCurrentVersion(history.versions)
+        const index = getTopicCurrentVersion(history.protection, history.versions)
         if (index == null) {
             return {error: "No se encontró el tema " + id + "."}
         }
@@ -389,6 +424,7 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
                 select: {
                     text: true,
                     format: true,
+                    dbFormat: true,
                     textBlob: {
                         select: {
                             cid: true,
@@ -422,15 +458,18 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
     }
 
     let text: string | null = null
+    let format: string | null = null
     if (topic.content.text == null) {
         if (topic.content.textBlob) {
             [text] = await fetchTextBlobs(
                 ctx,
                 [topic.content.textBlob]
             )
+            format = topic.content.format
         }
     } else {
         text = topic.content.text
+        format = topic.content.dbFormat
     }
 
     const author = dbUserToProfileViewBasic(topic.author)
@@ -441,7 +480,7 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
         return {error: "No se encontró el tema " + id + "."}
     }
 
-    const {text: transformedText, format: transformedFormat} = anyEditorStateToMarkdownOrLexical(text, topic.content.format)
+    const {text: transformedText, format: transformedFormat} = anyEditorStateToMarkdownOrLexical(text, format)
 
     const props = Array.isArray(topic.content.topicVersion.props) ? topic.content.topicVersion.props as unknown as TopicProp[] : []
 
@@ -533,8 +572,14 @@ type TopicWithEditors = {
 }
 
 export const getTopicsInCategoryForBatchEditing: CAHandlerNoAuth<{params: {cat: string}}, TopicWithEditors[]> = async (ctx, agent, {params}) => {
-    console.log("getting topics in category", params.cat)
-    const {data: topics, error} = await getTopics(ctx, [params.cat], "recent", "all", undefined)
+    const {data: topics, error} = await getTopics(
+        ctx,
+        [params.cat],
+        "recent",
+        "all",
+        undefined,
+        agent.hasSession() ? agent.did : undefined
+    )
 
     if(!topics) {
         console.log("error getting topics", error)

@@ -7,7 +7,8 @@ import {decompress} from "#/utils/compression";
 import {unique} from "#/utils/arrays";
 import {isVersionAccepted} from "#/services/wiki/current-version";
 import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard";
-import * as assert from "node:assert";
+import {getNumWords} from "#/services/wiki/content";
+import { sql } from "kysely";
 
 
 export const updateTopicContributionsHandler: CAHandler<{
@@ -19,16 +20,34 @@ export const updateTopicContributionsHandler: CAHandler<{
 }
 
 
-function getMarkdown(v: {
-    content: { text: string | null, textBlobId: string | null, format: string | null, record: { authorId: string } }
-}, dataplane: Dataplane): string | null {
-    let text: string | null = v.content.text
-    const format = v.content.format
-    if(!v.content.text && v.content.textBlobId){
+type TopicVersion = {
+    uri: string
+    topicId: string
+    authorship: boolean
+    protection: string
+    text: string | null
+    format: string | null
+    dbFormat: string | null
+    textBlobId: string | null
+    authorId: string
+    editorStatus: string
+    created_at: Date
+    reactions: {
+        uri: string
+        editorStatus: string
+    }[] | null
+}
+
+
+function getMarkdown(v: TopicVersion, dataplane: Dataplane): string | null {
+    let text: string | null = v.text
+    let format = v.dbFormat
+    if(!v.text && v.textBlobId){
         text = dataplane.textBlobs.get(getBlobKey({
-            cid: v.content.textBlobId,
-            authorId: v.content.record.authorId
+            cid: v.textBlobId,
+            authorId: v.authorId
         }))!
+        format = v.format
     }
     if(text == null) return null
 
@@ -47,7 +66,7 @@ function getMarkdown(v: {
             return null
         }
     } else if (format == "plain-text") {
-        return v.content.text
+        return v.text
     } else if(format == "markdown"){
         return text
     } else {
@@ -83,99 +102,63 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
         return
     }
 
-
-    type TopicVersion = {
-        uri: string
-        authorship: boolean
-        topicId: string
-        topic: {
-            protection: string
-        }
-        content: {
-            text: string | null
-            format: string | null
-            textBlobId: string | null
-            record: {
-                authorId: string
-                createdAt: Date
-                author: {editorStatus: string}
-                reactions: {uri: string, record: {author: {editorStatus: string}}}[]
-            }
-        }
-    }
-
     if (!topicIds || !(topicIds instanceof Array) || topicIds.length == 0) return
 
-    const versions: TopicVersion[] = await ctx.db.topicVersion.findMany({
-        select: {
-            uri: true,
-            topicId: true,
-            topic: {
-                select: {
-                    protection: true
-                }
-            },
-            authorship: true,
-            content: {
-                select: {
-                    text: true,
-                    format: true,
-                    textBlobId: true,
-                    record: {
-                        select: {
-                            authorId: true,
-                            author: {
-                                select: {
-                                    editorStatus: true
-                                }
-                            },
-                            createdAt: true,
-                            reactions: {
-                                select: {
-                                    uri: true,
-                                    record: {
-                                        select: {
-                                            author: {
-                                                select: {
-                                                    editorStatus: true
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        where: {
-            topicId: {
-                in: topicIds
-            }
-        },
-        orderBy: {
-            content: {
-                record: {
-                    createdAt: "asc"
-                }
-            }
-        }
-    })
+    const versions: TopicVersion[] = await ctx.kysely
+        .selectFrom("TopicVersion as tv")
+        .innerJoin("Topic as t", "t.id", "tv.topicId")
+        .innerJoin("Content as c", "c.uri", "tv.uri")
+        .innerJoin("Record as r", "r.uri", "tv.uri")
+        .innerJoin("User as u", "u.did", "r.authorId")
+        .leftJoin("Reaction", "Reaction.subjectId", "tv.uri")
+        .leftJoin("Record as ReactionRecord", "Reaction.uri", "ReactionRecord.uri")
+        .leftJoin("User as ReactionAuthor", "ReactionAuthor.did", "ReactionRecord.authorId")
+        .select([
+            "tv.uri",
+            "tv.topicId",
+            "tv.authorship",
+            "t.protection",
+            "c.text",
+            "c.format",
+            "c.dbFormat",
+            "c.textBlobId",
+            "r.authorId",
+            "u.editorStatus",
+            "r.created_at",
+            eb => eb.fn.jsonAgg(
+                sql<{ uri: string; editorStatus: string }>`json_build_object('uri', "Reaction"."uri", 'editorStatus', "ReactionAuthor"."editorStatus")`
+            ).filterWhere("Reaction.uri", "is not", null).as("reactions")
+        ])
+        .groupBy([
+            "tv.uri",
+            "tv.topicId",
+            "t.id",
+            "tv.authorship",
+            "t.protection",
+            "t.lastContentChange",
+            "c.text",
+            "c.format",
+            "c.dbFormat",
+            "c.textBlobId",
+            "r.authorId",
+            "u.editorStatus",
+            "r.created_at"
+        ])
+        .where("t.id", "in", topicIds)
+        .orderBy("r.created_at asc")
+        .execute()
 
     const blobRefs: BlobRef[] = versions.map(e => {
-        if (!e.content.textBlobId) return null
-        if(e.content.text != null) return null
-        console.log(e.topicId, e.uri, "has no text", e.content.text)
+        if (!e.textBlobId) return null
+        if(e.text != null) return null
+        console.log(e.topicId, e.uri, "has no text", e.text)
         return {
-            cid: e.content.textBlobId,
-            authorId: e.content.record.authorId
+            cid: e.textBlobId,
+            authorId: e.authorId
         }
     }).filter(x => x != null)
 
     const dataplane = new Dataplane(ctx)
-    console.log("fetching text blobs for blobRefs", blobRefs.length)
-    if(blobRefs.length > 25) throw Error(`too many blobs to fetch ${blobRefs.length}`)
     await dataplane.fetchTextBlobs(blobRefs)
 
     const versionsByTopic = new Map<string, TopicVersion[]>()
@@ -195,7 +178,10 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
         prevAcceptedUri: string | undefined
     }
 
+    type ContentUpd = {uri: string, numWords: number, text: string, dbFormat: string}
+
     let updates: Upd[] = []
+    let contentUpdates: ContentUpd[] = []
 
     Array.from(versionsByTopic.entries()).forEach(([topicId, topicVersions]) => {
         let prev = ""
@@ -203,16 +189,17 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
         let monetizedCharsAdded = 0
         let prevAccepted = undefined
         const versionUpdates: Upd[] = []
+        const versionContentUpdates: ContentUpd[] = []
 
         const acceptedMap = new Map<string, boolean>()
 
         let acceptedVersions = 0
         for (let i = 0; i < topicVersions.length; i++) {
             const v = topicVersions[i]
-            const status = getTopicVersionStatusFromReactions(v.content.record.reactions.map(r => ({uri: r.uri, editorStatus: r.record.author.editorStatus})))
+            const status = getTopicVersionStatusFromReactions(v.reactions?.map(r => ({uri: r.uri, editorStatus: r.editorStatus})) ?? [])
             const accepted = isVersionAccepted(
-                v.content.record.author.editorStatus,
-                v.topic.protection,
+                v.editorStatus,
+                v.protection,
                 status
             )
             acceptedMap.set(v.uri, accepted)
@@ -239,6 +226,12 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
                     topicId,
                     prevAcceptedUri: prevAccepted
                 })
+                versionContentUpdates.push({
+                    uri: v.uri,
+                    numWords: getNumWords(markdown, "markdown"),
+                    text: markdown,
+                    dbFormat: "markdown"
+                })
                 prev = markdown
                 continue
             }
@@ -254,7 +247,13 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
                 accCharsAdded: accCharsAdded,
                 diff: JSON.stringify(d),
                 topicId,
-                prevAcceptedUri: prevAccepted
+                prevAcceptedUri: prevAccepted,
+            })
+            versionContentUpdates.push({
+                uri: v.uri,
+                numWords: getNumWords(markdown, "markdown"),
+                text: markdown,
+                dbFormat: "markdown"
             })
             prev = markdown
             prevAccepted = v.uri
@@ -281,7 +280,8 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
                 monetized
             })
         }
-        updates = [...updates, ...versionUpdates]
+        updates.push(...versionUpdates)
+        contentUpdates.push(...versionContentUpdates)
     })
 
 
@@ -298,6 +298,19 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
                 prevAcceptedUri: eb.ref('excluded.prevAcceptedUri'),
             })))
             .execute()
+
+        await ctx.kysely
+            .insertInto("Content")
+            .values(contentUpdates.map(c => ({
+                ...c,
+                selfLabels: [],
+                embeds: []
+            })))
+            .onConflict((oc) => oc.column('uri').doUpdateSet((eb) => ({
+                numWords: eb.ref('excluded.numWords'),
+            })))
+            .execute()
+
     }
 
     console.log("Done after", Date.now() - t1)
