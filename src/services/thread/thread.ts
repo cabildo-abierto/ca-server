@@ -42,12 +42,6 @@ async function getThreadRepliesSkeletonForPostFromBsky(ctx: AppContext, agent: S
         const thread = isThreadViewPost(data.thread) ? data.thread : null
 
         if(thread){
-            console.log("got thread with replies", thread.replies?.length)
-            if(thread.replies){
-                for(let i = 0; i < thread.replies.length; i++){
-                    console.log("reply", i, thread.replies[i].$type)
-                }
-            }
             dataplane.saveDataFromPostThread(thread, true)
         }
 

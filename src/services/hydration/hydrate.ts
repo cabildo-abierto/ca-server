@@ -114,7 +114,7 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
             viewer,
             topicsMentioned: topicsMentioned.map(m => ({
                 count: m.count,
-                title: getTopicTitle(m.referencedTopic),
+                title: getTopicTitle({id: m.referencedTopic.id, props: m.referencedTopic?.currentVersion?.props as TopicProp[] | undefined}),
                 id: m.referencedTopic.id
             })),
             embeds
@@ -231,7 +231,7 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
         let format: string | null = null
         if(caData.content?.text != null){
             text = caData.content.text
-            format = caData.content.format ?? null
+            format = caData.content.dbFormat ?? null
         } else if (caData.content?.textBlobId) {
             text = data.getFetchedBlob({cid: caData.content?.textBlobId, authorId})
             format = record?.format ?? null
