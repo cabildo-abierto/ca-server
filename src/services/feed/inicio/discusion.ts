@@ -1,5 +1,4 @@
 import {FeedPipelineProps, FeedSortKey, GetSkeletonProps} from "#/services/feed/feed";
-import {rootCreationDateSortKey} from "#/services/feed/utils";
 import {CAHandler} from "#/utils/handler";
 import {Record as PostRecord, validateRecord as validatePostRecord, isRecord as isPostRecord} from "#/lex-api/types/app/bsky/feed/post";
 import {Record as ArticleRecord, validateRecord as validateArticleRecord, isRecord as isArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
@@ -61,9 +60,6 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
             ])
             .execute();
 
-        console.log("--------------------------------------------------------------------------------------------------")
-        console.log("En discusión skeleton", skeleton.filter(e => e.autolikes_uri != null))
-
         skeleton = sortByKey(skeleton, e => {
             return [
                 e.created_at > startDate ? 1 : 0,
@@ -72,16 +68,14 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
             ];
         }, listOrderDesc);
 
-        //console.log("getEnDiscusionSkeleton OUTPUT", { metric, time, format, skeleton });
-
         return {
             skeleton: skeleton.map(e => ({ post: e.uri })),
             cursor: undefined
         };
+
     } else if(metric == "Interacciones"){
 
         // Contamos cantidad de likes, reposts y respuestas. Pendiente: contar citas
-
         let skeleton = await ctx.kysely
             .with('Autolikes', (db) =>
                 db.selectFrom('Reaction')
@@ -131,87 +125,154 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
             ])
             .execute();
 
-
+        /*
         console.log("--------------------------------------------------------------------------------------------------")
-        console.log("En discusión skeleton", skeleton.filter(e => (e.autolikes_uri != null) || (e.autoreposts_uri != null) || (e.replies_from_others_count != null) ))
+        console.log(
+            "En discusión skeleton",
+            skeleton
+                .filter(e =>
+                    e.created_at > startDate &&
+                    (e.autolikes_uri != null ||
+                        e.autoreposts_uri != null ||
+                        e.replies_from_others_count != null)
+                )
+                .map(e => ({
+                    // lo que ya tenías
+                    ...e,
+                    // extras calculados
+                    flags: [
+                        e.created_at > startDate ? 1 : 0,
+                        (e.uniqueLikesCount ?? 0) +
+                        (e.uniqueRepostsCount ?? 0) +
+                        (Number(e.replies_from_others_count) ?? 0) -
+                        (e.autolikes_uri ? 1 : 0) -
+                        (e.autoreposts_uri ? 1 : 0),
+                        e.uniqueLikesCount ?? 0,
+                        e.uniqueRepostsCount ?? 0,
+                        Number(e.replies_from_others_count) ?? 0,
+                        e.autolikes_uri ? 1 : 0,
+                        e.autoreposts_uri ? 1 : 0,
+                        e.created_at.getTime()
+                    ]
+                }))
+        );
+        */
 
         skeleton = sortByKey(skeleton, e => {
             return [
                 e.created_at > startDate ? 1 : 0,
                 (e.uniqueLikesCount ?? 0) +
                 (e.uniqueRepostsCount ?? 0) +
-                (e.replies_from_others_count ?? 0) -
+                (Number(e.replies_from_others_count) ?? 0) -
                 (e.autolikes_uri ? 1 : 0) -
                 (e.autoreposts_uri ? 1 : 0),
                 e.created_at.getTime()
             ];
         }, listOrderDesc);
 
-        //console.log("getEnDiscusionSkeleton OUTPUT", { metric, time, format, skeleton });
-
         return {
             skeleton: skeleton.map(e => ({ post: e.uri })),
             cursor: undefined
         };
+
     } else if(metric == "Popularidad relativa") {
-        let skeleton = await ctx.db.record.findMany({
-            select: {
-                uri: true,
-                uniqueLikesCount: true,
-                uniqueRepostsCount: true,
-                _count: {
-                    select: {
-                        replies: true
-                    }
-                },
-                author: {
-                    select: {
-                        _count: {
-                            select: {
-                                followers: true
-                            }
-                        }
-                    }
-                },
-                createdAt: true
-            },
-            where: {
-                content: {
-                    selfLabels: {
-                        has: "ca:en discusión"
-                    }
-                },
-                collection: {
-                    in: collections
-                }
-            }
-        })
-        skeleton = sortByKey(skeleton, e => {
-            return [
-                e.createdAt > startDate ? 1 : 0,
-                ((e.uniqueLikesCount ?? 0) + (e.uniqueRepostsCount ?? 0) + e._count.replies) / (e.author._count.followers + 1),
-                e.createdAt.getTime()
-            ]
-        }, listOrderDesc)
+        // Contamos cantidad de likes, reposts y respuestas. Pendiente: contar citas
+        let skeleton = await ctx.kysely
+            .with('Autolikes', (db) =>
+                db.selectFrom('Reaction')
+                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
+                    .leftJoin('Record as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
+                    .where('ReactionRecord.collection', 'in', [
+                        'app.bsky.feed.like'
+                    ])
+                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
+                    .select(['Reaction.uri', 'Reaction.subjectId'])
+            )
+            .with('Autoreposts', (db) =>
+                db.selectFrom('Reaction')
+                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
+                    .leftJoin('Record as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
+                    .where('ReactionRecord.collection', 'in', [
+                        'app.bsky.feed.repost',
+                    ])
+                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
+                    .select(['Reaction.uri', 'Reaction.subjectId'])
+            )
+            .with('RepliesFromOthers', (db) =>
+                db.selectFrom('Record')
+                    .leftJoin('Post', 'Record.uri', 'Post.replyToId')
+                    .innerJoin('Record as ReplyRecord', 'Post.uri', 'ReplyRecord.uri')
+                    .whereRef('ReplyRecord.authorId', '!=', 'Record.authorId')
+                    .select(['Record.uri as reply_to_uri',
+                        (eb) => eb.fn.count<number>('Post.uri').as('reply_count')
+                    ])
+                    .groupBy(['Record.uri'])
+            )
+            .with('AuthorFollowers', (db) =>
+                db.selectFrom('User')
+                    .leftJoin('Follow', 'User.did', 'Follow.userFollowedId')
+                    .leftJoin('Record', 'Follow.uri', 'Record.uri' )
+                    .leftJoin('User as Follower', 'Record.authorId', 'Follower.did')
+                    .select(['User.did',
+                        (eb) => eb.fn.count<number>('Follower.did').distinct().as('followers_count')
+                    ])
+                    .groupBy(['User.did'])
+            )
+            .selectFrom('Record')
+            .leftJoin('Autolikes', 'Record.uri', 'Autolikes.subjectId')
+            .leftJoin('Autoreposts', 'Record.uri', 'Autoreposts.subjectId')
+            .leftJoin('RepliesFromOthers', 'Record.uri', 'RepliesFromOthers.reply_to_uri')
+            .leftJoin('AuthorFollowers', 'Record.authorId', 'AuthorFollowers.did')
+            .where('Record.collection', 'in', collections)
+            .innerJoin('Content', 'Record.uri', 'Content.uri')
+            .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
+            .select([
+                'Record.uri',
+                'Record.uniqueLikesCount',
+                'Record.uniqueRepostsCount',
+                'Record.created_at',
+                'AuthorFollowers.followers_count as followers_count',
+                'Autolikes.uri as autolikes_uri',
+                'Autoreposts.uri as autoreposts_uri',
+                'RepliesFromOthers.reply_count as replies_from_others_count'
+            ])
+            .execute();
+            skeleton = sortByKey(skeleton, e => {
+                return [
+                    e.created_at > startDate ? 1 : 0,
+                    ((e.uniqueLikesCount ?? 0) +
+                    (e.uniqueRepostsCount ?? 0) +
+                    (Number(e.replies_from_others_count) ?? 0) -
+                    (e.autolikes_uri ? 1 : 0) -
+                    (e.autoreposts_uri ? 1 : 0)) /
+                    ((e.followers_count ?? 0) + 1) ** (1/2),
+                    e.created_at.getTime()
+                ];
+            }, listOrderDesc);
+
+            return {
+                skeleton: skeleton.map(e => ({ post: e.uri })),
+                cursor: undefined
+            };
+    }
+    else {
+        const skeleton = await ctx.kysely.selectFrom('Record')
+            .where('Record.collection', 'in', collections)
+            .innerJoin('Content', 'Record.uri', 'Content.uri')
+            .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
+            .select(['Record.uri'])
+            .orderBy('Record.created_at', 'desc')
+            .execute()
         return {
-            skeleton: skeleton
-                .map(e => ({post: e.uri})),
+            skeleton: skeleton.map(e => ({ post: e.uri })),
             cursor: undefined
         }
-    }
-    return {
-        skeleton: [],
-        cursor: undefined
     }
 }
 
 
 const enDiscusionSortKey = (metric: EnDiscusionMetric): FeedSortKey => {
-    if(metric == "Recientes"){
-        return rootCreationDateSortKey
-    } else {
-        return null
-    }
+    return null
 }
 
 
