@@ -9,14 +9,12 @@ import {v4 as uuidv4} from "uuid";
 import {range} from "#/utils/arrays";
 
 
-async function isCAUser(ctx: AppContext, did: string): Promise<boolean> {
-    const res = await ctx.kysely
+async function getCAStatus(ctx: AppContext, did: string): Promise<{inCA: boolean, hasAccess: boolean} | null> {
+    return await ctx.kysely
         .selectFrom("User")
-        .select("did")
+        .select(["inCA", "hasAccess"])
         .where("did", "=", did)
-        .where("inCA", "=", true)
-        .executeTakeFirst()
-    return res != undefined
+        .executeTakeFirst() ?? null
 }
 
 
@@ -31,9 +29,9 @@ export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (c
     const did = await ctx.resolver.resolveHandleToDid(handle)
     if(!did) return {error: "No se encontró el usuario."}
 
-    const inCA = await isCAUser(ctx, did)
+    const status = await getCAStatus(ctx, did)
 
-    if(!inCA){
+    if(!status || !status.inCA || !status.hasAccess){
         if(code){
             const {error} = await checkValidCode(ctx, code, did)
             if(error){
@@ -169,7 +167,9 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
                     select: {
                         code: true
                     }
-                }
+                },
+                inCA: true,
+                hasAccess: true
             },
             where: {
                 did
@@ -179,7 +179,7 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
     if(!code) return {error: "No se encontró el código"}
     if(!user) return {error: "No se encontró el usuario"}
 
-    if(user.usedInviteCode != null){
+    if(user.usedInviteCode != null && user.inCA && user.hasAccess){
         return {}
     }
 
@@ -188,7 +188,7 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
     }
 
     const updates = [
-        ctx.db.inviteCode.update({
+        ...(!user.usedInviteCode ? [ctx.db.inviteCode.update({
             data: {
                 usedAt: new Date(),
                 usedByDid: did
@@ -196,7 +196,7 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
             where: {
                 code: inviteCode
             }
-        }),
+        })] : []),
         ctx.db.user.update({
             data: {
                 hasAccess: true,
