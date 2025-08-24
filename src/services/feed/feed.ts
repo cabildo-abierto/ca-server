@@ -74,7 +74,11 @@ export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAH
     let newCursor: string | undefined
     let skeleton: FeedSkeleton
     try {
+        const t1 = Date.now()
         const res = await pipeline.getSkeleton(ctx, agent, data, cursor)
+
+        const t2 = Date.now()
+        logTimes("feed skeleton", [t1, t2])
         newCursor = res.cursor
         skeleton = res.skeleton
     } catch (err) {
