@@ -124,6 +124,10 @@ export function isVisualization(c: string){
     return c == "ar.com.cabildoabierto.visualization"
 }
 
+export function isCAProfile(c: string){
+    return c == "ar.com.cabildoabierto.profile" || c == "ar.cabildoabierto.actor.caProfile"
+}
+
 export function articleUris(uris: string[]){
     return uris.filter(u => isArticle(getCollectionFromUri(u)))
 }

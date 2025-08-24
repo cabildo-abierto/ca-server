@@ -92,12 +92,8 @@ export function getTopicProp(prop: string, props?: TopicProp[]): TopicProp | nul
 
 
 export function getTopicTitle(topic: {id: string, props?: TopicProp[]}): string {
-    console.log("getting topic title from")
-    prettyPrintJSON(topic)
     const t = getTopicProp("Título", topic.props)
-    const title = t && isStringProp(t.value) ? t.value.value : topic.id
-    console.log("title is", title)
-    return title
+    return t && isStringProp(t.value) ? t.value.value : topic.id
 }
 
 

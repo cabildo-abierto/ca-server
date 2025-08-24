@@ -367,7 +367,7 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
     }
 
     const data = await getSessionData(ctx, agent.did)
-    if (isFullSessionData(data)) {
+    if (isFullSessionData(data) && data.hasAccess) {
         return {data}
     }
 

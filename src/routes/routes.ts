@@ -34,7 +34,7 @@ import {
     getTopicsMentioned
 } from "#/services/wiki/topics";
 import {getTopicFeed} from "#/services/feed/topic";
-import {deleteRecordHandler, deleteRecordsHandler} from "#/services/delete";
+import {deleteCAProfile, deleteRecordHandler, deleteRecordsHandler} from "#/services/delete";
 import {getCategoriesGraph, getCategoryGraph} from "#/services/wiki/graph";
 import {createTopicVersion} from "#/services/write/topic";
 import path from "path";
@@ -390,6 +390,8 @@ export const createRouter = (ctx: AppContext) => {
     router.post("/algorithm-config", makeHandler(ctx, updateAlgorithmConfig))
 
     router.get("/author-dashboard", makeHandler(ctx, getAuthorDashboardHandler))
+
+    router.post("/delete-ca-profile", makeHandler(ctx, deleteCAProfile))
 
     router.use(adminRoutes(ctx))
 

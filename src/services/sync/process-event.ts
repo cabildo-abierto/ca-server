@@ -1,5 +1,5 @@
 import {ATProtoStrongRef, CommitEvent, JetstreamEvent} from "#/lib/types";
-import {getCollectionFromUri, getDidFromUri, getUri, isTopicVersion, splitUri} from "#/utils/uri";
+import {getCollectionFromUri, getDidFromUri, getUri, isCAProfile, isTopicVersion, splitUri} from "#/utils/uri";
 import * as CAProfile from "#/lex-api/types/ar/cabildoabierto/actor/caProfile"
 import * as Post from "#/lex-api/types/app/bsky/feed/post"
 import * as BskyProfile from "#/lex-api/types/app/bsky/actor/profile"
@@ -82,15 +82,33 @@ export async function processEvent(ctx: AppContext, e: JetstreamEvent) {
 }
 
 
-export async function processDelete(ctx: AppContext, uri: string) {
+export async function processDeleteCAProfile(ctx: AppContext, uri: string) {
+    const did = getDidFromUri(uri)
+
+    const su = deleteRecordsDB(ctx, [uri])
+    await su.apply()
+
+    await ctx.kysely
+        .updateTable("User")
+        .set("User.inCA", false)
+        .set("User.hasAccess", false)
+        .where("User.did", "=", did)
+        .execute()
+
+    return {}
+}
+
+
+export async function processDelete(ctx: AppContext, uri: string): Promise<{error?: string}> {
     const c = getCollectionFromUri(uri)
 
     if (isTopicVersion(c)) {
         return await processDeleteTopicVersion(ctx, uri)
-
     } else if (isReactionCollection(c)) {
         await processDeleteReactionsBatch(ctx, [uri])
         return {}
+    } else if(isCAProfile(c)) {
+        return await processDeleteCAProfile(ctx, uri)
     } else {
         const su = deleteRecordsDB(ctx, [uri])
         await su.apply()

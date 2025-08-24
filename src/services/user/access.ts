@@ -33,17 +33,15 @@ export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (c
 
     const inCA = await isCAUser(ctx, did)
 
-    if(code){
-        if(!inCA){
+    if(!inCA){
+        if(code){
             const {error} = await checkValidCode(ctx, code, did)
             if(error){
                 return {error}
             } else {
                 // continuamos con el login y usamos el código si el login termina bien
             }
-        }
-    } else {
-        if(!inCA){
+        } else {
             return {error: "Necesitás un código de invitación para crear un usuario nuevo."}
         }
     }
