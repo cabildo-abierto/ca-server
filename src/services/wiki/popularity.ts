@@ -4,7 +4,7 @@ import {logTimes} from "#/utils/utils";
 import {testUsers} from "#/services/admin/stats";
 import {
     createContentInteractions,
-    getEditedTopics,
+    getEditedTopics, getLastContentInteractionsUpdate,
     updateContentInteractionsForTopics
 } from "#/services/wiki/interactions";
 import {updateReferences} from "#/services/wiki/references";
@@ -101,7 +101,8 @@ export async function updateTopicPopularityScores(ctx: AppContext) {
 
     console.log("creating interactions")
 
-    const topicIds = await getEditedTopics(ctx)
+    const since = await getLastContentInteractionsUpdate(ctx)
+    const topicIds = await getEditedTopics(ctx, since)
 
     console.log(`found ${topicIds} edited topics`)
 

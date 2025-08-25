@@ -224,23 +224,46 @@ export async function updateContentInteractionsForTopics(ctx: AppContext, topicI
 }
 
 
-export async function getEditedTopics(ctx: AppContext) {
-    const lastUpdate = await getLastContentInteractionsUpdate(ctx)
-
-    const topics = await ctx.kysely
-        .selectFrom("Topic")
-        .select("id")
-        .where("Topic.lastEdit", ">", lastUpdate)
-        .execute()
-
-    return topics.map(t => t.id)
-}
-
-
-export async function updateContentInteractionsForEditedTopics(ctx: AppContext) {
-    const topicIds = await getEditedTopics(ctx)
-
-    await updateContentInteractionsForTopics(ctx, topicIds)
-
-    await setLastContentInteractionsUpdate(ctx, new Date())
+export async function getEditedTopics(ctx: AppContext, since: Date) {
+    return (await ctx.db.topic.findMany({
+        select: {
+            id: true
+        },
+        where: {
+            OR: [
+                {
+                    versions: {
+                        some: {
+                            content: {
+                                record: {
+                                    createdAt: {
+                                        gt: since
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    versions: {
+                        some: {
+                            content: {
+                                record: {
+                                    reactions: {
+                                        some: {
+                                            record: {
+                                                createdAt: {
+                                                    gt: since
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+    })).map(t => t.id)
 }

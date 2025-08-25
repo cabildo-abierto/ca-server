@@ -214,7 +214,6 @@ export type Topic = {
     id: string;
     protection: Generated<EditorStatus>;
     currentVersionId: string | null;
-    lastSynonymsChange: Timestamp | null;
     popularityScore: Generated<number | null>;
     popularityScoreLastDay: Generated<number>;
     popularityScoreLastWeek: Generated<number>;

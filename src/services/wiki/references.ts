@@ -12,7 +12,7 @@ import {logTimes} from "#/utils/utils";
 import {v4 as uuidv4} from "uuid";
 import {getTopicSynonyms} from "#/services/wiki/utils";
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {updateContentInteractionsForTopics} from "#/services/wiki/interactions";
+import {getEditedTopics, updateContentInteractionsForTopics} from "#/services/wiki/interactions";
 import {updateTopicPopularities} from "#/services/wiki/popularity";
 import {updateContentsText} from "#/services/wiki/content";
 
@@ -49,6 +49,10 @@ export async function updateReferencesForNewContents(ctx: AppContext) {
     const batchSize = 10000
     let curOffset = 0
     const synonymsMap = await getSynonymsToTopicsMap(ctx)
+
+    console.log("synonyms", Array.from(synonymsMap)
+        .slice(0, 10)
+    )
 
     const caUsers = await getCAUsersDids(ctx)
 
@@ -88,10 +92,14 @@ async function updateReferencesForContentsAndTopics(ctx: AppContext, contents: C
     for(let i = 0; i < contents.length; i += batchSize){
         console.log("Updating references contents", i, "-", i+batchSize, "of", contents.length)
         try {
-            const texts = await getContentsText(ctx, contents.slice(i, i+batchSize), 10)
+            const batchContents = contents.slice(i, i+batchSize)
+            const texts = await getContentsText(ctx, batchContents, 10)
             console.log("Apply references update")
-            const referencesToInsert = getReferencesToInsert(contents, texts.map(t => t ? t.text : null), synonymsMap)
-            await applyReferencesUpdate(ctx, referencesToInsert, contents.slice(i, i+batchSize).map(c => c.uri), topicIds)
+            const referencesToInsert = getReferencesToInsert(
+                batchContents,
+                texts.map(t => t ? t.text : null),
+                synonymsMap)
+            await applyReferencesUpdate(ctx, referencesToInsert, batchContents.map(c => c.uri), topicIds)
         } catch (err) {
             console.log("error updating references", err)
             throw err
@@ -134,7 +142,7 @@ type ReferenceToInsert = {
 function getReferencesToInsert(contents: ContentProps[], texts: (string | null)[], synonymsMap: SynonymsMap) {
     const referencesToInsert: ReferenceToInsert[] = []
 
-    console.log("Analyzing references...")
+    console.log("Analyzing references...", contents.length, texts.length)
     const t1 = Date.now()
     for(let i = 0; i < contents.length; i++){
         const c = contents[i]
@@ -266,7 +274,7 @@ export async function getContentsText(ctx: AppContext, contents: MaybeContent[],
     if(decompressed){
         for(let i = 0; i < texts.length; i++){
             const text = texts[i]
-            if(text != null && text.text.length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(contents[i].format ?? null)){
+            if(text != null && text.text.length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(text.format ?? null)){
                 try {
                     texts[i] = {
                         text: decompress(text.text),
@@ -341,16 +349,7 @@ export async function updateReferencesForNewTopics(ctx: AppContext) {
     const lastUpdate = await getLastReferencesUpdate(ctx)
     console.log("Last reference update", lastUpdate)
 
-    const topicIds = (await ctx.db.topic.findMany({
-        select: {
-            id: true
-        },
-        where: {
-            lastEdit: {
-                gt: lastUpdate
-            }
-        }
-    })).map(t => t.id)
+    const topicIds = await getEditedTopics(ctx, lastUpdate)
 
     if(topicIds.length == 0) {
         console.log("No new topics, skipping")
@@ -364,7 +363,7 @@ export async function updateReferencesForNewTopics(ctx: AppContext) {
 
 
 export async function restartReferenceLastUpdate(ctx: AppContext) {
-    await setLastReferencesUpdate(ctx, new Date(Date.now()-1000*3600*24*7))
+    await setLastReferencesUpdate(ctx, new Date(Date.now()-1000*3600*24*14))
 }
 
 

@@ -191,7 +191,6 @@ model Topic {
   currentVersionId         String?            @unique
   referencedBy             Reference[]
   categories               TopicToCategory[]
-  lastSynonymsChange       DateTime?
   popularityScore          Int?               @default(1)
   popularityScoreLastDay   Int                @default(0)
   popularityScoreLastWeek  Int                @default(0)
