@@ -40,7 +40,6 @@ import {isViewNotFound, isViewRecord} from "#/lex-api/types/app/bsky/embed/recor
 import {NotificationQueryResult, NotificationsSkeleton} from "#/services/notifications/notifications";
 import {equalFilterCond, inFilterCond, stringListIncludes} from "#/services/dataset/read";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
-
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 
 import {
@@ -49,23 +48,6 @@ import {
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {getUrisFromThreadSkeleton} from "#/services/thread/thread";
 import {prettyPrintJSON} from "#/utils/strings";
-
-export function getUriFromEmbed(embed: PostView["embed"]): string | null {
-    if (isEmbedRecordView(embed)) {
-        if (isViewRecord(embed.record)) {
-            return embed.record.uri
-        } else if (isViewNotFound(embed.record)) {
-            return embed.record.uri
-        }
-    } else if (isEmbedRecordWithMediaView(embed)) {
-        if (isViewRecord(embed.record.record)) {
-            return embed.record.record.uri
-        } else if (isViewNotFound(embed.record.record)) {
-            return embed.record.record.uri
-        }
-    }
-    return null
-}
 
 
 export type FeedElementQueryResult = {
@@ -547,22 +529,24 @@ export class Dataplane {
 
     addEmbedsToPostsMap(m: Map<string, BskyPostView>) {
         const posts = Array.from(m.values())
-
         posts.forEach(post => {
             if (post.embed && isEmbedRecordView(post.embed) && isViewRecord(post.embed.record)) {
                 const record = post.embed.record
-                m.set(record.uri, {
-                    ...record,
-                    uri: record.uri,
-                    cid: record.cid,
-                    $type: "app.bsky.feed.defs#postView",
-                    author: {
-                        ...record.author
-                    },
-                    indexedAt: record.indexedAt,
-                    record: record.value,
-                    embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
-                })
+                const collection = getCollectionFromUri(record.uri)
+                if(isPost(collection)){
+                    m.set(record.uri, {
+                        ...record,
+                        uri: record.uri,
+                        cid: record.cid,
+                        $type: "app.bsky.feed.defs#postView",
+                        author: {
+                            ...record.author
+                        },
+                        indexedAt: record.indexedAt,
+                        record: record.value,
+                        embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
+                    })
+                }
             } else if(post.embed && isEmbedRecordWithMediaView(post.embed)){
                 const recordView = post.embed.record
                 if(isEmbedRecordView(recordView) && isViewRecord(recordView.record)){
@@ -579,6 +563,12 @@ export class Dataplane {
                         record: record.value,
                         embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
                     })
+                }
+            } else if(post.embed && isEmbedRecordView(post.embed) && isViewNotFound(post.embed.record)){
+                const uri = post.embed.record.uri
+                const collection = getCollectionFromUri(uri)
+                if(isArticle(collection)){
+                    this.requires.set(post.uri, [...(this.requires.get(post.uri) ?? []), uri])
                 }
             }
         })
@@ -682,7 +672,19 @@ export class Dataplane {
     }
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
-        const uris = getUrisFromThreadSkeleton(skeleton)
+        let uris = getUrisFromThreadSkeleton(skeleton)
+
+        const reqUris = uris
+            .map(u => this.requires.get(u))
+            .filter(x => x != null)
+            .flatMap(x => x)
+
+        uris = unique([...uris, ...reqUris])
+
+        uris.forEach(u => {
+            const r = this.requires.get(u)
+            if(r) uris.push()
+        })
 
         const c = getCollectionFromUri(skeleton.post)
 
@@ -1008,8 +1010,9 @@ export class Dataplane {
 
     saveDataFromPostThread(thread: ThreadViewPost, includeParents: boolean, excludeChild?: string) {
         if(thread.post){
-            this.bskyPosts.set(thread.post.uri, thread.post)
             this.addAuthorsFromPostViews([thread.post])
+            this.bskyPosts.set(thread.post.uri, thread.post)
+            this.addEmbedsToPostsMap(this.bskyPosts)
 
             if(includeParents && thread.parent && isThreadViewPost(thread.parent)){
                 this.saveDataFromPostThread(thread.parent, true, thread.post.uri)
