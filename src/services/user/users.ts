@@ -1,5 +1,5 @@
 import {AppContext} from "#/index";
-import {Account, AuthorStatus, CAProfile, Profile, Session, ValidationState} from "#/lib/types";
+import {Account, ATProtoStrongRef, AuthorStatus, CAProfile, Profile, Session, ValidationState} from "#/lib/types";
 import {Agent, cookieOptions, SessionAgent} from "#/utils/session-agent";
 import {deleteRecords} from "#/services/delete";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
@@ -11,7 +11,7 @@ import {getIronSession} from "iron-session";
 import {createCAUser} from "#/services/user/access";
 import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {Record as FollowRecord} from "#/lex-api/types/app/bsky/graph/follow"
-import {processFollow} from "#/services/sync/process-event";
+import {processBskyProfile, processFollow} from "#/services/sync/process-event";
 import {
     Record as BskyProfileRecord,
     validateRecord as validateBskyProfile
@@ -592,7 +592,6 @@ export const updateProfile: CAHandler<UpdateProfileProps, {}> = async (ctx, agen
 
     const val = validateBskyProfile(data.value)
 
-
     if (val.success) {
         const record = val.value
 
@@ -612,6 +611,20 @@ export const updateProfile: CAHandler<UpdateProfileProps, {}> = async (ctx, agen
             record: newRecord,
             rkey: "self"
         })
+
+        if(data.cid){
+            console.log("starting process bsky profile early")
+            const ref: ATProtoStrongRef = {
+                uri: data.uri,
+                cid: data.cid
+            }
+
+            await processBskyProfile(
+                ctx,
+                ref,
+                record
+            )
+        }
     }
 
     return {data: {}}

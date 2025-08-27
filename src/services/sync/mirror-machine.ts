@@ -2,6 +2,7 @@ import WebSocket, {RawData} from 'ws';
 import {getCAUsersDids} from "#/services/user/users";
 import {AppContext} from "#/index";
 import {processEvent} from "#/services/sync/process-event";
+import {isCAProfile} from "#/utils/uri";
 
 
 export class MirrorMachine {
@@ -31,7 +32,7 @@ export class MirrorMachine {
             const e = JSON.parse(data.toString())
 
             if(e.kind == "commit") {
-                if(e.commit.collection == "ar.com.cabildoabierto.profile" && e.commit.rkey == "self"){
+                if(isCAProfile(e.commit.collection) && e.commit.rkey == "self"){
                     this.knownUsers.add(e.did)
                     console.log("Added user", e.did)
                 }

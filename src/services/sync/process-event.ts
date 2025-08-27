@@ -53,7 +53,6 @@ export async function processEvent(ctx: AppContext, e: JetstreamEvent) {
             /*if (status == "Dirty" || status == "Failed") {
                 await syncUser(ctx, e.did)
             }*/
-            return
         }
     }
 
