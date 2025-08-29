@@ -42,41 +42,26 @@ function isProfile(collection: string) {
     return collection == "ar.com.cabildoabierto.profile" || collection == "ar.cabildoabierto.actor.caProfile"
 }
 
-export async function processEvent(ctx: AppContext, e: JetstreamEvent) {
-    if (e.kind == "commit") {
-        const c = e as CommitEvent
-
-        if (isProfile(c.commit.collection) && c.commit.rkey == "self") {
-            await newUser(ctx.db, e.did, true)
-            //const status = await getUserMirrorStatus(ctx, e.did)
-
-            /*if (status == "Dirty" || status == "Failed") {
-                await syncUser(ctx, e.did)
-            }*/
-        }
+export async function processCommitEvent(ctx: AppContext, e: JetstreamEvent) {
+    const c = e as CommitEvent
+    if (isProfile(c.commit.collection) && c.commit.rkey == "self") {
+        await newUser(ctx.db, e.did, true)
     }
 
-    if (e.kind == "commit") {
-        const c = e as CommitEvent
-
-        const uri = c.commit.uri ? c.commit.uri : getUri(c.did, c.commit.collection, c.commit.rkey)
-        if (c.commit.operation == "create" || c.commit.operation == "update") {
-            const record = {
-                did: c.did,
-                uri: uri,
-                cid: c.commit.cid,
-                collection: c.commit.collection,
-                rkey: c.commit.rkey,
-                record: c.commit.record
-            }
-
-            console.log("Commit event:", uri)
-            const ref = {uri, cid: c.commit.cid}
-            await processCreate(ctx, ref, record.record)
-        } else if (c.commit.operation == "delete") {
-            console.log(`Delete event: ${uri}`)
-            await processDelete(ctx, uri)
+    const uri = c.commit.uri ? c.commit.uri : getUri(c.did, c.commit.collection, c.commit.rkey)
+    if (c.commit.operation == "create" || c.commit.operation == "update") {
+        const record = {
+            did: c.did,
+            uri: uri,
+            cid: c.commit.cid,
+            collection: c.commit.collection,
+            rkey: c.commit.rkey,
+            record: c.commit.record
         }
+        const ref = {uri, cid: c.commit.cid}
+        await processCreate(ctx, ref, record.record)
+    } else if (c.commit.operation == "delete") {
+        await processDelete(ctx, uri)
     }
 }
 

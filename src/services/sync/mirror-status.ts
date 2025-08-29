@@ -1,32 +1,23 @@
-import {$Enums} from "@prisma/client";
-import MirrorStatus = $Enums.MirrorStatus;
 import {AppContext} from "#/index";
 
-export async function getUserMirrorStatus(ctx: AppContext, did: string){
-    return (await ctx.db.user.findUnique({
-        select: {
-            mirrorStatus: true
-        },
-        where: {
-            did
-        }
-    }))?.mirrorStatus ?? null
+export type MirrorStatus = "Sync" | "Dirty" | "InProcess" | "Failed"
+
+export async function getUserMirrorStatus(ctx: AppContext, did: string, inCA: boolean): Promise<MirrorStatus> {
+    const res = await ctx.ioredis.get(mirrorStatusKey(ctx, did, inCA))
+    return res ? res as MirrorStatus : "Dirty"
 }
 
 
-export async function getDirtyUsers(ctx: AppContext){
-    return (await ctx.db.user.findMany({
-        select: {
-            did: true
-        },
-        where: {
-            mirrorStatus: "Dirty",
-            inCA: true
-        }
-    })).map(({did}) => did)
+export function mirrorStatusKey(ctx: AppContext, did: string, inCA: boolean) {
+    return `${ctx.mirrorId}:mirror-status:${did}:${inCA ? "ca" : "ext"}`
 }
 
 
-export async function setMirrorStatus(ctx: AppContext, did: string, mirrorStatus: MirrorStatus){
-    await ctx.db.user.update({data: {mirrorStatus}, where: {did}})
+export function mirrorStatusKeyPrefix(ctx: AppContext) {
+    return `${ctx.mirrorId}:mirror-status`
+}
+
+
+export async function setMirrorStatus(ctx: AppContext, did: string, mirrorStatus: MirrorStatus, inCA: boolean){
+    await ctx.ioredis.set(mirrorStatusKey(ctx, did, inCA), mirrorStatus)
 }

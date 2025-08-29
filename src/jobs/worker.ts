@@ -1,7 +1,7 @@
 import {updateCategoriesGraph} from "#/services/wiki/graph";
 import {Worker} from 'bullmq';
 import {AppContext} from "#/index";
-import {syncAllUsers, syncUser} from "#/services/sync/sync-user";
+import {syncAllUsers, syncAllUsersAndFollows, syncUser} from "#/services/sync/sync-user";
 import {dbHandleToDid, updateAuthorStatus} from "#/services/user/users";
 import {
     cleanNotCAReferences,
@@ -100,7 +100,7 @@ export class CAWorker {
             }
             const did = await dbHandleToDid(ctx, handleOrDid)
             if (did) {
-                await syncUser(ctx, did, collectionsMustUpdate, 1)
+                await syncUser(ctx, did, collectionsMustUpdate)
             } else {
                 console.log("User not found in DB: ", handleOrDid)
             }
@@ -112,6 +112,7 @@ export class CAWorker {
         })
         this.registerJob("update-topics-popularity", () => updateTopicPopularityScores(ctx))
         this.registerJob("sync-all-users", (data) => syncAllUsers(ctx, (data as { mustUpdateCollections: string[] }).mustUpdateCollections))
+        this.registerJob("sync-all-follows", (data) => syncAllUsersAndFollows(ctx, (data as { mustUpdateCollections: string[] }).mustUpdateCollections))
         this.registerJob("delete-collection", (data) => deleteCollection(ctx, (data as { collection: string }).collection))
         this.registerJob("update-topics-categories", () => updateTopicsCategories(ctx))
         this.registerJob("update-topic-contributions", (data) => updateTopicContributions(ctx, data.topicIds as string[]))
@@ -127,15 +128,15 @@ export class CAWorker {
         this.registerJob("clean-not-ca-references", () => cleanNotCAReferences(ctx))
         this.registerJob("assign-invite-codes", () => assignInviteCodesToUsers(ctx))
         this.registerJob("update-topic-mentions", (data) => updateTopicMentions(ctx, data.id as string))
-        this.registerJob("update-contents-text", (data) => updateContentsText(ctx))
-        this.registerJob("update-num-words", (data) => updateContentsNumWords(ctx))
-        this.registerJob("reset-contents-format", (data) => resetContentsFormat(ctx))
-        this.registerJob("update-threads", (data) => updateThreads(ctx))
-        this.registerJob("update-post-langs", (data) => updatePostLangs(ctx))
-        this.registerJob("update-author-status-all", (data) => updateAuthorStatus(ctx))
+        this.registerJob("update-contents-text", () => updateContentsText(ctx))
+        this.registerJob("update-num-words", () => updateContentsNumWords(ctx))
+        this.registerJob("reset-contents-format", () => resetContentsFormat(ctx))
+        this.registerJob("update-threads", () => updateThreads(ctx))
+        this.registerJob("update-post-langs", () => updatePostLangs(ctx))
+        this.registerJob("update-author-status-all", () => updateAuthorStatus(ctx))
         this.registerJob("update-author-status", (data) => updateAuthorStatus(ctx, [data.did]))
-        this.registerJob("create-payment-promises", (data) => createPaymentPromises(ctx))
-        this.registerJob("update-topics-current-versions", (data) => updateAllTopicsCurrentVersions(ctx))
+        this.registerJob("create-payment-promises", () => createPaymentPromises(ctx))
+        this.registerJob("update-topics-current-versions", () => updateAllTopicsCurrentVersions(ctx))
 
         await this.removeAllRepeatingJobs()
         await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)

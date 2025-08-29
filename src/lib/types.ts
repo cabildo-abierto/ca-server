@@ -130,10 +130,7 @@ export type CommitEvent = JetstreamEvent & {
         rkey: string
         cid: string
         uri: string
-        record?: {
-            createdAt?: string
-            reply?: any
-        }
+        record?: any
     }
 }
 

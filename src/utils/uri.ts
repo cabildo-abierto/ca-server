@@ -112,6 +112,10 @@ export function isArticle(c: string){
     return articleCollections.includes(c)
 }
 
+export function isFollow(c: string){
+    return c == "app.bsky.graph.follow"
+}
+
 export function isTopicVersion(c: string){
     return c == "ar.cabildoabierto.wiki.topicVersion" || c == "ar.com.cabildoabierto.topic"
 }

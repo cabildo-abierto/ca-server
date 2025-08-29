@@ -158,6 +158,11 @@ export type Notification = {
     moreContext: string | null;
     reasonSubject: string | null;
 };
+export type NotInterested = {
+    id: string;
+    authorId: string;
+    subjectId: string;
+};
 export type PaymentPromise = {
     id: string;
     created_at: Generated<Timestamp>;
@@ -321,6 +326,7 @@ export type DB = {
     InviteCode: InviteCode;
     Meeting: Meeting;
     Notification: Notification;
+    NotInterested: NotInterested;
     PaymentPromise: PaymentPromise;
     Post: Post;
     Reaction: Reaction;

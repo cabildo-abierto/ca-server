@@ -878,9 +878,13 @@ export class Dataplane {
         const didBatches: string[][] = []
         for (let i = 0; i < dids.length; i += 25) didBatches.push(dids.slice(i, i + 25))
         const t1 = Date.now()
-        const data = await Promise.all(didBatches.map(b => agent.bsky.getProfiles({actors: b})))
+        const profiles: ProfileViewDetailed[] = []
+        for(let i = 0; i < didBatches.length; i++){
+            const b = didBatches[i]
+            const res = await agent.bsky.getProfiles({actors: b})
+            profiles.push(...res.data.profiles)
+        }
         const t2 = Date.now()
-        const profiles = data.flatMap(d => d.data.profiles)
 
         logTimes("fetching users from bsky", [t1, t2])
 

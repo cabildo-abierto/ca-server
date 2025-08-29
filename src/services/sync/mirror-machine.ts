@@ -1,12 +1,23 @@
 import WebSocket, {RawData} from 'ws';
 import {getCAUsersDids} from "#/services/user/users";
 import {AppContext} from "#/index";
-import {processEvent} from "#/services/sync/process-event";
-import {isCAProfile} from "#/utils/uri";
+import {processCommitEvent} from "#/services/sync/process-event";
+import {isCAProfile, isFollow} from "#/utils/uri";
+import {addPendingEvent, getCAUsersAndFollows} from "#/services/sync/sync-user";
+import {CommitEvent, JetstreamEvent} from "#/lib/types";
 
+import * as Follow from "#/lex-api/types/app/bsky/graph/follow"
+import {logTimes} from "#/utils/utils";
+import {getUserMirrorStatus, mirrorStatusKeyPrefix, setMirrorStatus} from "#/services/sync/mirror-status";
+import {redisDeleteByPrefix} from "#/services/user/follow-suggestions";
 
 export class MirrorMachine {
-    knownUsers: Set<string> = new Set()
+    caUsers: Set<string> = new Set()
+    extendedUsers: Set<string> = new Set()
+    eventCounter: number = 0
+    lastLog: Date = new Date()
+    lastRetry: Map<string, Date> = new Map()
+
     ctx: AppContext
 
     constructor(ctx: AppContext){
@@ -14,13 +25,28 @@ export class MirrorMachine {
     }
 
     async fetchUsers(){
+        console.log("Setting up mirror...")
         const dids = await getCAUsersDids(this.ctx)
-        this.knownUsers = new Set(dids)
+        const extendedUsers = (await getCAUsersAndFollows(this.ctx)).map(x => x.did)
+        await redisDeleteByPrefix(this.ctx, mirrorStatusKeyPrefix(this.ctx))
+        this.caUsers = new Set(dids)
+        this.extendedUsers = new Set(extendedUsers.filter(x => !this.caUsers.has(x)))
+        console.log("Mirror ready.")
+    }
+
+    logEventsPerSecond(){
+        const elapsed = Date.now() - this.lastLog.getTime()
+        if(elapsed > 60*1000){
+            console.log("Events per second: ", this.eventCounter / (elapsed / 1000))
+            this.eventCounter = 0
+            this.lastLog = new Date()
+        }
     }
 
     async run(){
         await this.fetchUsers()
-        console.log("Known users:", this.knownUsers)
+        console.log("CA users:", this.caUsers.size)
+        console.log("Extended users:", this.extendedUsers.size)
         const url = 'wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.*&wantedCollections=ar.cabildoabierto.*'
         const ws = new WebSocket(url)
 
@@ -29,20 +55,40 @@ export class MirrorMachine {
         })
 
         ws.on('message', async (data: RawData) => {
-            const e = JSON.parse(data.toString())
+            this.logEventsPerSecond()
+
+            const e: JetstreamEvent = JSON.parse(data.toString())
 
             if(e.kind == "commit") {
-                if(isCAProfile(e.commit.collection) && e.commit.rkey == "self"){
-                    this.knownUsers.add(e.did)
+                const c = e as CommitEvent
+                if(isCAProfile(c.commit.collection) && c.commit.rkey == "self"){
+                    this.caUsers.add(e.did)
+                    this.extendedUsers.add(e.did)
                     console.log("Added user", e.did)
                 }
             }
 
-            if(!this.knownUsers.has(e.did)){
+            const inCA = this.caUsers.has(e.did)
+            const inExtended = this.extendedUsers.has(e.did)
+
+            if(!inCA && !inExtended){
                 return
             }
 
-            await processEvent(this.ctx, e)
+            if(inCA){
+                this.eventCounter++
+                await this.processEvent(this.ctx, e, inCA)
+                if(e.kind == "commit" && isFollow((e as CommitEvent).commit.collection)){
+                    const record: Follow.Record = (e as CommitEvent).commit.record
+                    if((e as CommitEvent).commit.operation == "create"){
+                        this.extendedUsers.add(record.subject)
+                        console.log("Added extended user", record.subject)
+                    }
+                }
+            } else if(inExtended && e.kind == "commit" && isFollow((e as CommitEvent).commit.collection)){
+                this.eventCounter++
+                await this.processEvent(this.ctx, e, inCA)
+            }
         })
 
         ws.on('error', (error: Error) => {
@@ -52,5 +98,38 @@ export class MirrorMachine {
         ws.on('close', () => {
             console.log('WebSocket connection closed');
         })
+    }
+
+    async processEvent(ctx: AppContext, e: JetstreamEvent, inCA: boolean) {
+        const mirrorStatus = await getUserMirrorStatus(ctx, e.did, inCA)
+        console.log("event!", e.did, mirrorStatus)
+
+        if(mirrorStatus == "Sync"){
+            if(e.kind == "commit"){
+                const t1 = Date.now()
+                await processCommitEvent(ctx, e)
+                const t2 = Date.now()
+                const c = (e as CommitEvent)
+                logTimes(`process commit ${c.commit.operation} event: ${c.commit.uri}`, [t1, t2])
+            }
+
+        } else if(mirrorStatus == "Dirty"){
+            await setMirrorStatus(ctx, e.did, "InProcess", inCA)
+            await ctx.worker?.addJob("sync-user", {
+                handleOrDid: e.did,
+                collectionsMustUpdate: inCA ? undefined : ["app.bsky.graph.follow"]
+            })
+
+        } else if(mirrorStatus == "InProcess"){
+            await addPendingEvent(ctx, e.did, e)
+
+        } else if(mirrorStatus == "Failed") {
+            const last = this.lastRetry.get(e.did)
+            if(!last || last.getTime() - Date.now() > 6*3600*1000){
+                this.lastRetry.set(e.did, new Date())
+                await setMirrorStatus(ctx, e.did, "InProcess", inCA)
+                await ctx.worker?.addJob("sync-user", {handleOrDid: e.did})
+            }
+        }
     }
 }

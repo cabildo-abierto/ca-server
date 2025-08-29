@@ -79,9 +79,25 @@ model User {
 
   algorithmConfig Json?
 
+  notInterestedIn        NotInterested[] @relation("notInterested")
+  subjectOfNotInterested NotInterested[] @relation("notInterestedSubject")
+
   @@index([handle])
   @@index([inCA])
   @@index([CAProfileUri])
+}
+
+model NotInterested {
+  id       String @id @default(cuid())
+  authorId String
+  author   User   @relation("notInterested", fields: [authorId], references: [did])
+
+  subjectId String
+  subject   User   @relation("notInterestedSubject", fields: [subjectId], references: [did])
+
+  @@index([authorId])
+  @@index([subjectId])
+  @@index([authorId, subjectId])
 }
 
 enum ModerationState {

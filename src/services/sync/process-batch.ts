@@ -36,6 +36,7 @@ import {NotificationBatchData, NotificationJobData} from "#/services/notificatio
 import {isReactionCollection} from "#/utils/type-utils";
 import {getTopicCurrentVersion} from "#/services/wiki/current-version";
 import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard";
+import {redisDeleteByPrefix} from "#/services/user/follow-suggestions";
 
 
 export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: ATProtoStrongRef, record: any }[]) {
@@ -149,6 +150,11 @@ export async function processFollowsBatch(ctx: AppContext, records: {
                 })
             )
             .execute()
+
+        const dids = unique(follows.map(f => getDidFromUri(f.uri)))
+        for(let i = 0; i < dids.length; i++) {
+            await redisDeleteByPrefix(ctx, `follow-suggestions:${dids[i]}`)
+        }
     })
 }
 
@@ -379,6 +385,7 @@ function isReactionType(collection: string): collection is ReactionType {
 
 export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB> | AppContext["kysely"], topicIds: string[]) {
     topicIds = unique(topicIds)
+    if(topicIds.length == 0) return
 
     type VersionWithVotes = {
         topicId: string

@@ -30,13 +30,14 @@ export type AppContext = {
     resolver: BidirectionalResolver
     xrpc: XrpcServer
     ioredis: Redis
+    mirrorId: string
     worker: CAWorker | undefined
     kysely: Kysely<DB>
     sb: SupabaseClient
 }
 
 
-export async function setupAppContext(useWorker: boolean) {
+export async function setupAppContext(roles: Role[]) {
     const logger = pino({name: 'server start'})
 
     const db = new PrismaClient()
@@ -66,9 +67,11 @@ export async function setupAppContext(useWorker: boolean) {
     const xrpc = createServer()
 
     let worker: CAWorker | undefined = undefined
-    if(useWorker){
+    if(roles.includes("worker")){
         worker = new CAWorker(ioredis)
     }
+
+    const mirrorId = `mirror-${Date.now()}`
 
     const ctx: AppContext = {
         db,
@@ -79,7 +82,8 @@ export async function setupAppContext(useWorker: boolean) {
         ioredis: ioredis,
         kysely,
         worker,
-        sb
+        sb,
+        mirrorId
     }
 
     if(worker){
@@ -97,13 +101,15 @@ export class Server {
     ) {
     }
 
-    static async create(worker: boolean) {
+    static async create(roles: Role[]) {
         const {NODE_ENV, HOST, PORT} = env
 
-        const {ctx} = await setupAppContext(worker)
+        const {ctx} = await setupAppContext(roles)
 
-        const ingester = new MirrorMachine(ctx)
-        ingester.run()
+        if(roles.includes("mirror")){
+            const ingester = new MirrorMachine(ctx)
+            ingester.run()
+        }
 
         const app: Express = express()
         app.set('trust proxy', true)
@@ -171,8 +177,10 @@ export class Server {
     }
 }
 
-export const run = async (worker: boolean) => {
-    const server = await Server.create(worker)
+export type Role = "worker" | "web" | "mirror"
+
+export const run = async (roles: Role[]) => {
+    const server = await Server.create(roles)
 
     const onCloseSignal = async () => {
         setTimeout(() => process.exit(1), 10000).unref() // Force shutdown after 10s
@@ -184,4 +192,4 @@ export const run = async (worker: boolean) => {
     process.on('SIGTERM', onCloseSignal)
 }
 
-run(true)
+run(["web"])

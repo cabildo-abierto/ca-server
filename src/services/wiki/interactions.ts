@@ -29,6 +29,7 @@ export async function createContentInteractions(ctx: AppContext) {
     // si es una reacción solo vemos a qué record reacciona
     // si es un tema
     const lastUpdate = await getLastContentInteractionsUpdate(ctx)
+    console.log("Creating interactions since last update", lastUpdate)
 
     const batchSize = 5000
     let curOffset = 0
@@ -37,11 +38,14 @@ export async function createContentInteractions(ctx: AppContext) {
         console.log(`Updating topic interactions batch ${curOffset}`)
         const t1 = Date.now()
         const batchUris = await ctx.kysely.selectFrom("Record")
+            .innerJoin("User", "User.did", "Record.authorId")
+            .where("User.inCA", "=", true)
             .leftJoin("Post", "Record.uri", "Post.uri")
             .leftJoin("Reaction", "Record.uri", "Reaction.uri")
             .leftJoin("TopicVersion", "Record.uri", "TopicVersion.uri")
             .select(["Record.uri", "Post.replyToId", "Reaction.subjectId", "TopicVersion.topicId"])
             .where("Record.CAIndexedAt", ">=", lastUpdate)
+
             .orderBy("Record.CAIndexedAt asc")
             .limit(batchSize)
             .offset(curOffset)

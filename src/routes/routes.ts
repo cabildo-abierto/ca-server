@@ -62,6 +62,7 @@ import {
 import {getDraft, getDrafts, saveDraft } from '#/services/write/drafts';
 import { getNextMeeting } from '#/services/admin/meetings';
 import { getAuthorDashboardHandler } from '#/services/monetization/author-dashboard';
+import { getFollowSuggestions, setNotInterested } from '#/services/user/follow-suggestions';
 
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
@@ -392,6 +393,10 @@ export const createRouter = (ctx: AppContext) => {
     router.get("/author-dashboard", makeHandler(ctx, getAuthorDashboardHandler))
 
     router.post("/delete-ca-profile", makeHandler(ctx, deleteCAProfile))
+
+    router.get("/follow-suggestions/:limit/:offset", makeHandler(ctx, getFollowSuggestions))
+
+    router.post("/not-interested/:subject", makeHandler(ctx, setNotInterested))
 
     router.use(adminRoutes(ctx))
 
