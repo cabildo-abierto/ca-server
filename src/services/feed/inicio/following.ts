@@ -115,7 +115,7 @@ export const getSkeletonFromTimeline = (timeline: FeedViewPost[], following?: st
 }
 
 
-export async function getArticlesForFollowingFeed(ctx: AppContext, agent: SessionAgent): Promise<{
+export async function getArticlesForFollowingFeed(ctx: AppContext, agent: SessionAgent, data: Dataplane, startDate: Date): Promise<{
     created_at: Date,
     uri: string
 }[]> {
@@ -133,6 +133,7 @@ export async function getArticlesForFollowingFeed(ctx: AppContext, agent: Sessio
             eb("FollowRecord.authorId", "=", agent.did),
             eb("Record.authorId", "=", agent.did)
         ]))
+        .where("Record.created_at", "<", startDate)
         .orderBy("Record.created_at", "desc")
         .limit(25)
         .execute()
@@ -142,7 +143,7 @@ export async function getArticlesForFollowingFeed(ctx: AppContext, agent: Sessio
 }
 
 
-export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: SessionAgent, dataplane: Dataplane): Promise<RepostQueryResult[]> {
+export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: SessionAgent, dataplane: Dataplane, startDate: Date): Promise<RepostQueryResult[]> {
     const t1 = Date.now()
     const res = await ctx.kysely
         .selectFrom("Record")
@@ -215,13 +216,23 @@ export async function getBskyTimeline(agent: SessionAgent, limit: number, data: 
 }
 
 
-async function getFollowingFeedSkeletonAllCASide(ctx: AppContext, agent: SessionAgent, data: Dataplane) {
+async function getFollowingFeedSkeletonAllCASide(ctx: AppContext, agent: SessionAgent, data: Dataplane, startDate: Date) {
     const t1 = Date.now()
 
-    const articlesQuery = getArticlesForFollowingFeed(ctx, agent)
+    const articlesQuery = getArticlesForFollowingFeed(
+        ctx,
+        agent,
+        data,
+        startDate
+    )
 
     const t2 = Date.now()
-    const articleRepostsQuery: Promise<RepostQueryResult[]> = getArticleRepostsForFollowingFeed(ctx, agent, data)
+    const articleRepostsQuery: Promise<RepostQueryResult[]> = getArticleRepostsForFollowingFeed(
+        ctx,
+        agent,
+        data,
+        startDate
+    )
 
     const [articles, articleReposts, following] = await Promise.all([
         articlesQuery,
@@ -245,10 +256,12 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
 
     const timelineQuery = getBskyTimeline(agent, 25, data, cursor)
 
+    const cursorDate = cursor ? new Date(cursor) : new Date()
+
     const t1 = Date.now()
     let [timeline, {articles, articleReposts, following}] = await Promise.all([
         timelineQuery,
-        getFollowingFeedSkeletonAllCASide(ctx, agent, data)
+        getFollowingFeedSkeletonAllCASide(ctx, agent, data, cursorDate)
     ])
     const t2 = Date.now()
 
@@ -256,8 +269,8 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
     const lastInTimeline = timeline.feed.length > 0 ? timeline.feed[timeline.feed.length - 1].post.indexedAt : null
     if (lastInTimeline) {
         const lastInTimelineDate = new Date(lastInTimeline)
-        articles = articles.filter(a => a.created_at >= lastInTimelineDate)
-        articleReposts = articleReposts.filter(a => a.createdAt && a.createdAt >= lastInTimelineDate)
+        articles = articles.filter(a => a.created_at >= lastInTimelineDate && a.created_at <= cursorDate)
+        articleReposts = articleReposts.filter(a => a.createdAt && a.createdAt >= lastInTimelineDate && a.createdAt <= cursorDate)
     }
 
     const timelineSkeleton = getSkeletonFromTimeline(timeline.feed, following)

@@ -169,7 +169,9 @@ export class Dataplane {
     }
 
     async fetchCAContentsAndBlobs(uris: string[]) {
+        const t1 = Date.now()
         await this.fetchCAContents(uris)
+        const t2 = Date.now()
 
         const contents = Array.from(this.caContents?.values() ?? [])
         const blobRefs = blobRefsFromContents(contents
@@ -215,6 +217,8 @@ export class Dataplane {
             this.fetchTextBlobs(blobRefs),
             this.fetchFilteredTopics(filters)
         ])
+        const t3 = Date.now()
+        logTimes("fetch ca contents and blobs", [t1, t2, t3])
     }
 
     async fetchCAContents(uris: string[]) {
@@ -591,6 +595,7 @@ export class Dataplane {
         let postViews: PostView[] = []
         try {
             const t1 = Date.now()
+            if(batches.length > 1) console.log(`Warning: get bsky posts has ${batches.length} batches.`)
             for(const b of batches) {
                 const res = await agent.bsky.getPosts({uris: b})
                 postViews.push(...res.data.posts)
@@ -827,7 +832,6 @@ export class Dataplane {
         if (dids.length == 0) return
 
         const t1 = Date.now()
-
         const data = await this.ctx.db.user.findMany({
             select: {
                 did: true,
@@ -844,10 +848,6 @@ export class Dataplane {
                 }
             }
         })
-
-        const t2 = Date.now()
-
-        logTimes("fetching users from CA", [t1, t2])
 
         const res: CAProfileViewBasic[] = []
 
@@ -866,6 +866,9 @@ export class Dataplane {
             this.caUsers,
             new Map(res.map(r => [r.did, r]))
         )
+
+        const t2 = Date.now()
+        logTimes(`fetch users data from ca (N = ${dids.length})`, [t1, t2])
     }
 
     async fetchUsersHydrationDataFromBsky(dids: string[]) {
@@ -875,33 +878,29 @@ export class Dataplane {
         dids = dids.filter(d => !this.bskyUsers.has(d))
         if (dids.length == 0) return
 
+        const t1 = Date.now()
         const didBatches: string[][] = []
         for (let i = 0; i < dids.length; i += 25) didBatches.push(dids.slice(i, i + 25))
-        const t1 = Date.now()
         const profiles: ProfileViewDetailed[] = []
         for(let i = 0; i < didBatches.length; i++){
             const b = didBatches[i]
             const res = await agent.bsky.getProfiles({actors: b})
             profiles.push(...res.data.profiles)
         }
-        const t2 = Date.now()
-
-        logTimes("fetching users from bsky", [t1, t2])
 
         this.bskyUsers = joinMaps(
             this.bskyUsers,
             new Map(profiles.map(v => [v.did, {$type: "app.bsky.actor.defs#profileViewDetailed", ...v}]))
         )
+        const t2 = Date.now()
+        logTimes(`fetch users data from bsky (N = ${dids.length})`, [t1, t2])
     }
 
     async fetchUsersHydrationData(dids: string[]) {
-        const t1 = Date.now()
         await Promise.all([
             this.fetchUsersHydrationDataFromCA(dids),
             this.fetchUsersHydrationDataFromBsky(dids)
         ])
-        const t2 = Date.now()
-        logTimes("fetch users", [t1, t2])
     }
 
     async fetchFilesFromStorage(filePaths: string[], bucket: string) {

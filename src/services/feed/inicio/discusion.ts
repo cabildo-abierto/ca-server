@@ -7,7 +7,6 @@ import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/def
 import {$Typed} from "@atproto/api";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {sql} from "kysely";
-import {logTimes} from "#/utils/utils";
 
 
 function getEnDiscusionStartDate(time: EnDiscusionTime){
@@ -41,127 +40,80 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
     if(metric == "Me gustas"){
 
         let skeleton = await ctx.kysely
-            .with("RecordsEnDiscusion", (db => db
-                    .selectFrom("Record")
-                    .select([
-                        "Record.uri",
-                        "Record.created_at",
-                        "Record.uniqueLikesCount",
-                        "Record.authorId"
-                    ])
-                    .where('Record.collection', 'in', collections)
-                    .innerJoin('Content', 'Record.uri', 'Content.uri')
-                    .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
-            ))
-            .with('Autolikes', (db) =>
-                db.selectFrom('Reaction')
-                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
-                    .leftJoin('RecordsEnDiscusion as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
-                    .where('ReactionRecord.collection', 'in', [
-                        'app.bsky.feed.like'
-                    ])
-                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
-                    .select(['Reaction.uri', 'Reaction.subjectId'])
-            )
-            .selectFrom('RecordsEnDiscusion as Record')
-            .leftJoin('Autolikes', 'Record.uri', 'Autolikes.subjectId')
-            .select([
+            .selectFrom('Record')
+            .where('Record.collection', 'in', collections)
+            .innerJoin('Content', 'Record.uri', 'Content.uri')
+            .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
+            .select(eb => [
                 'Record.uri',
                 'Record.uniqueLikesCount',
+                'Record.uniqueRepostsCount',
                 'Record.created_at',
-                'Autolikes.uri as autolikes_uri',
+                eb.exists(eb.selectFrom('Reaction')
+                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
+                    .whereRef("Reaction.subjectId", "=", "Record.uri")
+                    .where('ReactionRecord.collection', '=', 'app.bsky.feed.like')
+                    .whereRef('ReactionRecord.authorId', '=', 'Record.authorId')).as("autolike")
             ])
-            .execute();
+            .execute()
 
         skeleton = sortByKey(skeleton, e => {
             return [
                 e.created_at > startDate ? 1 : 0,
-                (e.uniqueLikesCount ?? 0) - (e.autolikes_uri ? 1 : 0),
+                (e.uniqueLikesCount ?? 0) - (e.autolike ? 1 : 0),
                 e.created_at.getTime()
             ];
         }, listOrderDesc);
 
         return {
-            skeleton: skeleton.map(e => ({ post: e.uri })),
+            skeleton: skeleton.map(e => ({ post: e.uri })).slice(0, 25),
             cursor: undefined
         };
 
     } else if(metric == "Interacciones"){
-
-        // Contamos cantidad de likes, reposts y respuestas. Pendiente: contar citas
         let skeleton = await ctx.kysely
-            .with("RecordsEnDiscusion", (db => db
-                .selectFrom("Record")
-                .select([
-                    "Record.uri",
-                    "Record.created_at",
-                    "Record.uniqueLikesCount",
-                    "Record.uniqueRepostsCount",
-                    "Record.authorId"
-                ])
-                .where('Record.collection', 'in', collections)
-                .innerJoin('Content', 'Record.uri', 'Content.uri')
-                .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
-            ))
-            .with('Autolikes', (db) =>
-                db.selectFrom('Reaction')
-                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
-                    .leftJoin('RecordsEnDiscusion as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
-                    .where('ReactionRecord.collection', 'in', [
-                        'app.bsky.feed.like'
-                    ])
-                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
-                    .select(['Reaction.uri', 'Reaction.subjectId'])
-            )
-            .with('Autoreposts', (db) =>
-                db.selectFrom('Reaction')
-                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
-                    .leftJoin('RecordsEnDiscusion as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
-                    .where('ReactionRecord.collection', 'in', [
-                        'app.bsky.feed.repost',
-                    ])
-                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
-                    .select(['Reaction.uri', 'Reaction.subjectId'])
-            )
-            .with('RepliesFromOthers', (db) =>
-                db.selectFrom('Record as RecordsEnDiscusion')
-                    .leftJoin('Post', 'RecordsEnDiscusion.uri', 'Post.replyToId')
-                    .innerJoin('Record as ReplyRecord', 'Post.uri', 'ReplyRecord.uri')
-                    .whereRef('ReplyRecord.authorId', '!=', 'RecordsEnDiscusion.authorId')
-                    .select(['RecordsEnDiscusion.uri as reply_to_uri',
-                            (eb) => eb.fn.count<number>('Post.uri').as('reply_count')
-                            ])
-                    .groupBy(['RecordsEnDiscusion.uri'])
-            )
-            .selectFrom('RecordsEnDiscusion as Record')
-            .leftJoin('Autolikes', 'Record.uri', 'Autolikes.subjectId')
-            .leftJoin('Autoreposts', 'Record.uri', 'Autoreposts.subjectId')
-            .leftJoin('RepliesFromOthers', 'Record.uri', 'RepliesFromOthers.reply_to_uri')
-            .select([
+            .selectFrom('Record')
+            .where('Record.collection', 'in', collections)
+            .innerJoin('Content', 'Record.uri', 'Content.uri')
+            .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
+            .select(eb => [
                 'Record.uri',
                 'Record.uniqueLikesCount',
                 'Record.uniqueRepostsCount',
                 'Record.created_at',
-                'Autolikes.uri as autolikes_uri',
-                'Autoreposts.uri as autoreposts_uri',
-                'RepliesFromOthers.reply_count as replies_from_others_count'
+                eb.exists(eb.selectFrom('Reaction')
+                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
+                    .whereRef("Reaction.subjectId", "=", "Record.uri")
+                    .where('ReactionRecord.collection', '=', 'app.bsky.feed.like')
+                    .whereRef('ReactionRecord.authorId', '=', 'Record.authorId')).as("autolike"),
+                eb.exists(eb.selectFrom('Reaction')
+                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
+                    .whereRef("Reaction.subjectId", "=", "Record.uri")
+                    .where('ReactionRecord.collection', '=', 'app.bsky.feed.repost')
+                    .whereRef('ReactionRecord.authorId', '=', 'Record.authorId')).as("autorepost"),
+                eb.selectFrom('Post')
+                    .leftJoin('Record', 'Record.uri', 'Post.replyToId')
+                    .innerJoin('Record as ReplyRecord', 'Post.uri', 'ReplyRecord.uri')
+                    .whereRef('ReplyRecord.authorId', '!=', 'Record.authorId')
+                    .select(eb => eb.fn.count<number>('Post.uri').as('count')).as("replies_count")
             ])
-            .execute();
+            .execute()
 
+        // TO DO: Hacer adentro de la query
         skeleton = sortByKey(skeleton, e => {
             return [
                 e.created_at > startDate ? 1 : 0,
                 (e.uniqueLikesCount ?? 0) +
                 (e.uniqueRepostsCount ?? 0) +
-                (Number(e.replies_from_others_count) ?? 0) -
-                (e.autolikes_uri ? 1 : 0) -
-                (e.autoreposts_uri ? 1 : 0),
+                (Number(e.replies_count) ?? 0) -
+                (e.autolike ? 1 : 0) -
+                (e.autorepost ? 1 : 0),
                 e.created_at.getTime()
             ];
         }, listOrderDesc);
 
         return {
-            skeleton: skeleton.map(e => ({ post: e.uri })),
+            skeleton: skeleton.map(e => ({ post: e.uri })).slice(0, 25),
             cursor: undefined
         };
 
@@ -212,31 +164,25 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
                     ])
                     .groupBy(['RecordsEnDiscusion.uri'])
             )
-            .with('AuthorFollowers', (db) =>
-                db.selectFrom('User')
-                    .leftJoin('Follow', 'User.did', 'Follow.userFollowedId')
-                    .leftJoin('Record', 'Follow.uri', 'Record.uri' )
-                    .leftJoin('User as Follower', 'Record.authorId', 'Follower.did')
-                    .select(['User.did',
-                        (eb) => eb.fn.count<number>('Follower.did').distinct().as('followers_count')
-                    ])
-                    .where("User.inCA", "=", true)
-                    .groupBy(['User.did'])
-            )
             .selectFrom('RecordsEnDiscusion as Record')
+            .innerJoin("User as Author", "Author.did", "Record.authorId")
             .leftJoin('Autolikes', 'Record.uri', 'Autolikes.subjectId')
             .leftJoin('Autoreposts', 'Record.uri', 'Autoreposts.subjectId')
             .leftJoin('RepliesFromOthers', 'Record.uri', 'RepliesFromOthers.reply_to_uri')
-            .leftJoin('AuthorFollowers', 'Record.authorId', 'AuthorFollowers.did')
-            .select([
+            .select(eb => [
                 'Record.uri',
                 'Record.uniqueLikesCount',
                 'Record.uniqueRepostsCount',
                 'Record.created_at',
                 'Autolikes.uri as autolikes_uri',
                 'Autoreposts.uri as autoreposts_uri',
-                "AuthorFollowers.followers_count",
-                'RepliesFromOthers.reply_count as replies_from_others_count'
+                'RepliesFromOthers.reply_count as replies_from_others_count',
+                eb.selectFrom('Follow')
+                    .whereRef("Follow.userFollowedId", "=", "Record.authorId")
+                    .leftJoin('Record', 'Follow.uri', 'Record.uri' )
+                    .leftJoin('User as Follower', 'Record.authorId', 'Follower.did')
+                    .select((eb) => eb.fn.count<number>('Follower.did').distinct().as('followers_count'))
+                    .where("Follower.inCA", "=", true).as("followers_count")
             ])
             .execute();
 
@@ -254,18 +200,18 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
             }, listOrderDesc);
 
             return {
-                skeleton: skeleton.map(e => ({ post: e.uri })),
+                skeleton: skeleton.map(e => ({ post: e.uri })).slice(0, 25),
                 cursor: undefined
             };
     }
     else {
-        const skeleton = await ctx.kysely.selectFrom('Record')
+        const skeleton = (await ctx.kysely.selectFrom('Record')
             .where('Record.collection', 'in', collections)
             .innerJoin('Content', 'Record.uri', 'Content.uri')
             .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
             .select(['Record.uri'])
             .orderBy('Record.created_at', 'desc')
-            .execute()
+            .execute()).slice(0, 25)
         return {
             skeleton: skeleton.map(e => ({ post: e.uri })),
             cursor: undefined

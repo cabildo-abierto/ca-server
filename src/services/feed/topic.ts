@@ -67,27 +67,21 @@ const getTopicMentionsSkeleton = async (ctx: AppContext, agent: Agent, data: Dat
 }
 
 
-// TO DO: Solo mostrar versiones actuales.
 export async function getTopicMentionsInTopics(ctx: AppContext, id: string){
-    return ctx.db.content.findMany({
-        select: {
-            topicVersion: {
-                select: {
-                    topicId: true
-                }
-            }
-        },
-        where: {
-            references: {
-                some: {
-                    referencedTopicId: id
-                }
-            },
-            record: {
-                collection: "ar.com.cabildoabierto.topic"
-            }
-        }
-    })
+    return ctx.kysely
+        .selectFrom("TopicVersion")
+        .innerJoin("Record", "Record.uri", "TopicVersion.uri")
+        .where("Record.collection", "=", "ar.cabildoabierto.wiki.topicVersion")
+        .select("topicId")
+        .where(eb => eb.exists(eb => eb
+            .selectFrom("Reference")
+            .where("Reference.referencedTopicId", "=", id)
+            .whereRef("Reference.referencingContentId", "=", "TopicVersion.uri")
+        ))
+        .innerJoin("Topic", "Topic.currentVersionId", "TopicVersion.uri")
+        .select("TopicVersion.topicId")
+        .limit(25)
+        .execute()
 }
 
 
@@ -163,7 +157,7 @@ export const getTopicFeed: CAHandlerNoAuth<{ query: { i?: string, did?: string, 
             data: {
                 mentions: mentions.data.feed,
                 replies: replies.data,
-                topics: topicMentions.map(t => t.topicVersion?.topicId).filter(x => x != null),
+                topics: topicMentions.map(t => t?.topicId).filter(x => x != null),
                 history
             }
         }

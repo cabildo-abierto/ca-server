@@ -529,8 +529,8 @@ export const threadPostRepliesSortKey = (authorId: string) => (r: ThreadViewPost
         [1, -new Date(r.post.indexedAt).getTime()] : [0, 0]
 }
 
-export function hydrateThreadViewContent(skeleton: ThreadSkeleton, data: Dataplane, includeReplies: boolean = false): $Typed<ThreadViewContent> | null {
-    const content = hydrateContent(skeleton.post, data, true).data
+export function hydrateThreadViewContent(skeleton: ThreadSkeleton, data: Dataplane, includeReplies: boolean = false, isMain: boolean = false): $Typed<ThreadViewContent> | null {
+    const content = hydrateContent(skeleton.post, data, isMain).data
     if (!content) return null
 
     const authorDid = getDidFromUri(skeleton.post)

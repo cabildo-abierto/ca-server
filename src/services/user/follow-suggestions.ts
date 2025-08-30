@@ -33,53 +33,42 @@ async function getRecommendationRankingForUser(ctx: AppContext, did: string, lim
             .where("Record.authorId", "=", did)
             .select(["Follow.userFollowedId"])
         )
-        .with("CAUsers", db => db
-            .selectFrom("User")
-            .where("User.inCA", "=", true)
-            .select("did")
-        )
-        .with("FollowsCount", eb => eb.selectFrom("Follows").select(eb => eb.fn.count<number>("userFollowedId").as("count")))
         .with("Recommenders", db =>
             db.selectFrom("Follows")
                 .select("userFollowedId as did")
                 .where(
                     eb => eb(
-                        eb.selectFrom("FollowsCount").select("count"),
+                        eb => eb.selectFrom("Follows").select(eb => eb.fn.count<number>("userFollowedId").as("count")),
                         ">=",
                         3
                     )
                 )
                 .unionAll(
-                    db.selectFrom("CAUsers")
-                        .select("did")
+                    db.selectFrom("User")
                         .where(
                             eb => eb(
-                                eb.selectFrom("FollowsCount").select("count"),
+                                eb => eb.selectFrom("Follows").select(eb => eb.fn.count<number>("userFollowedId").as("count")),
                                 "<",
                                 3
                             )
                         )
+                        .where("inCA", "=", true)
+                        .select("did")
                 )
-        )
-        .with("Active", eb => eb
-            .selectFrom("User")
-            .innerJoin("Record", "Record.authorId", "User.did")
-            .where("Record.created_at", ">", lastTwoWeeks)
-            .select([
-                "did",
-                eb => eb.fn.count<number>("Record.uri").filterWhere("Record.collection", "=", "ar.cabildoabierto.feed.article").as("articles"),
-                eb => eb.fn.count<number>("Record.uri").as("records")
-            ])
-            .groupBy("did")
         )
         .selectFrom("User as Candidate") // los candidatos son todas las personas seguidas por algun seguido de agent.did
         .innerJoin("Follow as Recommendation", "Recommendation.userFollowedId", "Candidate.did")
         .innerJoin("Record as RecommendationRecord", "RecommendationRecord.uri", "Recommendation.uri")
         .innerJoin("Recommenders", "Recommenders.did", "RecommendationRecord.authorId")
-        .innerJoin("Active", "Active.did", "Candidate.did")
+
+        // no es seguido por el usuario logueado
         .leftJoin("Follows", "Follows.userFollowedId", "Candidate.did")
         .where("Follows.userFollowedId", "is", null)
+
+        // no es el usuario logueado
         .where("Candidate.did", "!=", did)
+
+        // no está marcado como not interested
         .where(eb =>
             eb.not(
                 eb.exists(
@@ -90,18 +79,31 @@ async function getRecommendationRankingForUser(ctx: AppContext, did: string, lim
                 )
             )
         )
+
         .select([
             "Candidate.did",
             sql<number>`
-              (count("Candidate"."did")::float / (select count(*) from "Recommenders"))
-              + CASE WHEN "Active"."articles" > 0 THEN 0.25 ELSE 0 END
-              + CASE WHEN "Active"."records" > 0 THEN 0.25 ELSE 0 END
-              + CASE WHEN "Candidate"."inCA" THEN 0.25 ELSE 0 END
+                (count("Candidate"."did")::float / (select count(*) from "Recommenders"))
+                + CASE 
+                WHEN EXISTS (
+                    SELECT 1 FROM "Record" 
+                    WHERE "Record"."authorId" = "Candidate"."did" 
+                    AND "Record"."created_at" > ${lastTwoWeeks}
+                AND "Record"."collection" = 'ar.cabildoabierto.feed.article'
+                ) THEN 0.25 ELSE 0
+                END
+                + CASE 
+                WHEN EXISTS (
+                    SELECT 1 FROM "Record" 
+                    WHERE "Record"."authorId" = "Candidate"."did" 
+                    AND "Record"."created_at" > ${lastTwoWeeks}
+                ) THEN 0.25 ELSE 0
+                END
+                + CASE WHEN "Candidate"."inCA" THEN 0.25 ELSE 0 END
             `.as("score")
         ])
-        .groupBy(["Candidate.did", "Active.articles", "Active.records"])
-        .orderBy("score", "desc")
-        .orderBy("Candidate.did", "asc") // determinismo
+        .groupBy(["Candidate.did"])
+        .orderBy(["score desc", "Candidate.did asc"])
         .limit(limit)
         .offset(offset)
         .execute()
