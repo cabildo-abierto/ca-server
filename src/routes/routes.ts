@@ -25,6 +25,7 @@ import {
 import {createPost} from "#/services/write/post";
 import {addLike, removeLike, removeRepost, repost} from "#/services/reactions/reactions";
 import {getThread} from "#/services/thread/thread";
+import {getLikes, getReposts} from "#/services/thread/getDetails";
 import {
     getTopicHandler,
     getTopicVersionHandler,
@@ -395,6 +396,10 @@ export const createRouter = (ctx: AppContext) => {
     router.post("/delete-ca-profile", makeHandler(ctx, deleteCAProfile))
 
     router.get("/follow-suggestions/:limit/:offset", makeHandler(ctx, getFollowSuggestions))
+
+    router.get("/likes/:did/:collection/:rkey/:limit/:offset", makeHandler(ctx, getLikes))
+
+    router.get("/reposts/:did/:collection/:rkey/:limit/:offset", makeHandler(ctx, getReposts))
 
     router.post("/not-interested/:subject", makeHandler(ctx, setNotInterested))
 
