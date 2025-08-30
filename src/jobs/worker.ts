@@ -42,49 +42,53 @@ type CAJobDefinition<T> = {
 
 
 export class CAWorker {
-    worker: Worker
+    worker?: Worker
     ioredis: Redis
     queue: Queue
     jobs: CAJobDefinition<any>[] = []
 
-    constructor(ioredis: Redis) {
+    constructor(ioredis: Redis, worker: boolean) {
         const env = process.env.NODE_ENV || "development"
         const queueName = `${env}-queue`
         const queuePrefix = undefined
-        console.log(`Starting worker on queue ${queueName} with prefix ${queuePrefix}`)
         this.ioredis = ioredis
+        console.log(`Starting queue ${queueName} with prefix ${queuePrefix}`)
         this.queue = new Queue(queueName, {
             prefix: queuePrefix,
             connection: ioredis
         })
-        this.worker = new Worker(queueName, async (job) => {
-                console.log("got job!", job.name)
-                for (let i = 0; i < this.jobs.length; i++) {
-                    if (job.name.startsWith(this.jobs[i].name)) {
-                        console.log(`Running job: ${job.name}.`)
-                        await this.jobs[i].handler(job.data)
-                        return
+
+        if(worker){
+            console.log(`Starting worker on queue ${queueName} with prefix ${queuePrefix}`)
+            this.worker = new Worker(queueName, async (job) => {
+                    console.log("got job!", job.name)
+                    for (let i = 0; i < this.jobs.length; i++) {
+                        if (job.name.startsWith(this.jobs[i].name)) {
+                            console.log(`Running job: ${job.name}.`)
+                            await this.jobs[i].handler(job.data)
+                            return
+                        }
                     }
+                    console.log("No handler for job:", job.name)
+                },
+                {
+                    connection: ioredis,
+                    lockDuration: 60 * 1000 * 5
                 }
-                console.log("No handler for job:", job.name)
-            },
-            {
-                connection: ioredis,
-                lockDuration: 60 * 1000 * 5
-            }
-        )
-        this.worker.on('failed', (job, err) => {
-            console.error(`Job ${job?.name} failed:`, err);
-        })
-        this.worker.on('error', (err) => {
-            console.error('Worker error:', err);
-        })
-        this.worker.on('active', (job) => {
-            console.log(`Job ${job.name} started`);
-        })
-        this.worker.on('completed', (job) => {
-            console.log(`Job ${job.name} completed`);
-        })
+            )
+            this.worker.on('failed', (job, err) => {
+                console.error(`Job ${job?.name} failed:`, err);
+            })
+            this.worker.on('error', (err) => {
+                console.error('Worker error:', err);
+            })
+            this.worker.on('active', (job) => {
+                console.log(`Job ${job.name} started`);
+            })
+            this.worker.on('completed', (job) => {
+                console.log(`Job ${job.name} completed`);
+            })
+        }
     }
 
     registerJob(jobName: string, handler: (data: any) => Promise<void>) {

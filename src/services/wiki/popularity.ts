@@ -60,6 +60,7 @@ export async function updateTopicPopularities(ctx: AppContext, topicIds: string[
                 if(humanUsers.has(authorId)){
                     cur.interactionsLastMonth.add(authorId)
                     if(d.created_at > lastWeek){
+                        console.log(`Interaction: ${d.recordId}, ${d.topicId}`)
                         cur.interactionsLastWeek.add(authorId)
                     }
                     if(d.created_at > lastDay){

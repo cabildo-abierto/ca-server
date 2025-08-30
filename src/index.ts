@@ -66,10 +66,7 @@ export async function setupAppContext(roles: Role[]) {
     const resolver = createBidirectionalResolver(baseIdResolver, ioredis)
     const xrpc = createServer()
 
-    let worker: CAWorker | undefined = undefined
-    if(roles.includes("worker")){
-        worker = new CAWorker(ioredis)
-    }
+    let worker: CAWorker = new CAWorker(ioredis, roles.includes("worker"))
 
     const mirrorId = `mirror-${Date.now()}`
 

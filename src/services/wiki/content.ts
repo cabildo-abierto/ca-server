@@ -54,13 +54,10 @@ export async function updateContentsText(ctx: AppContext) {
                 }
             }
             try {
-                console.log("found", t.text.slice(0, 50), t.format)
                 const res = anyEditorStateToMarkdownOrLexical(
                     t.text,
                     t.format
                 )
-                console.log(contents[idx].uri, t.text.slice(0, 50), t.format)
-                console.log("result is", res.text, res.format)
                 return {
                     uri: contents[idx].uri,
                     selfLabels: [],
