@@ -18,11 +18,14 @@ import {logTimes} from "#/utils/utils";
 */
 
 
-async function getRecommendationRankingForUser(ctx: AppContext, did: string, limit: number, offset: number = 0): Promise<string[]> {
-    const redisKey = `follow-suggestions:${did}:${limit}:${offset}`
-    const inCache = await ctx.ioredis.get(redisKey)
-    if(inCache != null){
-        return JSON.parse(inCache)
+async function getRecommendationRankingForUser(ctx: AppContext, did: string, ignoreCache: boolean = false): Promise<string[]> {
+    const redisKey = `follow-suggestions:${did}`
+
+    if(!ignoreCache){
+        const inCache = await ctx.ioredis.get(redisKey)
+        if(inCache != null){
+            return JSON.parse(inCache)
+        }
     }
 
     const lastTwoWeeks = new Date(Date.now() - 1000*3600*24*14)
@@ -55,6 +58,7 @@ async function getRecommendationRankingForUser(ctx: AppContext, did: string, lim
                         .where("inCA", "=", true)
                         .select("did")
                 )
+                .limit(1000)
         )
         .selectFrom("User as Candidate") // los candidatos son todas las personas seguidas por algun seguido de agent.did
         .innerJoin("Follow as Recommendation", "Recommendation.userFollowedId", "Candidate.did")
@@ -104,32 +108,64 @@ async function getRecommendationRankingForUser(ctx: AppContext, did: string, lim
         ])
         .groupBy(["Candidate.did"])
         .orderBy(["score desc", "Candidate.did asc"])
-        .limit(limit)
-        .offset(offset)
+        .limit(300)
         .execute()
 
     const dids = recommendations.map(r => r.did)
 
-    await ctx.ioredis.set(redisKey, JSON.stringify(dids), 'EX', 3600*24)
+    await ctx.ioredis.set(redisKey, JSON.stringify(dids))
     return dids
 }
 
 
-export const getFollowSuggestions: CAHandler<{params: {limit: number, offset: number}}, ProfileViewBasic[]> = async (ctx, agent, {params}) =>  {
+export async function getFollowSuggestionsToAvoid(ctx: AppContext, did: string) {
+    return new Set((await ctx.kysely
+        .selectFrom("NotInterested")
+        .select("subjectId as did")
+        .where("authorId", "=", did)
+        .unionAll(eb => eb
+            .selectFrom("Follow")
+            .innerJoin("User", "User.did", "Follow.userFollowedId")
+            .innerJoin("Record", "Record.uri", "Follow.uri")
+            .where("Record.authorId", "=", did)
+            .select("User.did")
+        )
+        .execute()).map(x => x.did))
+}
+
+
+export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: string}}, {profiles: ProfileViewBasic[], cursor?: string}> = async (ctx, agent, {params}) =>  {
     const t1 = Date.now()
-    const dids = await getRecommendationRankingForUser(ctx, agent.did, params.limit, params.offset)
+    const [ranking, avoid] = await Promise.all([
+        getRecommendationRankingForUser(ctx, agent.did),
+        getFollowSuggestionsToAvoid(ctx, agent.did)
+    ])
     const t2 = Date.now()
+
+    const limit = parseInt(params.limit)
+    const offset = params.cursor ? parseInt(params.cursor) : 0
+
+    const dids = ranking
+        .slice(offset, offset+limit)
+        .filter(r => !avoid.has(r))
 
     const dataplane = new Dataplane(ctx, agent)
     await dataplane.fetchUsersHydrationData(dids)
     const t3 = Date.now()
     logTimes("follow suggestions", [t1, t2, t3])
 
-    const data = dids
+    const profiles = dids
         .map(d => hydrateProfileViewBasic(d, dataplane))
         .filter(x => x != null)
 
-    return {data}
+    const cursorInt = offset + limit
+    const cursor = cursorInt >= ranking.length ? undefined : cursorInt.toString()
+
+    return {
+        data: {
+        profiles: profiles,
+        cursor
+    }}
 }
 
 
@@ -149,6 +185,21 @@ export async function redisDeleteByPrefix(ctx: AppContext, prefix: string) {
 }
 
 
+export async function redisGetByPrefix(ctx: AppContext, prefix: string): Promise<[string, string][]> {
+    const keys = await ctx.ioredis.keys(`${prefix}*`);
+    if (keys.length === 0) return []
+
+    const values = await ctx.ioredis.mget(...keys);
+
+    return keys
+        .map((k, i): [string, string] | null => {
+            const v = values[i]
+            return v != null ? [k, v] : null
+        })
+        .filter(x => x != null)
+}
+
+
 export const setNotInterested: CAHandler<{params: {subject: string}}, {}> = async (ctx, agent, {params}) => {
     await ctx.kysely
         .insertInto("NotInterested")
@@ -159,7 +210,25 @@ export const setNotInterested: CAHandler<{params: {subject: string}}, {}> = asyn
         }])
         .execute()
 
-    await redisDeleteByPrefix(ctx, `follow-suggestions:${agent.did}`)
+    await ctx.ioredis.set(`follow-suggestions-dirty:${agent.did}`, "true")
 
     return {data: {}}
+}
+
+
+export async function updateFollowSuggestions(ctx: AppContext){
+    const keys = await redisGetByPrefix(ctx, `follow-suggestions-dirty`)
+    console.log(`${keys.length} follow suggestions to update`)
+
+    for(let i = 0; i < keys.length; i++) {
+        const k = keys[i][0]
+        const did = k.split("follow-suggestions-dirty:")[1]
+        console.log(`updating follow-suggestions ${i} of ${keys.length}: ${did}`)
+        const t1 = Date.now()
+        await ctx.ioredis.del(k)
+        const t2 = Date.now()
+        await getRecommendationRankingForUser(ctx, did, true)
+        const t3 = Date.now()
+        logTimes(`updated follow-suggestions ${i}`, [t1, t2, t3])
+    }
 }

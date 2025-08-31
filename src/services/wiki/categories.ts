@@ -64,7 +64,7 @@ export async function updateTopicsCategories(ctx: AppContext) {
             console.log("Error getting existing relations", err)
             return
         }
-        const batchSize = 500;
+        const batchSize = 2000;
 
         console.log("Inserting new relations")
 

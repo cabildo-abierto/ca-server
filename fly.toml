@@ -28,12 +28,12 @@ primary_region = 'gru'
 
 [[vm]]
   size = 'shared-cpu-1x'
-  memory = '512mb'
+  memory = '1gb'
   processes = ['app']
 
 [[vm]]
   size = 'shared-cpu-1x'
-  memory = '1gb'
+  memory = '2gb'
   processes = ['worker']
 
 [processes]

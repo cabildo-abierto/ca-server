@@ -278,6 +278,8 @@ export type User = {
     lastSeenNotifications: Generated<Timestamp>;
     moderationState: Generated<ModerationState>;
     algorithmConfig: unknown | null;
+    articleLastMonth: Generated<boolean>;
+    postLastTwoWeeks: Generated<boolean>;
 };
 export type UserMonth = {
     id: string;

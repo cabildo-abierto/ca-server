@@ -30,6 +30,8 @@ import {restartLastContentInteractionsUpdate} from "#/services/wiki/interactions
 import {updatePostLangs} from "#/services/admin/posts";
 import {createPaymentPromises} from "#/services/monetization/promise-creation";
 import {updateAllTopicsCurrentVersions} from "#/services/sync/process-batch";
+import {updateActiveUsers} from "#/services/user/active";
+import {updateFollowSuggestions} from "#/services/user/follow-suggestions";
 
 const mins = 60 * 1000
 
@@ -141,13 +143,15 @@ export class CAWorker {
         this.registerJob("update-author-status", (data) => updateAuthorStatus(ctx, [data.did]))
         this.registerJob("create-payment-promises", () => createPaymentPromises(ctx))
         this.registerJob("update-topics-current-versions", () => updateAllTopicsCurrentVersions(ctx))
+        this.registerJob("update-follow-suggestions", () => updateFollowSuggestions(ctx))
 
         await this.removeAllRepeatingJobs()
-        await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)
-        await this.addRepeatingJob("update-topics-categories", 60 * 24 * mins, 60 * mins + 5)
-        await this.addRepeatingJob("update-categories-graph", 60 * 24 * mins, 60 * mins + 7)
-        await this.addRepeatingJob("create-user-months", 60 * 24 * mins, 60 * mins + 15)
+        await this.addRepeatingJob("update-topics-popularity", 30 * mins, 60 * mins)
+        await this.addRepeatingJob("update-topics-categories", 30 * mins, 60 * mins + 5)
+        await this.addRepeatingJob("update-categories-graph", 30 * mins, 60 * mins + 7)
+        await this.addRepeatingJob("create-user-months", 30 * mins, 60 * mins + 15)
         await this.addRepeatingJob("batch-jobs", mins / 2, 0)
+        await this.addRepeatingJob("update-follow-suggestions", 30 * mins, 30 * mins + 18)
 
         const waitingJobs = await this.queue.getJobs(['waiting'])
         const delayedJobs = await this.queue.getJobs(['delayed'])

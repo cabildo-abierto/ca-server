@@ -82,9 +82,15 @@ model User {
   notInterestedIn        NotInterested[] @relation("notInterested")
   subjectOfNotInterested NotInterested[] @relation("notInterestedSubject")
 
+  articleLastMonth Boolean @default(false)
+  postLastTwoWeeks Boolean @default(false)
+
   @@index([handle])
-  @@index([inCA])
+  @@index([inCA, did])
   @@index([CAProfileUri])
+  @@index([createdAt])
+  @@index([articleLastMonth, did])
+  @@index([postLastTwoWeeks, did])
 }
 
 model NotInterested {

@@ -394,7 +394,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.post("/delete-ca-profile", makeHandler(ctx, deleteCAProfile))
 
-    router.get("/follow-suggestions/:limit/:offset", makeHandler(ctx, getFollowSuggestions))
+    router.get("/follow-suggestions/:limit/:cursor", makeHandler(ctx, getFollowSuggestions))
 
     router.post("/not-interested/:subject", makeHandler(ctx, setNotInterested))
 
