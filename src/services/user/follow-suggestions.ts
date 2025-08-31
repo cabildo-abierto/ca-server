@@ -145,9 +145,15 @@ export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: s
     const limit = parseInt(params.limit)
     const offset = params.cursor ? parseInt(params.cursor) : 0
 
-    const dids = ranking
-        .slice(offset, offset+limit)
-        .filter(r => !avoid.has(r))
+    const dids: string[] = []
+
+    let nextIndex = offset
+    while(dids.length < limit && nextIndex < ranking.length){
+        if(!avoid.has(ranking[nextIndex])){
+            dids.push(ranking[nextIndex])
+        }
+        nextIndex++
+    }
 
     const dataplane = new Dataplane(ctx, agent)
     await dataplane.fetchUsersHydrationData(dids)
@@ -158,8 +164,7 @@ export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: s
         .map(d => hydrateProfileViewBasic(d, dataplane))
         .filter(x => x != null)
 
-    const cursorInt = offset + limit
-    const cursor = cursorInt >= ranking.length ? undefined : cursorInt.toString()
+    const cursor = nextIndex >= ranking.length ? undefined : nextIndex.toString()
 
     return {
         data: {
