@@ -235,11 +235,14 @@ export const createNotificationsBatchJob = async (ctx: AppContext, data: Notific
             .with('InputVersions', (qb) =>
                 qb
                     .selectFrom('TopicVersion')
-                    .select(['uri', 'topicId'])
+                    .innerJoin("Record", "Record.uri", "TopicVersion.uri")
+                    .select(['uri', 'topicId', "Record.created_at"])
                     .where('uri', 'in', data.uris)
             )
             .selectFrom("InputVersions")
             .innerJoin('TopicVersion as tv', 'InputVersions.topicId', 'tv.topicId')
+            .innerJoin("Record as tvRecord", "tvRecord.uri", "InputVersions.uri")
+            .whereRef("InputVersions.created_at", ">", "tvRecord.created_at")
             .select([
                 'InputVersions.uri as causeUri',
                 'tv.uri as notifiedVersionUri',
