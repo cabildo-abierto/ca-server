@@ -33,7 +33,7 @@ import {
     getCategories,
     getTopicsMentioned
 } from "#/services/wiki/topics";
-import {getTopicFeed} from "#/services/feed/topic";
+import {getTopicFeed, getTopicMentionsInTopicsFeed, getTopicQuoteReplies} from "#/services/feed/topic";
 import {deleteCAProfile, deleteRecordHandler, deleteRecordsHandler} from "#/services/delete";
 import {getCategoriesGraph, getCategoryGraph} from "#/services/wiki/graph";
 import {createTopicVersion} from "#/services/write/topic";
@@ -220,9 +220,20 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/topic-feed',
+        '/topic-feed/:kind',
         makeHandlerNoAuth(ctx, getTopicFeed)
     )
+
+    router.get(
+        '/topic-mentions-in-topics-feed',
+        makeHandler(ctx, getTopicMentionsInTopicsFeed)
+    )
+
+    router.get(
+        '/topic-quote-replies/:did/:rkey',
+        makeHandler(ctx, getTopicQuoteReplies)
+    )
+
 
     router.get(
         '/topic-history/:id',
