@@ -397,9 +397,9 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get("/follow-suggestions/:limit/:offset", makeHandler(ctx, getFollowSuggestions))
 
-    router.get("/likes/:did/:collection/:rkey/:limit/:offset", makeHandler(ctx, getLikes))
+    router.get("/likes/:did/:collection/:rkey", makeHandler(ctx, getLikes))
 
-    router.get("/reposts/:did/:collection/:rkey/:limit/:offset", makeHandler(ctx, getReposts))
+    router.get("/reposts/:did/:collection/:rkey", makeHandler(ctx, getReposts))
 
     router.post("/not-interested/:subject", makeHandler(ctx, setNotInterested))
 
