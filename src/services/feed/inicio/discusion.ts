@@ -50,6 +50,7 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
             .where('Record.collection', 'in', collections)
             .innerJoin('Content', 'Record.uri', 'Content.uri')
             .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
+            .where("Record.created_at", ">", startDate)
             .select(eb => [
                 'Record.uri',
                 'Record.uniqueLikesCount',
@@ -65,7 +66,6 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
 
         res = sortByKey(res, e => {
             return [
-                e.created_at > startDate ? 1 : 0,
                 (e.uniqueLikesCount ?? 0) - (e.autolike ? 1 : 0),
                 e.created_at.getTime()
             ];
@@ -80,6 +80,7 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
         let res = await ctx.kysely
             .selectFrom('Record')
             .where('Record.collection', 'in', collections)
+            .where("Record.created_at", ">", startDate)
             .innerJoin('Content', 'Record.uri', 'Content.uri')
             .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
             .select(eb => [
@@ -108,7 +109,6 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
         // TO DO: Hacer adentro de la query
         res = sortByKey(res, e => {
             return [
-                e.created_at > startDate ? 1 : 0,
                 (e.uniqueLikesCount ?? 0) +
                 (e.uniqueRepostsCount ?? 0) +
                 (Number(e.replies_count) ?? 0) -
@@ -128,6 +128,7 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
         let res = await ctx.kysely
             .selectFrom('Record')
             .where('Record.collection', 'in', collections)
+            .where("Record.created_at", ">", startDate)
             .innerJoin('Content', 'Record.uri', 'Content.uri')
             .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
             .select(eb => [
@@ -161,7 +162,6 @@ export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusi
 
         res = sortByKey(res, e => {
             return [
-                e.created_at > startDate ? 1 : 0,
                 ((e.uniqueLikesCount ?? 0) +
                 (e.uniqueRepostsCount ?? 0) +
                 (Number(e.replies_count) ?? 0) -
