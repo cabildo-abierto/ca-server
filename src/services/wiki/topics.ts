@@ -328,7 +328,9 @@ export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?:
         }
     }
 
-    const {data: currentVersionId} = await cached(ctx, ["currentVersion", id], async () => getTopicCurrentVersionFromDB(ctx, id))
+    const {data: currentVersionId, error} = await getTopicCurrentVersionFromDB(ctx, id)
+    if(error) return {error: "No se encontró el tema " + id + "."}
+
     let uri: string
     if (!currentVersionId) {
         console.log(`Warning: Current version not set for topic ${id}.`)
