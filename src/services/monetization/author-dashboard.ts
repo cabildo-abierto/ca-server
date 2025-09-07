@@ -15,8 +15,11 @@ type ArticleStats = {
     created_at: Date
     title: string
     seenBy: number
-    avgReadFraction: number
+    seenByVerified: number
+    avgReadFraction: number | null
+    avgReadFractionVerified: number | null
     income: number
+    likes: number
 }
 
 
@@ -27,6 +30,7 @@ type EditedTopicStats = {
     last_edit: Date
     edits_count: number
     topicSeenBy: number
+    topicSeenByVerified: number
     contribution: number | null
     monetizedContribution: number | null
     income: number
@@ -37,9 +41,11 @@ type AuthorDashboard = {
     articles: ArticleStats[]
     edits: EditedTopicStats[]
     totalReadByArticles: number | null
+    totalReadByArticlesVerified: number | null
     avgReadFractionArticles: number | null
+    avgReadFractionArticlesVerified: number | null
     totalReadByEdits: number | null
-    avgReadFractionEdits: number | null
+    totalReadByEditsVerified: number | null
     totalIncome: number | null
 }
 
@@ -52,6 +58,7 @@ type TopicVersionQueryResult = {
     reactions: unknown
     protection: string
     seenBy: number
+    seenByVerified: number
     income: number | null
 }
 
@@ -127,8 +134,13 @@ async function getTopicsForDashboardQuery(ctx: AppContext, did: string) {
                     .distinct()
                     .filterWhereRef('ReadSession.created_at', '>', 'Record.created_at')
                     .filterWhereRef("ReadSession.userId", "!=", "Record.authorId")
-                    .filterWhere("Reader.userValidationHash", "is not", null)
                     .as("seenBy"),
+                eb => eb.fn.count<number>("ReadSession.userId")
+                    .distinct()
+                    .filterWhereRef('ReadSession.created_at', '>', 'Record.created_at')
+                    .filterWhereRef("ReadSession.userId", "!=", "Record.authorId")
+                    .filterWhere("Reader.userValidationHash", "is not", null)
+                    .as("seenByVerified"),
                 eb => eb.selectFrom('PaymentPromise')
                     .whereRef('PaymentPromise.contentId', '=', 'TopicVersion.uri')
                     .select(eb => eb.fn.sum<number>('PaymentPromise.amount').as("income"))
@@ -194,7 +206,8 @@ async function getTopicsForDashboardQuery(ctx: AppContext, did: string) {
             acceptedCount,
             contribution,
             monetizedContribution,
-            topicSeenBy: t[0].seenBy
+            topicSeenBy: t[0].seenBy,
+            topicSeenByVerified: t[0].seenByVerified
         }
     })
 
@@ -213,6 +226,24 @@ export function getReadPercentageFromChunks(chunks: ReadChunks, totalChunks: num
 }
 
 
+function getAvgReadFraction(readSessions: any[] | undefined, did: string) {
+    if(!readSessions) return null
+    const sessionsByUser = new Map<string, ReadChunksAttr[]>()
+    readSessions.forEach(s => {
+        sessionsByUser.set(s.userId, [
+            ...(sessionsByUser.get(s.userId) ?? []),
+            s.readChunks as ReadChunksAttr
+        ])
+    })
+
+    return sum(Array.from(sessionsByUser.entries()).filter(([readerDid, s]) => s.length > 0 && readerDid != did), ([did, s]) => {
+        const allUserChunks = s.map(s => s.chunks)
+        const chunks = joinManyChunks(allUserChunks)
+        return getReadPercentageFromChunks(chunks, s[0].totalChunks)
+    }) / sessionsByUser.size
+}
+
+
 async function getArticlesForDashboardQuery(ctx: AppContext, did: string): Promise<ArticleStats[]> {
 
     const [readSessions, paymentPromises] = await Promise.all([
@@ -226,13 +257,11 @@ async function getArticlesForDashboardQuery(ctx: AppContext, did: string): Promi
                 "Article.title",
                 "Record.created_at",
                 "ReadSession.readChunks",
-                "ReadSession.userId"
+                "ReadSession.userId",
+                "Reader.userValidationHash",
+                "Record.uniqueLikesCount"
             ])
             .where("Record.authorId", "=", did)
-            .where(eb => eb.or([
-                eb("Reader.userValidationHash", "is not", null),
-                eb("Reader.did", "is", null)
-            ]))
             .execute(),
         ctx.kysely
             .selectFrom("Article")
@@ -249,11 +278,20 @@ async function getArticlesForDashboardQuery(ctx: AppContext, did: string): Promi
             .execute()
     ])
 
-    const m = new Map<string, {uri: string, title: string, created_at: Date, income: number | null, readSessions?: {readChunks: unknown, userId: string}[]}>()
+    const m = new Map<string, {
+        uri: string
+        title: string
+        created_at: Date
+        uniqueLikesCount: number
+        income: number | null
+        readSessions?: {readChunks: unknown, userId: string, verified: boolean}[]
+    }>()
+
     readSessions.forEach(r => {
         const cur = m.get(r.uri)
         const readSessions = r.readChunks && r.userId ?
-            [...(cur && cur.readSessions ? cur.readSessions : []), {readChunks: r.readChunks, userId: r.userId}]
+            [...(cur && cur.readSessions ? cur.readSessions : []), {
+            readChunks: r.readChunks, userId: r.userId, verified: r.userValidationHash != null}]
             :
             cur?.readSessions
         m.set(r.uri, {
@@ -261,7 +299,8 @@ async function getArticlesForDashboardQuery(ctx: AppContext, did: string): Promi
             title: r.title,
             created_at: r.created_at,
             readSessions,
-            income: null
+            income: null,
+            uniqueLikesCount: r.uniqueLikesCount
         })
     })
 
@@ -278,28 +317,25 @@ async function getArticlesForDashboardQuery(ctx: AppContext, did: string): Promi
         const seenBy = new Set(a.readSessions?.map(a => a.userId))
         seenBy.delete(did)
 
-        const sessionsByUser = new Map<string, ReadChunksAttr[]>()
-        a.readSessions?.forEach(s => {
-            sessionsByUser.set(s.userId, [
-                ...(sessionsByUser.get(s.userId) ?? []),
-                s.readChunks as ReadChunksAttr
-            ])
-        })
+        const verifiedReadSessions = a.readSessions?.filter(r => r.verified)
+        const seenByVerified = new Set<string>(
+            verifiedReadSessions?.map(r => r.userId)
+        )
+        seenByVerified.delete(did)
 
-        const avgReadFraction = sum(Array.from(sessionsByUser.entries()).filter(([readerDid, s]) => s.length > 0 && readerDid != did), ([did, s]) => {
-            const allUserChunks = s.map(s => s.chunks)
-            const chunks = joinManyChunks(allUserChunks)
-            const res = getReadPercentageFromChunks(chunks, s[0].totalChunks)
-            return res
-        }) / sessionsByUser.size
+        const avgReadFraction = getAvgReadFraction(a.readSessions, did)
+        const avgReadFractionVerified = getAvgReadFraction(verifiedReadSessions, did)
 
         return {
             uri: a.uri,
             created_at: a.created_at,
             title: a.title,
             seenBy: seenBy.size,
+            seenByVerified: seenByVerified.size,
             avgReadFraction,
-            income: a.income ?? 0
+            avgReadFractionVerified,
+            income: a.income ?? 0,
+            likes: a.uniqueLikesCount
         }
     }), x => x.income, orderNumberDesc)
 }
@@ -314,14 +350,17 @@ export async function getAuthorDashboard(ctx: AppContext, did: string) {
     if(!editStats.data) return {error: editStats.error}
 
     const totalReadByEdits = editStats.data.length > 0 ? sum(editStats.data, a => Number(a.topicSeenBy)) : null
+    const totalReadByEditsVerified = editStats.data.length > 0 ? sum(editStats.data, a => Number(a.topicSeenByVerified)) : null
 
     const authorDashboard: AuthorDashboard = {
         articles,
         edits: editStats.data,
+        totalReadByArticlesVerified: articles.length > 0 ? sum(articles, a => a.seenByVerified) : null,
         totalReadByArticles: articles.length > 0 ? sum(articles, a => a.seenBy) : null,
-        avgReadFractionArticles: articles.length > 0 ? sum(articles, a => a.avgReadFraction) / articles.length : null,
+        avgReadFractionArticles: articles.length > 0 ? sum(articles, a => a.avgReadFraction ?? 0) / articles.length : null,
+        avgReadFractionArticlesVerified: articles.length > 0 ? sum(articles, a => a.avgReadFractionVerified ?? 0) / articles.length : null,
         totalReadByEdits,
-        avgReadFractionEdits: null,
+        totalReadByEditsVerified,
         totalIncome: sum([...articles, ...editStats.data], e => e.income)
     }
 
