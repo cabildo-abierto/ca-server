@@ -3,7 +3,7 @@ import {
 } from "./process-batch";
 import {getUserMirrorStatus, setMirrorStatus} from "./mirror-status";
 import {AppContext} from "#/index";
-import {getCAUsersDids} from "#/services/user/users";
+import {getCAUsersDids, handleToDid} from "#/services/user/users";
 import {JetstreamEvent, UserRepo, UserRepoElement} from "#/lib/types";
 import {iterateAtpRepo} from "@atcute/car"
 import {getServiceEndpointForDid} from "#/services/blob";
@@ -20,7 +20,9 @@ export async function syncAllUsers(ctx: AppContext, mustUpdateCollections?: stri
 
     for (let i = 0; i < users.length; i++) {
         console.log("Syncing user", i + 1, "of", users.length, `(did: ${users[i]})`)
+        await setMirrorStatus(ctx, users[i], "InProcess", true)
         await syncUser(ctx, users[i], mustUpdateCollections)
+
     }
 }
 
@@ -32,48 +34,40 @@ export async function getCAUsersAndFollows(ctx: AppContext) {
         .innerJoin("Record", "Record.uri", "Follow.uri")
         .innerJoin("User as Follower", "Follower.did", "Record.authorId")
         .where("Follower.inCA", "=", true)
-        .select(["User.did", "User.mirrorStatus"])
+        .select(["User.did"])
         .distinct()
         .execute()
 }
 
 
-export async function syncAllUsersAndFollows(ctx: AppContext, mustUpdateCollections?: string[], retries: number = 100, ignoreStatus = true) {
-    const users = await getCAUsersAndFollows(ctx)
-
-    console.log("Se obtuvieron", users.length, "usuarios")
-    const pending = users.filter(u => u.mirrorStatus != "Sync")
-    console.log(`Están pendientes: ${pending.length}`)
-
-    const toSync = ignoreStatus || mustUpdateCollections?.length ? users : pending
-
-    for (let i = 0; i < toSync.length; i++) {
-        console.log("Syncing user", i + 1, "of", toSync.length, `(did: ${users[i].did})`)
-        await syncUser(ctx, toSync[i].did, mustUpdateCollections)
-    }
-}
-
-
-function parseCar(did: string, buf: ArrayBuffer): UserRepo {
-    const ui8 = new Uint8Array(buf);
-    const repo = []
-    for (const {collection, rkey, record, cid} of iterateAtpRepo(ui8)) {
-        const uri = "at://" + did + "/" + collection + "/" + rkey
-        repo.push({did, collection, rkey, record, cid: cid.$link, uri: uri})
-    }
-    return repo
-}
-
-
-export async function getUserRepo(did: string, doc: string | Record<string, unknown> | null) {
-    if (typeof doc != "string") return null
+export async function getUserRepo(did: string, doc: string, collections: string[]): Promise<{repo?: any[], error?: string}> {
     const url = doc + "/xrpc/com.atproto.sync.getRepo?did=" + did
+    console.log(`fetching ${did} repo from`, url)
     const res = await fetch(url)
+    console.log("got repo", did)
+
+    const collectionsSet = new Set(collections)
+
     if (res.ok) {
         const arrayBuffer = await res.arrayBuffer()
-        return parseCar(did, arrayBuffer)
+        const mb = 1000000
+        if(arrayBuffer.byteLength > 50 * mb){
+            console.log(`${did} repo is too large: ${arrayBuffer.byteLength / mb}mbs.`)
+            return {error: "too large"}
+        }
+
+        const ui8 = new Uint8Array(arrayBuffer)
+        const repo = []
+        for (const {collection, rkey, record, cid} of iterateAtpRepo(ui8)) {
+            const uri = "at://" + did + "/" + collection + "/" + rkey
+            if(collectionsSet.has(collection)){
+                repo.push({did, collection, rkey, record, cid: cid.$link, uri: uri})
+            }
+        }
+        return {repo}
     }
-    return null
+    console.log(`fetch error for repo ${did}`)
+    return {error: "fetch error"}
 }
 
 
@@ -140,19 +134,12 @@ export async function syncUser(ctx: AppContext, did: string, collections?: strin
     console.log("Collections to sync:", collections)
 
     const doc = await getServiceEndpointForDid(did)
-
-    console.log(`Downloading repo ${did}...`)
-    const t2 = Date.now()
-    let repo = await getUserRepo(did, doc)
-
-    if (!repo) {
-        console.log("Couldn't fetch repo from " + did)
+    if (typeof doc != "string") {
         await setMirrorStatus(ctx, did, "Failed", inCA)
         return
     }
-    console.log(`Got ${did} repo after`, Date.now()-t2)
 
-    await processRepo(ctx, repo, did, collections)
+    await processRepo(ctx, doc, did, collections, inCA)
 
     while(true){
         const pending = await getPendingEvents(ctx, did)
@@ -171,7 +158,7 @@ export async function syncUser(ctx: AppContext, did: string, collections?: strin
 }
 
 
-const allCollections = [
+export const allCollections = [
     "app.bsky.feed.post",
     "app.bsky.feed.like",
     "app.bsky.feed.repost",
@@ -189,24 +176,34 @@ const allCollections = [
 
 export async function processCreateBatchInBatches(ctx: AppContext, records: UserRepoElement[], collection: string) {
     const batchSize = 1000
-    const batches = []
-    for (let i = 0; i < records.length; i += batchSize) {
-        batches.push(records.slice(i, i + batchSize))
-    }
-    for (let i = 0; i < batches.length; i++) {
-        if(batches.length > 1){
-            console.log(`${collection}: processing batch ${i + 1} of ${batches.length} (bs = ${batchSize})`)
+    for (let i = 0; i < records.length; i+=batchSize) {
+        if(i > 0){
+            console.log(`${collection}: processing batch ${i + 1} of ${records.length} (bs = ${batchSize})`)
         }
         const t1 = Date.now()
-        await processCreateBatch(ctx, batches[i], collection)
+        await processCreateBatch(ctx, records.slice(i, i+batchSize), collection)
         const t2 = Date.now()
         console.log(`processed batch in ${t2-t1}ms`)
     }
 }
 
 
-export async function processRepo(ctx: AppContext, repo: UserRepo, did: string, collections: string[] = []) {
+export async function processRepo(ctx: AppContext, doc: string, did: string, collections: string[] = [], inCA: boolean) {
     const t1 = Date.now()
+    if(collections.length == 0) collections = allCollections
+
+    console.log(`Downloading repo ${did}...`)
+    let {repo, error} = await getUserRepo(did, doc, collections)
+
+    if (!repo) {
+        if(error && error == "too large"){
+            await setMirrorStatus(ctx, did, "Failed - Too Large", inCA)
+        } else {
+            await setMirrorStatus(ctx, did, "Failed", inCA)
+        }
+        return
+    }
+
     const {reqUpdate, recordsReqUpdate, recordsNotPresent} = await checkUpdateRequired(
         ctx,
         repo,
@@ -214,31 +211,17 @@ export async function processRepo(ctx: AppContext, repo: UserRepo, did: string, 
         collections,
     )
     const t2 = Date.now()
-    console.log(`Repo has ${repo.length} records.`)
     console.log(`Requires update: ${reqUpdate}. Records to update: ${recordsReqUpdate ? recordsReqUpdate.size : 0}.`)
 
     if (!reqUpdate) {
         return
     }
 
-    const recordsByCollection = new Map<string, UserRepoElement[]>()
+    const repoReqUpdate = repo.filter(r => recordsReqUpdate.has(r.uri))
 
-    for (let i = 0; i < repo.length; i++) {
-        if (recordsReqUpdate.has(repo[i].uri)) {
-            const c = getCollectionFromUri(repo[i].uri)
-            const cur = recordsByCollection.get(c)
-            if(!cur){
-                recordsByCollection.set(c, [repo[i]])
-            } else {
-                cur.push(repo[i])
-            }
-        }
-    }
-
-    const entries = Array.from(recordsByCollection.entries())
-
-    for (let i = 0; i < entries.length; i++) {
-        const [collection, records] = entries[i]
+    for (let i = 0; i < collections.length; i++) {
+        const collection = collections[i]
+        const records = repoReqUpdate.filter(r => r.collection == collection)
 
         console.log(`*** Processing collection ${collection} (${records.length} records).`)
         const t1 = Date.now()
@@ -255,8 +238,6 @@ export async function processRepo(ctx: AppContext, repo: UserRepo, did: string, 
 
 
 export async function checkUpdateRequired(ctx: AppContext, repo: UserRepo, did: string, collections: string[]) {
-    if(collections.length == 0) collections = allCollections
-
     console.log("checking update required for collections", collections)
 
     const dbRecords = (await ctx.db.record.findMany({
@@ -268,6 +249,9 @@ export async function checkUpdateRequired(ctx: AppContext, repo: UserRepo, did: 
             authorId: did,
             collection: {
                 in: collections
+            },
+            record: {
+                not: null
             }
         }
     }))
@@ -303,7 +287,6 @@ export async function checkUpdateRequired(ctx: AppContext, repo: UserRepo, did: 
 
     // Iteramos los records del repo. Si alguno no está en la db o está y su cid no coincide o tiene una colección que estamos actualizando, require actualización
     filteredRepo.forEach((r, i) => {
-        const c = getCollectionFromUri(r.uri)
         if (!dbCids.has(r.uri) || dbCids.get(r.uri) != r.cid) {
             reqUpdate = true
             recordsReqUpdate.add(r.uri)
@@ -316,10 +299,14 @@ export async function checkUpdateRequired(ctx: AppContext, repo: UserRepo, did: 
 
 export const syncUserHandler: CAHandler<{
     params: { handleOrDid: string },
-    query: { c: string[] | string | undefined }
+    query: { c: string[] | string | undefined, inCA?: boolean }
 }, {}> = async (ctx, agent, {params, query}) => {
     const {handleOrDid} = params
-    const {c} = query
+    const {c, inCA} = query
+
+    const did = await handleToDid(ctx, agent, handleOrDid)
+    if(!did) return {error: "No se pudo obtener el did."}
+    await setMirrorStatus(ctx, did, "InProcess", inCA ?? false)
 
     await ctx.worker?.addJob("sync-user", {
         handleOrDid,
@@ -337,4 +324,60 @@ export const syncAllUsersHandler: CAHandler<{
     await ctx.worker?.addJob("sync-all-users", data)
     console.log("Added sync all users to queue with data", data)
     return {data: {}}
+}
+
+
+export async function updateRecordsCreatedAt(ctx: AppContext) {
+    let offset = 0
+    const bs = 10000
+    while(true){
+        console.log("updating records created at batch", offset)
+
+        const t1 = Date.now()
+        const res = await ctx.kysely
+            .selectFrom("Record")
+            .select([
+                "uri",
+                "record"
+            ])
+            .limit(bs)
+            .offset(offset)
+            .orderBy("uri desc")
+            .execute()
+        const t2 = Date.now()
+
+        const values: {uri: string, created_at: Date}[] = []
+        res.forEach(r => {
+            if(r.record){
+                const record = JSON.parse(r.record)
+                if(record.created_at){
+                    values.push({
+                        uri: r.uri,
+                        created_at: record.created_at
+                    })
+                }
+            }
+        })
+
+        console.log(`got ${res.length} results and ${values.length} values to update`)
+        if(values.length > 0){
+            await ctx.kysely
+                .insertInto("Record")
+                .values(values.map(v => ({
+                    ...v,
+                    collection: "",
+                    rkey: "",
+                    authorId: ""
+                })))
+                .onConflict(oc => oc.column("uri").doUpdateSet(eb => ({
+                    created_at: eb.ref("excluded.created_at")
+                })))
+                .execute()
+        }
+        const t3 = Date.now()
+        logTimes("batch done in", [t1, t2, t3])
+
+        offset += bs
+        if(res.length < bs) break
+    }
 }

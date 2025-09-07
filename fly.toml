@@ -36,6 +36,12 @@ primary_region = 'gru'
   memory = '2gb'
   processes = ['worker']
 
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+  processes = ['mirror']
+
 [processes]
   app = "node dist/index.js"
-  worker = "node dist/worker-mirror.js"
+  mirror = "node dist/mirror.js"
+  worker = "node dist/worker.js"

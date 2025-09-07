@@ -356,7 +356,7 @@ function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView
         if (view) {
             embedView = view;
         } else {
-            console.log("Warning: No se encontraron los datos para el record embed:", embed.record.uri)
+            console.log("Warning: No se encontraron los datos para el record embed:", embed.record.uri, "embedido en", uri)
         }
     }
 

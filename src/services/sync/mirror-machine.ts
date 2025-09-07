@@ -14,6 +14,7 @@ import {redisDeleteByPrefix} from "#/services/user/follow-suggestions";
 export class MirrorMachine {
     caUsers: Set<string> = new Set()
     extendedUsers: Set<string> = new Set()
+    tooLargeUsers: Set<string> = new Set()
     eventCounter: number = 0
     lastLog: Date = new Date()
     lastRetry: Map<string, Date> = new Map()
@@ -24,14 +25,23 @@ export class MirrorMachine {
         this.ctx = ctx
     }
 
-    async fetchUsers(){
+    async setup() {
         console.log("Setting up mirror...")
+        await this.fetchUsers()
+        console.log("CA users:", this.caUsers.size)
+        console.log("Extended users:", this.extendedUsers.size)
+
+        await redisDeleteByPrefix(this.ctx, mirrorStatusKeyPrefix(this.ctx))
+        console.log("Mirror ready.")
+    }
+
+    async fetchUsers(){
         const dids = await getCAUsersDids(this.ctx)
         const extendedUsers = (await getCAUsersAndFollows(this.ctx)).map(x => x.did)
         await redisDeleteByPrefix(this.ctx, mirrorStatusKeyPrefix(this.ctx))
         this.caUsers = new Set(dids)
         this.extendedUsers = new Set(extendedUsers.filter(x => !this.caUsers.has(x)))
-        console.log("Mirror ready.")
+        this.tooLargeUsers = new Set()
     }
 
     logEventsPerSecond(){
@@ -44,60 +54,66 @@ export class MirrorMachine {
     }
 
     async run(){
-        await this.fetchUsers()
-        console.log("CA users:", this.caUsers.size)
-        console.log("Extended users:", this.extendedUsers.size)
-        const url = 'wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.*&wantedCollections=ar.cabildoabierto.*'
-        const ws = new WebSocket(url)
+        await this.setup()
 
-        ws.on('open', () => {
-            console.log('Connected to the WebSocket server');
-        })
+        const connect = () => {
+            const url = 'wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.*&wantedCollections=ar.cabildoabierto.*'
+            const ws = new WebSocket(url)
 
-        ws.on('message', async (data: RawData) => {
-            this.logEventsPerSecond()
+            ws.on('open', () => {
+                console.log('Connected to the WebSocket server');
+            })
 
-            const e: JetstreamEvent = JSON.parse(data.toString())
+            ws.on('error', (error: Error) => {
+                console.error('WebSocket error:', error)
+                ws.close()
+            })
 
-            if(e.kind == "commit") {
-                const c = e as CommitEvent
-                if(isCAProfile(c.commit.collection) && c.commit.rkey == "self"){
-                    this.caUsers.add(e.did)
-                    this.extendedUsers.add(e.did)
-                    console.log("Added user", e.did)
-                }
-            }
+            ws.on('close', () => {
+                console.log('WebSocket connection closed. Retrying in 5s...')
+                setTimeout(connect, 5000)
+            })
 
-            const inCA = this.caUsers.has(e.did)
-            const inExtended = this.extendedUsers.has(e.did)
+            ws.on('message', async (data: RawData) => {
+                this.logEventsPerSecond()
 
-            if(!inCA && !inExtended){
-                return
-            }
+                const e: JetstreamEvent = JSON.parse(data.toString())
 
-            if(inCA){
-                this.eventCounter++
-                await this.processEvent(this.ctx, e, inCA)
-                if(e.kind == "commit" && isFollow((e as CommitEvent).commit.collection)){
-                    const record: Follow.Record = (e as CommitEvent).commit.record
-                    if((e as CommitEvent).commit.operation == "create"){
-                        this.extendedUsers.add(record.subject)
-                        console.log("Added extended user", record.subject)
+                if(e.kind == "commit") {
+                    const c = e as CommitEvent
+                    if(isCAProfile(c.commit.collection) && c.commit.rkey == "self"){
+                        this.caUsers.add(e.did)
+                        this.extendedUsers.add(e.did)
+                        console.log("Added user", e.did)
                     }
                 }
-            } else if(inExtended && e.kind == "commit" && isFollow((e as CommitEvent).commit.collection)){
-                this.eventCounter++
-                await this.processEvent(this.ctx, e, inCA)
-            }
-        })
 
-        ws.on('error', (error: Error) => {
-            console.error('WebSocket error:', error);
-        })
+                const inCA = this.caUsers.has(e.did)
+                const inExtended = this.extendedUsers.has(e.did)
+                const inTooLarge = this.tooLargeUsers.has(e.did)
 
-        ws.on('close', () => {
-            console.log('WebSocket connection closed');
-        })
+                if((!inCA && !inExtended) || inTooLarge){
+                    return
+                }
+
+                if(inCA){
+                    this.eventCounter++
+                    await this.processEvent(this.ctx, e, inCA)
+                    if(e.kind == "commit" && isFollow((e as CommitEvent).commit.collection)){
+                        const record: Follow.Record = (e as CommitEvent).commit.record
+                        if((e as CommitEvent).commit.operation == "create"){
+                            this.extendedUsers.add(record.subject)
+                            console.log("Added extended user", record.subject)
+                        }
+                    }
+                } else if(inExtended && e.kind == "commit" && isFollow((e as CommitEvent).commit.collection)){
+                    this.eventCounter++
+                    await this.processEvent(this.ctx, e, inCA)
+                }
+            })
+        }
+
+        connect()
     }
 
     async processEvent(ctx: AppContext, e: JetstreamEvent, inCA: boolean) {
@@ -130,6 +146,9 @@ export class MirrorMachine {
                 await setMirrorStatus(ctx, e.did, "InProcess", inCA)
                 await ctx.worker?.addJob("sync-user", {handleOrDid: e.did})
             }
+        } else if(mirrorStatus == "Failed - Too Large"){
+            this.tooLargeUsers.add(e.did)
+            console.log(`${e.did} tiene un repositorio demasiado pesado.`)
         }
     }
 }

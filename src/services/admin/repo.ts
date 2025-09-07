@@ -1,6 +1,6 @@
 import {CAHandler} from "#/utils/handler";
 import {getServiceEndpointForDid} from "#/services/blob";
-import {getUserRepo} from "#/services/sync/sync-user";
+import {allCollections, getUserRepo} from "#/services/sync/sync-user";
 
 type UserRepoCounts = {
     counts: {
@@ -17,13 +17,13 @@ export const getRepoCounts: CAHandler<{params: {handleOrDid: string}}, UserRepoC
     }
 
     const doc = await getServiceEndpointForDid(did)
-    if(!doc){
+    if(typeof doc != "string"){
         return {error: "No se encontró el repositorio."}
     }
 
-    let repo = await getUserRepo(did, doc)
+    let {repo, error} = await getUserRepo(did, doc, allCollections)
     if(!repo){
-        return {error: "No se pudo obtener el repositorio."}
+        return {error}
     }
 
     const counts = new Map<string, number>()

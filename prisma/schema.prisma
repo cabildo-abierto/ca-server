@@ -22,13 +22,6 @@ model AuthState {
   state String
 }
 
-enum MirrorStatus {
-  Dirty
-  InProcess
-  Sync
-  Failed
-}
-
 model User {
   did                        String       @id @db.VarChar(255) // https://atproto.com/guides/identity
   handle                     String?
@@ -41,7 +34,6 @@ model User {
   inCA                       Boolean      @default(false)
   CAProfile                  Record?      @relation("CAProfile", fields: [CAProfileUri], references: [uri])
   CAProfileUri               String?      @unique
-  mirrorStatus               MirrorStatus @default(Dirty) // estado del mirror, usado en atproto-sync
   createdAt                  DateTime     @default(now()) @map("created_at")
   editorStatus               EditorStatus @default(Beginner) // permisos de editor en la wiki
   platformAdmin              Boolean      @default(false) // si tiene acceso o no a /admin
@@ -315,6 +307,7 @@ model Record {
 
   @@index([authorId, createdAt(sort: Desc)])
   @@index([collection, createdAt(sort: Desc)])
+  @@index([authorId, collection, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
 }
 

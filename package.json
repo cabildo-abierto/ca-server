@@ -9,6 +9,7 @@
   "scripts": {
     "worker": "tsx watch --clear-screen=false src/worker.ts | pino-pretty",
     "worker-mirror": "tsx watch --clear-screen=false src/worker-mirror.ts | pino-pretty",
+    "mirror": "tsx watch --clear-screen=false src/mirror.ts | pino-pretty",
     "dev": "tsx watch --clear-screen=false src/index.ts | pino-pretty",
     "build": "tsup",
     "typecheck": "tsc --noEmit",

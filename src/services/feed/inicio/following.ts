@@ -294,139 +294,110 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
 }
 
 
-function followingFeedOnlyCABaseQueryAll(ctx: AppContext, agent: SessionAgent, cursor?: string) {
-    return ctx.kysely
-        .with("follows", eb => eb
-            .selectFrom("User")
-            .select(["User.did"])
-            .where("User.inCA", "=", true)
-            .where(eb => eb.or([
-                eb("User.did", "=", agent.did),
-                eb.exists(
-                    eb.selectFrom("Follow")
-                        .innerJoin("Record", "Follow.uri", "Record.uri")
-                        .where("Record.authorId", "=", agent.did)
-                        .whereRef("Follow.userFollowedId", "=", "User.did")
-                )
-            ]))
-        )
-        .with("filteredRecords", (eb) =>
-            eb
-                .selectFrom("Record")
-                .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.post", "app.bsky.feed.repost"])
-                .where(eb => eb.exists(
-                        eb
-                            .selectFrom("follows")
-                            .whereRef("follows.did", "=", "Record.authorId")
-                    )
-                )
-                .$if(cursor != null, (qb) => qb.where("Record.created_at", "<", new Date(cursor!)))
-                .select(["Record.uri", "Record.collection", "Record.created_at"])
-        )
-        .selectFrom("filteredRecords as Record")
-        .leftJoin("Post", (join) =>
-            join
-                .onRef("Post.uri", "=", "Record.uri")
-                .on("Record.collection", "=", "app.bsky.feed.post")
-        )
-        .leftJoin("Reaction as Repost", (join) =>
-            join
-                .onRef("Repost.uri", "=", "Record.uri")
-                .on("Record.collection", "=", "app.bsky.feed.repost")
-        )
-        .leftJoin("Record as RepostedRecord", "Repost.subjectId", "RepostedRecord.uri")
-        .select([
-            "Record.uri as uri",
-            "Record.created_at as createdAt",
-            "RepostedRecord.uri as repostedRecordUri"
-        ])
-        .where((eb) =>
-            eb.or([
-                eb.and([
-                    eb("Record.collection", "=", "app.bsky.feed.post"),
-                    eb("Post.replyToId", "is", null)
-                ]),
-                eb("Record.collection", "=", "ar.cabildoabierto.feed.article"),
-                eb.and([
-                    eb("Record.collection", "=", "app.bsky.feed.repost"),
-                    eb.exists(
-                        eb.selectFrom("follows")
-                            .whereRef("follows.did", "=", "RepostedRecord.authorId")
-                    ),
-                ]),
-            ])
-        )
-        .orderBy("createdAt", "desc");
+async function getCAFollows(ctx: AppContext, did: string){
+    return (await ctx.kysely.selectFrom("Follow")
+        .select("Follow.userFollowedId as did")
+        .innerJoin("Record", "Follow.uri", "Record.uri")
+        .innerJoin("User", "User.did", "Follow.userFollowedId")
+        .where("Record.authorId", "=", did)
+        .where("User.inCA", "=", true)
+        .execute())
+        .map(x => x.did)
+        .filter(x => x != null)
 }
 
 
-function followingFeedOnlyCABaseQueryArticles(ctx: AppContext, agent: SessionAgent, cursor?: string) {
-    return ctx.kysely
-        .with("follows", eb => eb
-            .selectFrom("User")
-            .where("User.inCA", "=", true)
-            .select(["User.did"])
-            .where(eb => eb.or([
-                eb("User.did", "=", agent.did),
-                eb.exists(
-                    eb.selectFrom("Follow")
-                        .innerJoin("Record", "Follow.uri", "Record.uri")
-                        .where("Record.authorId", "=", agent.did)
-                        .whereRef("Follow.userFollowedId", "=", "User.did")
-                )
-            ]))
-        )
-        .with("filteredRecords", (eb) =>
-            eb
-                .selectFrom("Record")
-                .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.repost"])
-                .where(eb => eb.exists(
-                        eb
-                            .selectFrom("follows")
-                            .whereRef("follows.did", "=", "Record.authorId")
-                    )
-                )
-                .$if(cursor != null, (qb) => qb.where("Record.created_at", "<", new Date(cursor!)))
-                .select(["Record.uri", "Record.collection", "Record.created_at"])
-        )
-        .selectFrom("filteredRecords as Record")
-        .leftJoin("Reaction as Repost", (join) =>
-            join
-                .onRef("Repost.uri", "=", "Record.uri")
-                .on("Record.collection", "=", "app.bsky.feed.repost")
-        )
-        .leftJoin("Record as RepostedRecord", "Repost.subjectId", "RepostedRecord.uri")
+async function followingFeedOnlyCABaseQueryAll(ctx: AppContext, agent: SessionAgent, limit: number, cursor?: string): Promise<{uri: string, createdAt: Date, repostedRecordUri: string | null}[]> {
+    const follows = await getCAFollows(ctx, agent.did)
+
+    return await ctx.kysely
+        .selectFrom("Record")
+        .where("Record.collection", "=", "ar.cabildoabierto.feed.article")
+        .$if(cursor != null, (qb) => qb.where("Record.created_at", "<", new Date(cursor!)))
+        .where("Record.authorId", "in", [...follows, agent.did])
         .select([
             "Record.uri as uri",
             "Record.created_at as createdAt",
-            "RepostedRecord.uri as repostedRecordUri"
+            eb => eb.val<string | null>(null).as("repostedRecordUri")
         ])
-        .where((eb) =>
-            eb.or([
-                eb("Record.collection", "=", "ar.cabildoabierto.feed.article"),
-                eb.exists(
-                    eb.selectFrom("follows")
-                        .whereRef("follows.did", "=", "RepostedRecord.authorId")
-                )
+        .unionAll(eb => eb
+            .selectFrom("Record")
+            .$if(cursor != null, (qb) => qb.where("Record.created_at", "<", new Date(cursor!)))
+            .where("Record.authorId", "in", [...follows, agent.did])
+            .where("Record.collection", "=", "app.bsky.feed.post")
+            .leftJoin("Post", "Post.uri", "Record.uri")
+            .where("Post.replyToId", "is", null)
+            .select([
+                "Record.uri as uri",
+                "Record.created_at as createdAt",
+                eb => eb.val<string | null>(null).as("repostedRecordUri")
             ])
         )
-        .orderBy("createdAt", "desc");
+        .unionAll(eb => eb
+            .selectFrom("Record")
+            .$if(cursor != null, (qb) => qb.where("Record.created_at", "<", new Date(cursor!)))
+            .where("Record.authorId", "in", [...follows, agent.did])
+            .where("Record.collection", "=", "app.bsky.feed.repost")
+            .leftJoin("Reaction", "Reaction.uri", "Record.uri")
+            .leftJoin("Record as SubjectRecord", "SubjectRecord.uri", "Reaction.subjectId")
+            .where("SubjectRecord.authorId", "in", [...follows, agent.did])
+            .where("SubjectRecord.collection", "in", ["app.bsky.feed.post", "ar.cabildoabierto.feed.article"])
+            .select([
+                "Record.uri as uri",
+                "Record.created_at as createdAt",
+                "Reaction.subjectId as repostedRecordUri"
+            ])
+        )
+        .orderBy("createdAt", "desc")
+        .limit(limit)
+        .execute()
+}
+
+
+async function followingFeedOnlyCABaseQueryArticles(ctx: AppContext, agent: SessionAgent, limit: number, cursor?: string) {
+    const follows = await getCAFollows(ctx, agent.did)
+
+    return await ctx.kysely
+        .selectFrom("Record")
+        .where("Record.collection", "=", "ar.cabildoabierto.feed.article")
+        .$if(cursor != null, (qb) => qb.where("Record.created_at", "<", new Date(cursor!)))
+        .where("Record.authorId", "in", [...follows, agent.did])
+        .select([
+            "Record.uri as uri",
+            "Record.created_at as createdAt",
+            eb => eb.val<string | null>(null).as("repostedRecordUri")
+        ])
+        .unionAll(eb => eb
+            .selectFrom("Record")
+            .$if(cursor != null, (qb) => qb.where("Record.created_at", "<", new Date(cursor!)))
+            .where("Record.authorId", "in", [...follows, agent.did])
+            .where("Record.collection", "=", "app.bsky.feed.repost")
+            .leftJoin("Reaction", "Reaction.uri", "Record.uri")
+            .leftJoin("Record as SubjectRecord", "SubjectRecord.uri", "Reaction.subjectId")
+            .where("SubjectRecord.authorId", "in", [...follows, agent.did])
+            .where("SubjectRecord.collection", "=", "ar.cabildoabierto.feed.article")
+            .select([
+                "Record.uri as uri",
+                "Record.created_at as createdAt",
+                "Reaction.subjectId as repostedRecordUri"
+            ])
+        )
+        .orderBy("createdAt", "desc")
+        .limit(limit)
+        .execute()
 }
 
 
 const getFollowingFeedSkeletonOnlyCA: (format: FeedFormatOption) => GetSkeletonProps = (format) => async (ctx, agent, data, cursor) => {
     if (!agent.hasSession()) return {skeleton: [], cursor: undefined}
 
-    const query = format == "Todos" ?
-        followingFeedOnlyCABaseQueryAll(ctx, agent, cursor) :
-        followingFeedOnlyCABaseQueryArticles(ctx, agent, cursor)
-
     const limit = 25
 
     const t1 = Date.now()
-    const posts = await query
-        .limit(limit)
-        .execute()
+    const posts = await (format == "Todos" ?
+        followingFeedOnlyCABaseQueryAll(ctx, agent, limit, cursor) :
+        followingFeedOnlyCABaseQueryArticles(ctx, agent, limit, cursor))
+
     const t2 = Date.now()
     logTimes("posts for skeleton only ca", [t1, t2])
 

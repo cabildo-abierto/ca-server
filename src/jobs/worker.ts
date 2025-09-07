@@ -1,7 +1,7 @@
 import {updateCategoriesGraph} from "#/services/wiki/graph";
 import {Worker} from 'bullmq';
 import {AppContext} from "#/index";
-import {syncAllUsers, syncAllUsersAndFollows, syncUser} from "#/services/sync/sync-user";
+import {syncAllUsers, syncUser, updateRecordsCreatedAt} from "#/services/sync/sync-user";
 import {dbHandleToDid, updateAuthorStatus} from "#/services/user/users";
 import {
     cleanNotCAReferences,
@@ -30,7 +30,6 @@ import {restartLastContentInteractionsUpdate} from "#/services/wiki/interactions
 import {updatePostLangs} from "#/services/admin/posts";
 import {createPaymentPromises} from "#/services/monetization/promise-creation";
 import {updateAllTopicsCurrentVersions} from "#/services/sync/process-batch";
-import {updateActiveUsers} from "#/services/user/active";
 import {updateFollowSuggestions} from "#/services/user/follow-suggestions";
 
 const mins = 60 * 1000
@@ -118,7 +117,6 @@ export class CAWorker {
         })
         this.registerJob("update-topics-popularity", () => updateTopicPopularityScores(ctx))
         this.registerJob("sync-all-users", (data) => syncAllUsers(ctx, (data as { mustUpdateCollections: string[] }).mustUpdateCollections))
-        this.registerJob("sync-all-follows", (data) => syncAllUsersAndFollows(ctx, (data as { mustUpdateCollections: string[] }).mustUpdateCollections))
         this.registerJob("delete-collection", (data) => deleteCollection(ctx, (data as { collection: string }).collection))
         this.registerJob("update-topics-categories", () => updateTopicsCategories(ctx))
         this.registerJob("update-topic-contributions", (data) => updateTopicContributions(ctx, data.topicIds as string[]))
@@ -144,6 +142,7 @@ export class CAWorker {
         this.registerJob("create-payment-promises", () => createPaymentPromises(ctx))
         this.registerJob("update-topics-current-versions", () => updateAllTopicsCurrentVersions(ctx))
         this.registerJob("update-follow-suggestions", () => updateFollowSuggestions(ctx))
+        this.registerJob("update-records-created-at", () => updateRecordsCreatedAt(ctx))
 
         await this.removeAllRepeatingJobs()
         await this.addRepeatingJob("update-topics-popularity", 30 * mins, 60 * mins)

@@ -1,6 +1,6 @@
 import {AppContext} from "#/index";
 
-export type MirrorStatus = "Sync" | "Dirty" | "InProcess" | "Failed"
+export type MirrorStatus = "Sync" | "Dirty" | "InProcess" | "Failed" | "Failed - Too Large"
 
 export async function getUserMirrorStatus(ctx: AppContext, did: string, inCA: boolean): Promise<MirrorStatus> {
     const res = await ctx.ioredis.get(mirrorStatusKey(ctx, did, inCA))

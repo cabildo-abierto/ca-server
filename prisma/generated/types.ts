@@ -4,13 +4,6 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   : ColumnType<T, T | undefined, T>;
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
-export const MirrorStatus = {
-    Dirty: "Dirty",
-    InProcess: "InProcess",
-    Sync: "Sync",
-    Failed: "Failed"
-} as const;
-export type MirrorStatus = (typeof MirrorStatus)[keyof typeof MirrorStatus];
 export const ModerationState = {
     Ok: "Ok",
     ShadowBan: "ShadowBan"
@@ -264,7 +257,6 @@ export type User = {
     hasAccess: Generated<boolean>;
     inCA: Generated<boolean>;
     CAProfileUri: string | null;
-    mirrorStatus: Generated<MirrorStatus>;
     created_at: Generated<Timestamp>;
     editorStatus: Generated<EditorStatus>;
     platformAdmin: Generated<boolean>;
