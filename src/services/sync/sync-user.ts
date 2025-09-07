@@ -299,14 +299,17 @@ export async function checkUpdateRequired(ctx: AppContext, repo: UserRepo, did: 
 
 export const syncUserHandler: CAHandler<{
     params: { handleOrDid: string },
-    query: { c: string[] | string | undefined, inCA?: boolean }
+    query: { c: string[] | string | undefined }
 }, {}> = async (ctx, agent, {params, query}) => {
     const {handleOrDid} = params
-    const {c, inCA} = query
+    const {c} = query
 
     const did = await handleToDid(ctx, agent, handleOrDid)
     if(!did) return {error: "No se pudo obtener el did."}
-    await setMirrorStatus(ctx, did, "InProcess", inCA ?? false)
+
+    const inCA = await isCAUser(ctx, did)
+
+    await setMirrorStatus(ctx, did, "InProcess", inCA)
 
     await ctx.worker?.addJob("sync-user", {
         handleOrDid,

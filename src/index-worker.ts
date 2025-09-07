@@ -63,6 +63,7 @@ export async function setupAppContext(roles: Role[]) {
     let worker: CAWorker | undefined = new CAWorker(ioredis, roles.includes("worker"))
 
     const mirrorId = `mirror-${process.env.NODE_ENV ?? "development"}`
+    console.log("Mirror ID", mirrorId)
 
     const ctx: AppContext = {
         db,

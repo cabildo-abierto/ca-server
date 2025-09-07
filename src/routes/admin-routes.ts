@@ -17,6 +17,7 @@ import {updateTopicContributionsHandler} from "#/services/wiki/contributions";
 import {getActivityStats, getStatsDashboard} from "#/services/admin/stats";
 import {getRepoCounts} from "#/services/admin/repo";
 import {startJob} from "#/jobs/worker";
+import {clearRedisHandler} from "#/services/admin/cache";
 
 
 function isAdmin(did: string) {
@@ -148,6 +149,8 @@ export const adminRoutes = (ctx: AppContext) => {
     router.get("/access-requests", makeAdminHandler(ctx, getAccessRequests))
 
     router.post("/access-request-sent/:id", makeAdminHandler(ctx, markAccessRequestSent))
+
+    router.post("/clear-redis/:prefix", makeAdminHandler(ctx, clearRedisHandler))
 
     return router
 }

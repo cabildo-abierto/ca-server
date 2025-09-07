@@ -36,6 +36,7 @@ import {NotificationBatchData, NotificationJobData} from "#/services/notificatio
 import {isReactionCollection} from "#/utils/type-utils";
 import {getTopicCurrentVersion} from "#/services/wiki/current-version";
 import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard";
+import {redisDeleteByPrefix} from "#/services/user/follow-suggestions";
 
 
 export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: ATProtoStrongRef, record: any }[]) {
@@ -153,6 +154,7 @@ export async function processFollowsBatch(ctx: AppContext, records: {
         const dids = unique(follows.map(f => getDidFromUri(f.uri)))
         for(let i = 0; i < dids.length; i++){
             await ctx.ioredis.set(`follow-suggestions-dirty:${dids[i]}`, "true")
+            await redisDeleteByPrefix(ctx, `ca-follows:${dids[i]}`)
         }
     })
 }
