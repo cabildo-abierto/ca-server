@@ -48,6 +48,7 @@ import {
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {getUrisFromThreadSkeleton} from "#/services/thread/thread";
 import {prettyPrintJSON} from "#/utils/strings";
+import {ProfileView} from "#/lex-api/types/app/bsky/actor/defs";
 
 
 export type FeedElementQueryResult = {
@@ -147,7 +148,7 @@ export class Dataplane {
     bskyPosts: Map<string, BskyPostView> = new Map()
     likes: Map<string, string | null> = new Map()
     reposts: Map<string, RepostQueryResult | null> = new Map() // mapea uri del post a información del repost asociado
-    bskyUsers: Map<string, $Typed<ProfileViewBasic> | $Typed<ProfileViewDetailed>> = new Map()
+    bskyUsers: Map<string, $Typed<ProfileViewBasic> | $Typed<ProfileViewDetailed> | $Typed<ProfileView>> = new Map()
     caUsers: Map<string, CAProfileViewBasic> = new Map()
     topicsByUri: Map<string, TopicQueryResultBasic> = new Map()
     textBlobs: Map<string, string> = new Map()

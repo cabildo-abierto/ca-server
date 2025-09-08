@@ -25,7 +25,7 @@ import {
 import {createPost} from "#/services/write/post";
 import {addLike, removeLike, removeRepost, repost} from "#/services/reactions/reactions";
 import {getThread} from "#/services/thread/thread";
-import {getLikes, getReposts} from "#/services/thread/getDetails";
+import {getLikes, getReposts, getQuotes} from "#/services/thread/getDetails";
 import {
     getTopicHandler,
     getTopicVersionHandler,
@@ -400,6 +400,8 @@ export const createRouter = (ctx: AppContext) => {
     router.get("/likes/:did/:collection/:rkey", makeHandler(ctx, getLikes))
 
     router.get("/reposts/:did/:collection/:rkey", makeHandler(ctx, getReposts))
+
+    router.get("/quotes/:did/:collection/:rkey", makeHandler(ctx, getQuotes))
 
     router.post("/not-interested/:subject", makeHandler(ctx, setNotInterested))
 

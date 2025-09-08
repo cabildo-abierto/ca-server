@@ -324,7 +324,7 @@ function hydrateRecordEmbedView(embed: CARecordEmbed | RecordEmbed, data: Datapl
 }
 
 
-function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView>, error?: string } {
+export function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView>, error?: string } {
     const post = data.bskyPosts?.get(uri)
     const caData = data.caContents?.get(uri)
 
