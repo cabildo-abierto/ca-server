@@ -15,6 +15,8 @@ import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {getEditedTopics, updateContentInteractionsForTopics} from "#/services/wiki/interactions";
 import {updateTopicPopularities} from "#/services/wiki/popularity";
 import {updateContentsText} from "#/services/wiki/content";
+import {redisDeleteByPrefix} from "#/services/user/follow-suggestions";
+import {topicMentionsSkeletonRedisKeyTopicPrefix} from "#/services/feed/topic";
 
 function getSynonymRegex(synonym: string){
     const escapedKey = cleanText(synonym).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -203,12 +205,22 @@ export async function applyReferencesUpdate(ctx: AppContext, referencesToInsert:
             }
         })
 
+        await clearRedisCacheAfterReferenceUpdate(ctx, referencesToInsert)
+
         const t2 = Date.now()
         console.log("Updates applied after", t2-t1)
     } catch (e) {
         console.log("Error applying references update")
         console.log(e)
         throw e
+    }
+}
+
+
+export async function clearRedisCacheAfterReferenceUpdate(ctx: AppContext, referencesToInsert: ReferenceToInsert[]) {
+    const insertedTopics = new Set(referencesToInsert.map(r => r.referencedTopicId))
+    for(const id of insertedTopics){
+        await redisDeleteByPrefix(ctx, topicMentionsSkeletonRedisKeyTopicPrefix(id))
     }
 }
 

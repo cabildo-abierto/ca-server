@@ -110,7 +110,6 @@ type UserAccessStatus = {
     hasAccess: boolean
     inCA: boolean
     inviteCode: string | null
-    mirrorStatus: string
     displayName: string | null
 }
 
@@ -120,7 +119,7 @@ export const getUsers: CAHandler<{}, UserAccessStatus[]> = async (ctx, agent, {}
         const users = await ctx.kysely
             .selectFrom("User")
             .leftJoin("InviteCode", "InviteCode.usedByDid", "User.did")
-            .select(["did", "handle", "displayName", "mirrorStatus", "hasAccess", "CAProfileUri", "User.created_at", "inCA", "InviteCode.code"])
+            .select(["did", "handle", "displayName", "hasAccess", "CAProfileUri", "User.created_at", "inCA", "InviteCode.code"])
             .where(eb => eb.or([
                 eb("InviteCode.code", "is not", null),
                 eb("User.inCA", "=", true),
@@ -189,7 +188,9 @@ async function getCAProfile(ctx: AppContext, agent: Agent, handleOrDid: string):
                 eb
                     .selectFrom("Follow")
                     .innerJoin("Record", "Record.uri", "Follow.uri")
+                    .innerJoin("User", "User.did", "Record.authorId")
                     .select(eb.fn.countAll<number>().as("count"))
+                    .where("User.inCA", "=", true)
                     .where("Follow.userFollowedId", "=", did)
                     .as("followersCount"),
             (eb) =>

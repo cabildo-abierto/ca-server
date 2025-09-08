@@ -11,6 +11,7 @@ import {ATProtoStrongRef} from "#/lib/types";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
 import {ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {EmbedContext, getEmbedsFromEmbedViews} from "#/services/write/topic";
+import {clearRedisCacheAfterReferenceUpdate} from "#/services/wiki/references";
 
 export type CreateArticleProps = {
     title: string
@@ -85,6 +86,8 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
             .insertInto("Reference")
             .values(values)
             .execute()
+
+        await clearRedisCacheAfterReferenceUpdate(ctx, values)
 
     } : undefined
 
