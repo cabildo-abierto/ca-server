@@ -52,10 +52,6 @@ export async function updateReferencesForNewContents(ctx: AppContext) {
     let curOffset = 0
     const synonymsMap = await getSynonymsToTopicsMap(ctx)
 
-    console.log("synonyms", Array.from(synonymsMap)
-        .slice(0, 10)
-    )
-
     const caUsers = await getCAUsersDids(ctx)
 
     while(true){
@@ -197,11 +193,14 @@ export async function applyReferencesUpdate(ctx: AppContext, referencesToInsert:
             await deleteQuery.execute()
 
             if(referencesToInsert.length > 0){
-                await trx
-                    .insertInto("Reference")
-                    .values(referencesToInsert)
-                    .onConflict(ob => ob.columns(["referencingContentId", "referencedTopicId"]).doNothing())
-                    .execute()
+                const batchSize = 5000
+                for(let i = 0; i < referencesToInsert.length; i += batchSize){
+                    await trx
+                        .insertInto("Reference")
+                        .values(referencesToInsert.slice(i, i+batchSize))
+                        .onConflict(ob => ob.columns(["referencingContentId", "referencedTopicId"]).doNothing())
+                        .execute()
+                }
             }
         })
 

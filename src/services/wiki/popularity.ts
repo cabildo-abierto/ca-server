@@ -79,8 +79,6 @@ export async function updateTopicPopularities(ctx: AppContext, topicIds: string[
             popularityScoreLastMonth: x[1].interactionsLastMonth.size
         }))
 
-        console.log("values", values.length)
-
         if(values.length == 0) continue
 
         await ctx.kysely

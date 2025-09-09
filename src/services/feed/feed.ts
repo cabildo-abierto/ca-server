@@ -23,6 +23,7 @@ export type FollowingFeedFilter = "Todos" | "Solo Cabildo Abierto"
 
 export const getFeedByKind: CAHandler<{params: {kind: string}, query: {cursor?: string, metric?: EnDiscusionMetric, time?: EnDiscusionTime, format?: FeedFormatOption, filter?: FollowingFeedFilter}}, GetFeedOutput> = async (ctx, agent, {params, query}) => {
     let pipeline: FeedPipelineProps
+    
     const {kind} = params
     const {cursor, metric, time, filter, format} = query
     if(kind == "discusion"){

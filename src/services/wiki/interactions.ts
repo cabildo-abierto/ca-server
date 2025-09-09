@@ -29,7 +29,7 @@ export async function createContentInteractions(ctx: AppContext) {
     // si es una reacción solo vemos a qué record reacciona
     // si es un tema
     const lastUpdate = await getLastContentInteractionsUpdate(ctx)
-    console.log("Creating interactions since last update", lastUpdate)
+    console.log("Creating interactions for contents since last update", lastUpdate)
 
     const batchSize = 5000
     let curOffset = 0
@@ -45,7 +45,6 @@ export async function createContentInteractions(ctx: AppContext) {
             .leftJoin("TopicVersion", "Record.uri", "TopicVersion.uri")
             .select(["Record.uri", "Post.replyToId", "Reaction.subjectId", "TopicVersion.topicId"])
             .where("Record.CAIndexedAt", ">=", lastUpdate)
-
             .orderBy("Record.CAIndexedAt asc")
             .limit(batchSize)
             .offset(curOffset)
@@ -109,6 +108,10 @@ export async function createContentInteractions(ctx: AppContext) {
         }
         const t3 = Date.now()
         logTimes("content interactions batch", [t1, t2, t3])
+
+        if(curOffset < batchSize) {
+            break
+        }
     }
 
     await setLastContentInteractionsUpdate(ctx, new Date())
@@ -199,28 +202,31 @@ export async function updateContentInteractionsForTopics(ctx: AppContext, topicI
 
         console.log(`adding ${values.length} interactions`)
 
-        if (values.length > 0) {
-            await ctx.kysely.insertInto("TopicInteraction")
-                .values(values)
-                .onConflict((oc) => oc.columns(["topicId", "recordId"]).doNothing())
+        await ctx.kysely.transaction().execute(async trx => {
+            console.log("deleting current interactions")
+
+            const now = new Date()
+            if (values.length > 0) {
+                const batchSize = 1000
+                for(let j = 0; j < values.length; j+=batchSize){
+                    console.log("inserting interactions batch", j)
+                    await trx.insertInto("TopicInteraction")
+                        .values(values.slice(j, j+batchSize).map(v => ({
+                            ...v,
+                            touched: now
+                        })))
+                        .onConflict((oc) => oc.columns(["topicId", "recordId"]).doUpdateSet(eb => ({
+                            touched: now
+                        })))
+                        .execute()
+                }
+            }
+            await trx
+                .deleteFrom("TopicInteraction")
+                .where("topicId", "in", topicIds)
+                .where("touched", "<", now)
                 .execute()
-        }
-
-        let deleteQuery = ctx.kysely.deleteFrom("TopicInteraction")
-            .where("topicId", "in", topicIds)
-
-        if(values.length > 0) {
-            deleteQuery = deleteQuery
-                .where(({eb, refTuple, tuple}) =>
-                    eb(
-                        refTuple("TopicInteraction.recordId", 'TopicInteraction.topicId'),
-                        'not in',
-                        values.map(e => tuple(e.recordId, e.topicId))
-                    )
-                )
-        }
-
-        await deleteQuery.execute()
+        })
 
         const t3 = Date.now()
         logTimes("content interactions batch", [t1, t2, t3])

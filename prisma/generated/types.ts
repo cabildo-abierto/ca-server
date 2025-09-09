@@ -225,6 +225,7 @@ export type TopicCategory = {
 export type TopicInteraction = {
     recordId: string;
     topicId: string;
+    touched: Generated<Timestamp>;
 };
 export type TopicToCategory = {
     topicId: string;

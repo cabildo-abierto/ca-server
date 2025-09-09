@@ -206,7 +206,22 @@ export async function redisGetByPrefix(ctx: AppContext, prefix: string): Promise
 
 
 export async function redisGetKeysByPrefix(ctx: AppContext, prefix: string): Promise<string[]> {
-    return await ctx.ioredis.keys(`${prefix}*`)
+    return ctx.ioredis.keys(`${prefix}*`);
+}
+
+
+export async function setFollowSuggestionsDirty(ctx: AppContext, did: string) {
+   await ctx.ioredis.sadd("follow-suggestions-dirty", did)
+}
+
+
+export async function setFollowSuggestionsNotDirty(ctx: AppContext, did: string) {
+    await ctx.ioredis.srem("follow-suggestions-dirty", did)
+}
+
+
+export function getDirtyFollowSuggestions(ctx: AppContext) {
+    return ctx.ioredis.smembers("follow-suggestions-dirty");
 }
 
 
@@ -220,25 +235,24 @@ export const setNotInterested: CAHandler<{params: {subject: string}}, {}> = asyn
         }])
         .execute()
 
-    await ctx.ioredis.set(`follow-suggestions-dirty:${agent.did}`, "true")
+    await setFollowSuggestionsDirty(ctx, agent.did)
 
     return {data: {}}
 }
 
 
 export async function updateFollowSuggestions(ctx: AppContext){
-    const keys = await redisGetByPrefix(ctx, `follow-suggestions-dirty`)
-    console.log(`${keys.length} follow suggestions to update`)
+    const dids = await getDirtyFollowSuggestions(ctx)
+    console.log(`${dids.length} follow suggestions to update`)
 
     const requested = new Set(await redisGetKeysByPrefix(ctx, `follow-suggestions:`))
 
-    for(let i = 0; i < keys.length; i++) {
-        const k = keys[i][0]
-        if(requested.has(k)){
-            const did = k.split("follow-suggestions-dirty:")[1]
-            console.log(`updating follow-suggestions ${i} of ${keys.length}: ${did}`)
+    for(let i = 0; i < dids.length; i++) {
+        const did = dids[i]
+        if(requested.has(`follow-suggestions:${did}`)){
+            console.log(`updating follow-suggestions ${i} of ${dids.length}: ${did}`)
             const t1 = Date.now()
-            await ctx.ioredis.del(k)
+            await setFollowSuggestionsNotDirty(ctx, did)
             const t2 = Date.now()
             await getRecommendationRankingForUser(ctx, did, true)
             const t3 = Date.now()

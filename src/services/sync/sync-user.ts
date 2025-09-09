@@ -16,8 +16,6 @@ import {logTimes} from "#/utils/utils";
 export async function syncAllUsers(ctx: AppContext, mustUpdateCollections?: string[]) {
     let users = await getCAUsersDids(ctx)
 
-    console.log("Syncing", users.length, "users")
-
     for (let i = 0; i < users.length; i++) {
         console.log("Syncing user", i + 1, "of", users.length, `(did: ${users[i]})`)
         await setMirrorStatus(ctx, users[i], "InProcess", true)

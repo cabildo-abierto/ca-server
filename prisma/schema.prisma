@@ -338,6 +338,8 @@ model TopicInteraction {
   topicId  String
   topic    Topic  @relation(fields: [topicId], references: [id])
 
+  touched DateTime @default(now())
+
   @@unique([recordId, topicId])
 }
 

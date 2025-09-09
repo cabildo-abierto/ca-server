@@ -1,5 +1,13 @@
 import {ATProtoStrongRef, UserRepoElement} from "#/lib/types";
-import {getCollectionFromUri, getDidFromUri, getRkeyFromUri, isArticle, isTopicVersion, splitUri} from "#/utils/uri";
+import {
+    getCollectionFromUri,
+    getDidFromUri,
+    getRkeyFromUri,
+    isArticle,
+    isFollow,
+    isTopicVersion,
+    splitUri
+} from "#/utils/uri";
 import * as Post from "#/lex-api/types/app/bsky/feed/post"
 import * as Follow from "#/lex-api/types/app/bsky/graph/follow"
 import * as Like from "#/lex-api/types/app/bsky/feed/like"
@@ -36,7 +44,7 @@ import {NotificationBatchData, NotificationJobData} from "#/services/notificatio
 import {isReactionCollection} from "#/utils/type-utils";
 import {getTopicCurrentVersion} from "#/services/wiki/current-version";
 import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard";
-import {redisDeleteByPrefix} from "#/services/user/follow-suggestions";
+import {redisDeleteByPrefix, setFollowSuggestionsDirty} from "#/services/user/follow-suggestions";
 
 
 export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: ATProtoStrongRef, record: any }[]) {
@@ -151,12 +159,23 @@ export async function processFollowsBatch(ctx: AppContext, records: {
             )
             .execute()
 
-        const dids = unique(follows.map(f => getDidFromUri(f.uri)))
-        for(let i = 0; i < dids.length; i++){
-            await ctx.ioredis.set(`follow-suggestions-dirty:${dids[i]}`, "true")
-            await redisDeleteByPrefix(ctx, `ca-follows:${dids[i]}`)
-        }
+        await updateRedisCacheAfterFollowsUpdate(ctx, follows.map(f => f.uri))
     })
+}
+
+
+async function updateRedisCacheAfterFollowsUpdate(ctx: AppContext, uris: string[]){
+    uris = uris.filter(u => isFollow(getCollectionFromUri(u)))
+    const dids = unique(uris.map(getDidFromUri))
+    for(let i = 0; i < dids.length; i++){
+        await setFollowSuggestionsDirty(ctx, dids[i])
+        await redisDeleteByPrefix(ctx, `ca-follows:${dids[i]}`)
+    }
+}
+
+
+async function updateRedisCacheAfterDelete(ctx: AppContext, uris: string[]) {
+    await updateRedisCacheAfterFollowsUpdate(ctx, uris)
 }
 
 
@@ -998,6 +1017,7 @@ export async function processDeleteBatch(ctx: AppContext, uris: string[]) {
                 const su = deleteRecordsDB(ctx, batchUris)
                 await su.apply()
             }
+            await updateRedisCacheAfterDelete(ctx, batchUris)
             console.log("batch finished")
         }
     }
