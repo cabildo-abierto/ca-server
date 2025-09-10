@@ -6,6 +6,7 @@ import {sql} from "kysely";
 import {AppContext} from "#/index";
 import {v4 as uuidv4} from 'uuid'
 import {logTimes} from "#/utils/utils";
+import {getCAUsersDids} from "#/services/user/users";
 
 /*
     1. Tomamos un conjunto de usuarios recomendadores. Los recomendadores son los seguidos del usuario o, si tiene muy pocos, todos los usuarios de CA.
@@ -247,9 +248,11 @@ export async function updateFollowSuggestions(ctx: AppContext){
 
     const requested = new Set(await redisGetKeysByPrefix(ctx, `follow-suggestions:`))
 
+    const caUsers = new Set(await getCAUsersDids(ctx))
+
     for(let i = 0; i < dids.length; i++) {
         const did = dids[i]
-        if(requested.has(`follow-suggestions:${did}`)){
+        if(requested.has(`follow-suggestions:${did}`) && caUsers.has(did)){
             console.log(`updating follow-suggestions ${i} of ${dids.length}: ${did}`)
             const t1 = Date.now()
             await setFollowSuggestionsNotDirty(ctx, did)

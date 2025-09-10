@@ -1,6 +1,6 @@
 import {processPost} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
-import {$Typed, RichText} from "@atproto/api";
+import {$Typed} from "@atproto/api";
 import {ATProtoStrongRef} from "#/lib/types";
 import {Image} from "#/lex-api/types/app/bsky/embed/images";
 import {uploadImageBlob} from "#/services/blob";
@@ -10,6 +10,7 @@ import {Main as EmbedRecord} from "#/lex-server/types/app/bsky/embed/record"
 import {Main as EmbedRecordWithMedia} from "#/lex-server/types/app/bsky/embed/recordWithMedia"
 import {Main as Visualization} from "#/lex-server/types/ar/cabildoabierto/embed/visualization"
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
+import {getParsedPostContent} from "#/services/write/rich-text";
 
 function createQuotePostEmbed(post: ATProtoStrongRef): $Typed<EmbedRecord> {
     return {
@@ -117,6 +118,7 @@ async function getPostEmbed(agent: SessionAgent, post: CreatePostProps): Promise
     return undefined
 }
 
+
 export async function createPostAT({
                                        agent,
                                        post
@@ -124,10 +126,7 @@ export async function createPostAT({
     agent: SessionAgent
     post: CreatePostProps
 }): Promise<{ ref: ATProtoStrongRef, record: PostRecord }> {
-    const rt = new RichText({
-        text: post.text
-    })
-    await rt.detectFacets(agent.bsky)
+    const rt = getParsedPostContent(post.text)
 
     const embed = await getPostEmbed(agent, post)
 
