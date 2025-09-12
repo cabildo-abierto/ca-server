@@ -87,6 +87,9 @@ export const getQuotes: GetQuotesType = async (ctx, agent, {params, query}) =>  
     const {uris, cursor} = await getQuotesSkeleton(ctx, agent, uri, dataplane, parseInt(query.limit ?? "25"), query.cursor)
     await dataplane.fetchPostAndArticleViewsHydrationData(uris)
 
+    console.log("CA quotes", dataplane.caContents.size)
+    console.log("bsky quotes", dataplane.bskyPosts.size)
+
     const data = {posts: uris.map(d => hydratePostView(d, dataplane).data).filter(x => x != null),
         cursor : cursor
     }
