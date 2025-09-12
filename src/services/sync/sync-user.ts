@@ -1,16 +1,13 @@
-import {
-    processCreateBatch, processDeleteBatch
-} from "./process-batch";
-import {getUserMirrorStatus, setMirrorStatus} from "./mirror-status";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {getCAUsersDids, handleToDid} from "#/services/user/users";
-import {JetstreamEvent, UserRepo, UserRepoElement} from "#/lib/types";
+import {JetstreamEvent} from "#/lib/types";
 import {iterateAtpRepo} from "@atcute/car"
 import {getServiceEndpointForDid} from "#/services/blob";
 import {getCollectionFromUri, shortCollectionToCollection} from "#/utils/uri";
 import {CAHandler} from "#/utils/handler";
-import {processCommitEvent} from "#/services/sync/process-event";
 import {logTimes} from "#/utils/utils";
+import {getProcessorForEvent} from "#/services/sync/event-processing/event-processor";
+import {batchDeleteRecords, getRecordProcessor} from "#/services/sync/event-processing/get-record-processor";
 
 
 export async function syncAllUsers(ctx: AppContext, mustUpdateCollections?: string[]) {
@@ -18,7 +15,7 @@ export async function syncAllUsers(ctx: AppContext, mustUpdateCollections?: stri
 
     for (let i = 0; i < users.length; i++) {
         console.log("Syncing user", i + 1, "of", users.length, `(did: ${users[i]})`)
-        await setMirrorStatus(ctx, users[i], "InProcess", true)
+        await ctx.redisCache.mirrorStatus.set(users[i], "InProcess", true)
         await syncUser(ctx, users[i], mustUpdateCollections)
 
     }
@@ -121,7 +118,7 @@ export async function syncUser(ctx: AppContext, did: string, collections?: strin
     const inCA = await isCAUser(ctx, did)
     console.log(`${did} inCA:`, inCA)
 
-    const mirrorStatus = await getUserMirrorStatus(ctx, did, inCA)
+    const mirrorStatus = await ctx.redisCache.mirrorStatus.get(did, inCA)
     if(mirrorStatus != "InProcess") {
         console.log(`Mirror status of ${did} is not InProcess: ${mirrorStatus}. Not syncing.`)
         return
@@ -133,7 +130,7 @@ export async function syncUser(ctx: AppContext, did: string, collections?: strin
 
     const doc = await getServiceEndpointForDid(did)
     if (typeof doc != "string") {
-        await setMirrorStatus(ctx, did, "Failed", inCA)
+        await ctx.redisCache.mirrorStatus.set(did, "Failed", inCA)
         return
     }
 
@@ -146,12 +143,11 @@ export async function syncUser(ctx: AppContext, did: string, collections?: strin
         for(let i = 0; i < pending.length; i++) {
             const e = pending[i]
             if(e.kind == "commit"){
-                await processCommitEvent(ctx, e)
+                await getProcessorForEvent(ctx, e).process()
             }
         }
     }
-
-    await setMirrorStatus(ctx, did, "Sync", inCA)
+    await ctx.redisCache.mirrorStatus.set(did, "Sync", inCA)
     console.log("Finished syncing user", did, "after", Date.now()-t1)
 }
 
@@ -171,20 +167,16 @@ export const allCollections = [
     "ar.com.cabildoabierto.profile"
 ]
 
+export type UserRepo = UserRepoElement[]
 
-export async function processCreateBatchInBatches(ctx: AppContext, records: UserRepoElement[], collection: string) {
-    const batchSize = 1000
-    for (let i = 0; i < records.length; i+=batchSize) {
-        if(i > 0){
-            console.log(`${collection}: processing batch ${i + 1} of ${records.length} (bs = ${batchSize})`)
-        }
-        const t1 = Date.now()
-        await processCreateBatch(ctx, records.slice(i, i+batchSize), collection)
-        const t2 = Date.now()
-        console.log(`processed batch in ${t2-t1}ms`)
-    }
+export type UserRepoElement = {
+    did: string
+    uri: string
+    collection: string
+    rkey: string
+    record: any
+    cid: string
 }
-
 
 export async function processRepo(ctx: AppContext, doc: string, did: string, collections: string[] = [], inCA: boolean) {
     const t1 = Date.now()
@@ -195,9 +187,9 @@ export async function processRepo(ctx: AppContext, doc: string, did: string, col
 
     if (!repo) {
         if(error && error == "too large"){
-            await setMirrorStatus(ctx, did, "Failed - Too Large", inCA)
+            await ctx.redisCache.mirrorStatus.set(did, "Failed - Too Large", inCA)
         } else {
-            await setMirrorStatus(ctx, did, "Failed", inCA)
+            await ctx.redisCache.mirrorStatus.set(did, "Failed", inCA)
         }
         return
     }
@@ -219,17 +211,19 @@ export async function processRepo(ctx: AppContext, doc: string, did: string, col
 
     for (let i = 0; i < collections.length; i++) {
         const collection = collections[i]
-        const records = repoReqUpdate.filter(r => r.collection == collection)
+        const records: UserRepoElement[] = repoReqUpdate.filter(r => r.collection == collection)
 
         console.log(`*** Processing collection ${collection} (${records.length} records).`)
         const t1 = Date.now()
-        await processCreateBatchInBatches(ctx, records, collection)
+        await getRecordProcessor(ctx, collection)
+            .processInBatches(records.map(r => ({ref: {uri: r.uri, cid: r.cid}, record: r.record})))
         console.log(`${collection} done after ${Date.now() - t1} ms.`)
     }
     const t3 = Date.now()
 
     console.log(`Deleting ${recordsNotPresent.size} records not present in repo.`)
-    await processDeleteBatch(ctx, Array.from(recordsNotPresent))
+
+    await batchDeleteRecords(ctx, Array.from(recordsNotPresent))
     const t4 = Date.now()
     logTimes(`process repo ${did}`, [t1, t2, t3, t4])
 }
@@ -270,7 +264,7 @@ export async function checkUpdateRequired(ctx: AppContext, repo: UserRepo, did: 
     const recordsNotPresent = new Set<string>()
 
     // Iteramos los records de la DB. Si alguno no está en el repo o está y su cid no coincide, require actualización
-    dbRecords.forEach((r, i) => {
+    dbRecords.forEach(r => {
         const inRepo = repoCids.has(r.uri)
         if(!inRepo){
             recordsNotPresent.add(r.uri)
@@ -307,7 +301,7 @@ export const syncUserHandler: CAHandler<{
 
     const inCA = await isCAUser(ctx, did)
 
-    await setMirrorStatus(ctx, did, "InProcess", inCA)
+    await ctx.redisCache.mirrorStatus.set(did, "InProcess", inCA)
 
     await ctx.worker?.addJob("sync-user", {
         handleOrDid,

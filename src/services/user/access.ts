@@ -1,12 +1,11 @@
 import {SessionAgent} from "#/utils/session-agent";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {isValidHandle} from "@atproto/syntax";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {Record as CAProfileRecord} from "#/lex-server/types/ar/cabildoabierto/actor/caProfile"
-import {processBskyProfile, processCAProfile} from "#/services/sync/process-event";
-import {Record as BskyProfileRecord} from "#/lex-api/types/app/bsky/actor/profile"
 import {v4 as uuidv4} from "uuid";
 import {range} from "#/utils/arrays";
+import {BskyProfileRecordProcessor, CAProfileRecordProcessor} from "#/services/sync/event-processing/profile";
 
 
 async function getCAStatus(ctx: AppContext, did: string): Promise<{inCA: boolean, hasAccess: boolean} | null> {
@@ -111,21 +110,12 @@ export async function createCAUser(ctx: AppContext, agent: SessionAgent, code?: 
         })
     ])
 
-    await processCAProfile(ctx, {uri: data.uri, cid: data.cid}, caProfileRecord)
-    await processBskyProfile(ctx, {uri: bskyProfile.uri, cid: bskyProfile.cid!}, bskyProfile.value as BskyProfileRecord)
-
-    const status = await ctx.db.user.findFirst({
-        select: {
-            mirrorStatus: true
-        },
-        where: {
-            did
-        }
-    })
-
-    if(!status || (status.mirrorStatus != "Sync" && status.mirrorStatus != "InProcess")){
-        await ctx.worker?.addJob("sync-user", {handleOrDid: did})
-    }
+    await Promise.all([
+        new CAProfileRecordProcessor(ctx)
+            .processValidated([{ref: {uri: data.uri, cid: data.cid}, record: caProfileRecord}]),
+        new BskyProfileRecordProcessor(ctx)
+            .process([{ref: {uri: bskyProfile.uri, cid: bskyProfile.cid!}, record: bskyProfile.value}])
+    ])
 
     return {}
 }

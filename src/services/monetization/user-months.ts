@@ -1,4 +1,4 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {getMonthlyValue} from "#/services/monetization/donations";
 import {getDidFromUri} from "#/utils/uri";
 import {sum} from "#/utils/arrays";

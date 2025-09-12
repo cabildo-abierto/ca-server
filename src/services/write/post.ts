@@ -1,4 +1,3 @@
-import {processPost} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
 import {$Typed} from "@atproto/api";
 import {ATProtoStrongRef} from "#/lib/types";
@@ -11,6 +10,7 @@ import {Main as EmbedRecordWithMedia} from "#/lex-server/types/app/bsky/embed/re
 import {Main as Visualization} from "#/lex-server/types/ar/cabildoabierto/embed/visualization"
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
 import {getParsedPostContent} from "#/services/write/rich-text";
+import {PostRecordProcessor} from "#/services/sync/event-processing/post";
 
 function createQuotePostEmbed(post: ATProtoStrongRef): $Typed<EmbedRecord> {
     return {
@@ -167,7 +167,7 @@ export type CreatePostProps = {
 export const createPost: CAHandler<CreatePostProps, ATProtoStrongRef> = async (ctx, agent, post) => {
     const {ref, record} = await createPostAT({agent, post})
 
-    await processPost(ctx, ref, record)
+    await new PostRecordProcessor(ctx).processValidated([{ref, record}])
 
     return {data: ref}
 }

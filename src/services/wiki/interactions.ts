@@ -1,24 +1,11 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {unique} from "#/utils/arrays";
-import {formatIsoDate} from "#/utils/dates";
 import {logTimes} from "#/utils/utils";
 import {sql} from "kysely";
 
 
-export async function getLastContentInteractionsUpdate(ctx: AppContext) {
-    const lastUpdateStr = await ctx.ioredis.get("last-topic-interactions-update")
-    return lastUpdateStr ? new Date(lastUpdateStr) : new Date(0)
-}
-
-
-export async function setLastContentInteractionsUpdate(ctx: AppContext, date: Date) {
-    await ctx.ioredis.set("last-topic-interactions-update", date.toISOString())
-    console.log("Last topic interactions update set to", formatIsoDate(date))
-}
-
-
 export async function restartLastContentInteractionsUpdate(ctx: AppContext) {
-    await setLastContentInteractionsUpdate(ctx, new Date(Date.now()-1000*3600*24*7))
+    await ctx.redisCache.lastTopicInteractionsUpdate.restart()
 }
 
 
@@ -28,7 +15,7 @@ export async function createContentInteractions(ctx: AppContext) {
     // si es un artículo solo vemos a quién menciona
     // si es una reacción solo vemos a qué record reacciona
     // si es un tema
-    const lastUpdate = await getLastContentInteractionsUpdate(ctx)
+    const lastUpdate = await ctx.redisCache.lastTopicInteractionsUpdate.get()
     console.log("Creating interactions for contents since last update", lastUpdate)
 
     const batchSize = 5000
@@ -114,7 +101,7 @@ export async function createContentInteractions(ctx: AppContext) {
         }
     }
 
-    await setLastContentInteractionsUpdate(ctx, new Date())
+    await ctx.redisCache.lastTopicInteractionsUpdate.set(new Date())
 }
 
 

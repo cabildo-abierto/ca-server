@@ -1,5 +1,5 @@
 import {ThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {SessionAgent} from "#/utils/session-agent";
 import {
     getCollectionFromUri,

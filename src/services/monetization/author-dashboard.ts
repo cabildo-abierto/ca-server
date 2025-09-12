@@ -5,7 +5,7 @@ import {sql} from "kysely";
 import {getSessionData} from "#/services/user/users";
 import {isVersionAccepted} from "#/services/wiki/current-version";
 import {getCollectionFromUri, getDidFromUri} from "#/utils/uri";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {orderNumberDesc, sortByKey, sum} from "#/utils/arrays";
 import {ReadChunks, ReadChunksAttr} from "#/services/monetization/read-tracking";
 import {FULL_READ_DURATION, joinManyChunks} from "#/services/monetization/user-months";

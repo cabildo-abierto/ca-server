@@ -10,18 +10,16 @@ import {
     Record as ArticleRecord,
     validateRecord as validateArticleRecord
 } from "#/lex-api/types/ar/cabildoabierto/feed/article";
-import {processArticle, processPost} from "#/services/sync/process-event";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 import {$Typed} from "@atproto/api";
 import {sql} from "kysely";
-import {redisDeleteByPrefix} from "#/services/user/follow-suggestions";
 import {
-    followingFeedCursorToScore, followingFeedScoreToCursor,
-    getCachedSkeleton,
     GetNextCursor,
     getNextFollowingFeedCursor,
     SkeletonQuery
 } from "#/services/feed/inicio/following";
+import {PostRecordProcessor} from "#/services/sync/event-processing/post";
+import {ArticleRecordProcessor} from "#/services/sync/event-processing/article";
 
 
 export function getEnDiscusionStartDate(time: EnDiscusionTime) {
@@ -64,30 +62,16 @@ const getEnDiscusionSkeletonQuery: (metric: EnDiscusionMetric, time: EnDiscusion
             if(limit == 0) return []
 
             const res = await ctx.kysely
-                .selectFrom('Record')
+                .selectFrom('Content')
+                .innerJoin('Record', 'Record.uri', 'Content.uri')
                 .where('Record.collection', 'in', collections)
-                .innerJoin('Content', 'Record.uri', 'Content.uri')
                 .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
                 .where("Record.created_at", ">", startDate)
-                .select(eb => [
-                    'Record.uri',
-                    "Record.created_at as createdAt",
-                    eb(
-                        "Record.uniqueLikesCount",
-                        "-",
-                        eb.case()
-                            .when(
-                                eb.exists(eb.selectFrom('Reaction')
-                                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
-                                    .whereRef("Reaction.subjectId", "=", "Record.uri")
-                                    .where('ReactionRecord.collection', '=', 'app.bsky.feed.like')
-                                    .whereRef('ReactionRecord.authorId', '=', 'Record.authorId'))
-                            )
-                            .then(1).else(0)
-                            .end()
-                    ).as("score")
+                .select([
+                    "Content.uri",
+                    "Content.created_at as createdAt"
                 ])
-                .orderBy(["score desc", "Record.created_at desc"])
+                .orderBy(["likesScore desc", "Content.created_at desc"])
                 .limit(limit)
                 .offset(offsetFrom)
                 .execute()
@@ -108,45 +92,13 @@ const getEnDiscusionSkeletonQuery: (metric: EnDiscusionMetric, time: EnDiscusion
                 .selectFrom('Record')
                 .where('Record.collection', 'in', collections)
                 .where("Record.created_at", ">", startDate)
-                .innerJoin(
-                    'Content',
-                    'Record.uri',
-                    'Content.uri'
-                )
+                .innerJoin('Content', 'Record.uri', 'Content.uri')
                 .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
                 .select([
-                    'Record.uri',
-                    "Record.created_at as createdAt",
-                    sql<number>`
-                    "Record"."uniqueLikesCount" + 
-                    "Record"."uniqueRepostsCount" +
-                    (select count("Post"."uri") as "count" from "Post"
-                    inner join "Record" as "ReplyRecord" on "Post"."uri" = "ReplyRecord"."uri"
-                    where 
-                        "Post"."replyToId" = "Record"."uri" and
-                        "ReplyRecord"."authorId" != "Record"."authorId"
-                    )
-                    - (
-                        case when exists (
-                            select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
-                            where
-                                "ReactionRecord"."collection" = 'app.bsky.feed.repost'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
-                        ) then 1 else 0 end
-                    )
-                    - (
-                        case when exists (
-                            select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
-                            where
-                                "ReactionRecord"."collection" = 'app.bsky.feed.like'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
-                        ) then 1 else 0 end
-                    )
-                `.as("score")
+                    "Content.uri",
+                    "Content.created_at as createdAt"
                 ])
-                .orderBy(["score desc", "created_at desc"])
+                .orderBy(["interactionsScore desc", "Content.created_at desc"])
                 .limit(limit)
                 .offset(offsetFrom)
                 .execute()
@@ -171,43 +123,9 @@ const getEnDiscusionSkeletonQuery: (metric: EnDiscusionMetric, time: EnDiscusion
                 .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
                 .select(eb => [
                     'Record.uri',
-                    "Record.created_at as createdAt",
-                    sql<number>`
-                    ("Record"."uniqueLikesCount" + 
-                    "Record"."uniqueRepostsCount" +
-                    (select count("Post"."uri") as "count" from "Post"
-                    inner join "Record" as "ReplyRecord" on "Post"."uri" = "ReplyRecord"."uri"
-                    where 
-                        "Post"."replyToId" = "Record"."uri" and
-                        "ReplyRecord"."authorId" != "Record"."authorId"
-                    )
-                    - (
-                        case when exists (
-                            select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
-                            where
-                                "ReactionRecord"."collection" = 'app.bsky.feed.repost'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
-                        ) then 1 else 0 end
-                    )
-                    - (
-                        case when exists (
-                            select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
-                            where
-                                "ReactionRecord"."collection" = 'app.bsky.feed.like'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
-                        ) then 1 else 0 end
-                    ))::numeric / sqrt(1 + (
-                        select count(distinct "Follower"."did") from "Follow"
-                        inner join "Record" as "FollowRecord" on "Follow"."uri" = "FollowRecord"."uri"
-                        inner join "User" as "Follower" on "FollowRecord"."authorId" = "Follower"."did"
-                        where "Follower"."inCA" = true
-                        and "Follow"."userFollowedId" = "Record"."authorId"
-                    ))
-                `.as("score"),
+                    "Record.created_at as createdAt"
                 ])
-                .orderBy(["score desc", "createdAt desc"])
+                .orderBy(["relativePopularityScore desc", "Content.created_at desc"])
                 .limit(limit)
                 .offset(offsetFrom)
                 .execute()
@@ -267,35 +185,18 @@ export const getNextCursorEnDiscusion: (metric: EnDiscusionMetric, time: EnDiscu
 }
 
 
-export function enDiscusionFeedCursorToScore(cursor: string) {
-    return -Number(cursor)
-}
-
-
-export function enDiscusionFeedScoreToCursor(score: number) {
-    return (-score).toString()
-}
-
-
 export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption) => GetSkeletonProps = (metric, time, format) => async (
     ctx, agent, data, cursor
 ) => {
-    const redisKey = `endiscusion-skeleton:${metric}:${time}:${format}`
-    const res = await getCachedSkeleton(
-        ctx,
-        agent,
-        redisKey,
-        getEnDiscusionSkeletonQuery(metric, time, format),
-        getNextCursorEnDiscusion(metric, time, format),
-        metric == "Recientes" ? followingFeedCursorToScore : enDiscusionFeedCursorToScore,
-        metric == "Recientes" ? followingFeedScoreToCursor : enDiscusionFeedScoreToCursor,
-        25,
-        cursor
+    const limit = 25
+
+    const res = await getEnDiscusionSkeletonQuery(metric, time, format)(
+        ctx, agent, cursor, undefined, limit
     )
 
     return {
-        skeleton: res.skeleton.map(r => ({post: r.uri})),
-        cursor: res.cursor
+        skeleton: res.map(r => ({post: r.uri})),
+        cursor: getNextCursorEnDiscusion(metric, time, format)(cursor, res, limit)
     }
 }
 
@@ -355,15 +256,13 @@ export const addToEnDiscusion: CAHandler<{
         })
 
         if (isArticleRecord(validRecord)) {
-            await processArticle(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
+            await new ArticleRecordProcessor(ctx).processValidated([{ref: {uri: ref.data.uri, cid: ref.data.cid}, record: validRecord}])
         } else {
-            await processPost(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
+            await new PostRecordProcessor(ctx).processValidated([{ref: {uri: ref.data.uri, cid: ref.data.cid}, record: validRecord}])
         }
     } else {
         return {error: "No se pudo agregar a en discusión."}
     }
-
-    await redisDeleteByPrefix(ctx, "endiscusion-skeleton")
 
     return {data: {}}
 }
@@ -410,16 +309,14 @@ export const removeFromEnDiscusion: CAHandler<{
             record: validRecord
         })
 
-        if (isArticleRecord(record)) {
-            await processArticle(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord as ArticleRecord)
-        } else if (isPostRecord(record)) {
-            await processPost(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord as PostRecord)
+        if (isArticleRecord(validRecord)) {
+            await new ArticleRecordProcessor(ctx).process([{ref: {uri: ref.data.uri, cid: ref.data.cid}, record: validRecord}])
+        } else if(isPostRecord(validRecord)) {
+            await new PostRecordProcessor(ctx).process([{ref: {uri: ref.data.uri, cid: ref.data.cid}, record: validRecord}])
         }
     } else {
         return {error: "No se pudo remover de en discusión."}
     }
-
-    await redisDeleteByPrefix(ctx, "endiscusion-skeleton")
 
     return {data: {}}
 }

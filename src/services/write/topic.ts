@@ -1,4 +1,3 @@
-import {processTopicVersion} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
 import {CAHandler} from "#/utils/handler";
 import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
@@ -8,6 +7,7 @@ import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wi
 import {ArticleEmbedView, ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {isView as isImagesEmbedView, Image} from "#/lex-api/types/app/bsky/embed/images"
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
+import {TopicVersionRecordProcessor} from "#/services/sync/event-processing/topic";
 
 
 export async function getEmbedsFromEmbedViews(agent: SessionAgent, embeds?: ArticleEmbedView[], embedContexts?: EmbedContext[]): Promise<{data?: ArticleEmbed[], error?: string}> {
@@ -169,7 +169,8 @@ export const createTopicVersion: CAHandler<CreateTopicVersionProps> = async (ctx
 
     const {error, ref, record} = await createTopicVersionATProto(agent, params)
     if(!error && ref && record){
-        await processTopicVersion(ctx, ref, record)
+        await new TopicVersionRecordProcessor(ctx)
+            .processValidated([{ref, record}])
     }
     return {error}
 }

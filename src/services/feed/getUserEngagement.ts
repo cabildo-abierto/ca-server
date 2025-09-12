@@ -1,4 +1,4 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {getCollectionFromUri, getDidFromUri, getRkeyFromUri} from "#/utils/uri";
 
 

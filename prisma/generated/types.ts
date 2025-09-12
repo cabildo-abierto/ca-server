@@ -82,6 +82,10 @@ export type Content = {
     lastReferencesUpdate: Timestamp | null;
     selfLabels: string[];
     embeds: unknown[];
+    created_at: Generated<Timestamp>;
+    likesScore: number | null;
+    interactionsScore: number | null;
+    relativePopularityScore: number | null;
 };
 export type ContentToDataset = {
     A: string;

@@ -1,21 +1,16 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {ATProtoStrongRef} from "#/lib/types";
 import {CAHandler} from "#/utils/handler";
 import {getCollectionFromUri, getUri} from "#/utils/uri";
-import {
-    processDelete, processReaction
-} from "#/services/sync/process-event";
 import {Record as LikeRecord} from "#/lex-api/types/app/bsky/feed/like";
 import {Record as RepostRecord} from "#/lex-api/types/app/bsky/feed/repost";
 import {Record as VoteAcceptRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept";
 import {Record as VoteRejectRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject";
-import {
-    PrismaTransactionClient
-} from "#/services/sync/sync-update";
 import {SessionAgent} from "#/utils/session-agent";
 import {$Typed} from "@atproto/api";
 import {createVoteAcceptAT, createVoteRejectAT, VoteRejectProps} from "#/services/wiki/votes";
 import {deleteRecordAT} from "#/services/delete";
+import {ReactionDeleteProcessor, ReactionRecordProcessor} from "#/services/sync/event-processing/reaction";
 
 
 export type ReactionType =
@@ -60,7 +55,7 @@ export const addReaction = async (ctx: AppContext, agent: SessionAgent, ref: ATP
             createdAt: new Date().toISOString()
         }
 
-        await processReaction(ctx, res, record)
+        await new ReactionRecordProcessor(ctx).processValidated([{ref, record}])
 
         return {data: {uri: res.uri}}
     } catch (err) {
@@ -80,33 +75,6 @@ export const repost: CAHandler<ATProtoStrongRef, { uri: string }> = async (ctx, 
 }
 
 
-export async function decrementReactionCounter(db: PrismaTransactionClient, type: ReactionType, subjectId: string) {
-    if (type == "app.bsky.feed.like") {
-        return db.record.update({
-            data: {uniqueLikesCount: {decrement: 1}},
-            where: {uri: subjectId}
-        })
-    } else if (type == "app.bsky.feed.repost") {
-        return db.record.update({
-            data: {uniqueRepostsCount: {decrement: 1}},
-            where: {uri: subjectId}
-        })
-    } else if (type == "ar.cabildoabierto.wiki.voteAccept") {
-        return db.record.update({
-            data: {uniqueAcceptsCount: {decrement: 1}},
-            where: {uri: subjectId}
-        })
-    } else if (type == "ar.cabildoabierto.wiki.voteReject") {
-        return db.record.update({
-            data: {uniqueRejectsCount: {decrement: 1}},
-            where: {uri: subjectId}
-        })
-    } else {
-        throw Error("Reacción desconocida: " + type)
-    }
-}
-
-
 export const removeReactionAT = async (ctx: AppContext, agent: SessionAgent, uri: string) => {
     const collection = getCollectionFromUri(uri)
     if (collection == "app.bsky.feed.like") {
@@ -118,7 +86,7 @@ export const removeReactionAT = async (ctx: AppContext, agent: SessionAgent, uri
     } else if (collection == "ar.cabildoabierto.wiki.voteReject") {
         await deleteRecordAT(agent, uri)
     }
-    await processDelete(ctx, uri)
+    await new ReactionDeleteProcessor(ctx).process([uri])
     return {data: {}}
 }
 

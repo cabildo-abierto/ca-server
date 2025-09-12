@@ -1,6 +1,6 @@
 import {fetchTextBlobs} from "../blob";
 import {getDidFromUri, getUri} from "#/utils/uri";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {CAHandler, CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
 import {TopicProp, TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion";
@@ -149,9 +149,10 @@ export async function getTopics(
     } else if(sortedBy == "recent"){
         baseQuery = baseQuery.orderBy("lastEdit desc")
     }
-
+    const t1 = Date.now()
     const topics = await (limit ? baseQuery.limit(limit) : baseQuery).execute()
-
+    const t2 = Date.now()
+    logTimes("get trending topics", [t1, t2])
     return {
         data: topics.map(t => topicQueryResultToTopicViewBasic({
             id: t.id,
@@ -273,26 +274,6 @@ export function dbUserToProfileViewBasic(author: {
 }
 
 
-export const redisCacheEnabled = false
-
-async function cached<T>(ctx: AppContext, key: string[], fn: () => Promise<{ data?: T, error?: string }>): Promise<{
-    data?: T,
-    error?: string
-}> {
-    if (!redisCacheEnabled) {
-        return await fn()
-    }
-    const strKey = key.join(":")
-    const cur = await ctx.ioredis.get(strKey)
-    if (cur) return {data: JSON.parse(cur) as T}
-    const res = await fn()
-    if (res.data) {
-        await ctx.ioredis.set(strKey, JSON.stringify(res), "EX", redisCacheTTL)
-    }
-    return res
-}
-
-
 export const getTopicCurrentVersionFromDB = async (ctx: AppContext, id: string): Promise<{
     data?: string | null,
     error?: string
@@ -321,7 +302,7 @@ export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?:
         if(!did || !rkey){
             return {error: "Se requiere un id o un par did y rkey."}
         } else {
-            id = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey) ?? undefined
+            id = await getTopicIdFromTopicVersionUri(ctx, did, rkey) ?? undefined
             if(!id){
                 return {error: "No se encontró esta versión del tema."}
             }
@@ -334,7 +315,7 @@ export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?:
     let uri: string
     if (!currentVersionId) {
         console.log(`Warning: Current version not set for topic ${id}.`)
-        const history = await getTopicHistory(ctx.db, id, agent.hasSession() ? agent : undefined)
+        const history = await getTopicHistory(ctx, id, agent.hasSession() ? agent : undefined)
 
         if (!history) {
             return {error: "No se encontró el tema " + id + "."}
@@ -349,18 +330,13 @@ export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?:
         uri = currentVersionId
     }
 
-    return await getCachedTopicVersion(ctx, uri)
+    return await getTopicVersion(ctx, uri)
 }
 
 
 export const getTopicHandler: CAHandlerNoAuth<{ query: { i?: string, did?: string, rkey?: string } }, TopicView> = async (ctx, agent, params) => {
     const {i, did, rkey} = params.query
     return getTopic(ctx, agent, i, did, rkey)
-}
-
-
-export const getCachedTopicVersion = async (ctx: AppContext, uri: string) => {
-    return cached(ctx, ["topicVersion", uri], async () => getTopicVersion(ctx, uri))
 }
 
 
@@ -513,7 +489,7 @@ export const getTopicVersionHandler: CAHandler<{
     params: { did: string, rkey: string }
 }, TopicView> = async (ctx, _, {params}) => {
     const {did, rkey} = params
-    return getCachedTopicVersion(ctx, getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey))
+    return getTopicVersion(ctx, getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey))
 }
 
 

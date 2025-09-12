@@ -79,6 +79,7 @@ model User {
 
   @@index([handle])
   @@index([inCA, did])
+  @@index([did, inCA])
   @@index([CAProfileUri])
   @@index([createdAt])
   @@index([articleLastMonth, did])
@@ -308,6 +309,7 @@ model Record {
   @@index([authorId, createdAt(sort: Desc)])
   @@index([collection, createdAt(sort: Desc)])
   @@index([authorId, collection, createdAt(sort: Desc)])
+  @@index([collection, authorId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
 }
 
@@ -330,6 +332,16 @@ model Content {
   datasetsUsed         Dataset[]
   readSessions         ReadSession[]
   paymentPromises      PaymentPromise[]
+
+  createdAt               DateTime @default(now()) @map("created_at") // createdAt de record denormalizada
+  likesScore              Int? // solo para contents, pero va acá por el índice
+  interactionsScore       Int? // solo para contents, pero va acá por el índice
+  relativePopularityScore Float? // solo para contents, pero va acá por el índice
+
+  @@index([likesScore(sort: Desc), createdAt(sort: Desc)])
+  @@index([interactionsScore(sort: Desc), createdAt(sort: Desc)])
+  @@index([relativePopularityScore(sort: Desc), createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
 }
 
 model TopicInteraction {
@@ -361,16 +373,17 @@ model ReadSession {
 }
 
 model Post {
-  uri       String   @id
-  content   Content  @relation(fields: [uri], references: [uri])
-  facets    String?
-  embed     String?
+  uri     String  @id
+  content Content @relation(fields: [uri], references: [uri])
+  facets  String?
+  embed   String?
+
   replyToId String?
-  replyTo   Record?  @relation("reply", fields: [replyToId], references: [uri])
-  quote     String?
-  rootId    String?
-  root      Record?  @relation("root", fields: [rootId], references: [uri])
-  langs     String[]
+  replyTo   Record? @relation("reply", fields: [replyToId], references: [uri])
+
+  rootId String?
+  root   Record?  @relation("root", fields: [rootId], references: [uri])
+  langs  String[]
 
   @@index([replyToId])
   @@index([rootId])
@@ -394,6 +407,7 @@ model Reaction {
   voteReject VoteReject?
 
   @@index([subjectId])
+  @@index([uri, subjectId])
 }
 
 model HasReacted {

@@ -1,22 +1,16 @@
-import {max} from "#/utils/arrays";
-import {AppContext} from "#/index";
+import {max, unique} from "#/utils/arrays";
 import {TopicProp, TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {PrismaTransactionClient, SyncUpdate} from "#/services/sync/sync-update";
-import {getDidFromUri, getRkeyFromUri, getUri} from "#/utils/uri";
-import {addUpdateContributionsJobForTopics} from "#/services/sync/process-batch";
+import {getUri} from "#/utils/uri";
 import {CAHandlerNoAuth} from "#/utils/handler";
 import {getTopicTitle} from "#/services/wiki/utils";
-import {getTopicHistory} from "#/services/wiki/history";
+import {AppContext} from "#/setup";
+import {DB} from "../../../prisma/generated/types";
+import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard";
+import {sql, Transaction} from "kysely";
 
 
-export function getTopicLastEditFromVersions(topic: { versions: { content: { record: { createdAt: Date } } }[] }) {
-    const dates = topic.versions.map(v => v.content.record.createdAt)
-    return max(dates)
-}
-
-
-export async function getTopicIdFromTopicVersionUri(db: PrismaTransactionClient, did: string, rkey: string) {
-    const res = await db.topicVersion.findMany({
+export async function getTopicIdFromTopicVersionUri(ctx: AppContext, did: string, rkey: string) {
+    const res = await ctx.db.topicVersion.findMany({
         select: {
             topicId: true
         },
@@ -27,106 +21,6 @@ export async function getTopicIdFromTopicVersionUri(db: PrismaTransactionClient,
         }
     })
     return res && res.length > 0 ? res[0].topicId : null
-}
-
-
-export async function processDeleteTopicVersion(ctx: AppContext, uri: string) {
-    // TO DO: Esto debería ser atómico (leer la versión actual y actualizarla)
-
-    const id = await getTopicIdFromTopicVersionUri(ctx.db, getDidFromUri(uri), getRkeyFromUri(uri))
-    if (!id) return {error: "Ocurrió un error al borrar la versión."}
-    const topicHistory = await getTopicHistory(ctx.db, id)
-    if (!topicHistory) return {error: "Ocurrió un error al borrar la versión."}
-
-    const currentVersion = getTopicCurrentVersion(
-        topicHistory.protection,
-        topicHistory.versions
-    )
-    if (currentVersion == null) return {error: "Ocurrió un error al borrar la versión."}
-
-    const index = topicHistory.versions.findIndex(v => v.uri == uri)
-
-    const spliced = topicHistory.versions.toSpliced(index, 1)
-    const newCurrentVersionIndex = getTopicCurrentVersion(topicHistory.protection, spliced)
-
-    const currentVersionId = newCurrentVersionIndex != null ? spliced[newCurrentVersionIndex].uri : undefined
-
-    const updates = [
-        ctx.db.topicInteraction.deleteMany({where: {recordId: uri}}),
-        ctx.db.notification.deleteMany({where: {causedByRecordId: uri}}),
-        ctx.db.notification.deleteMany({where: {causedByRecordId: uri}}),
-        ctx.db.readSession.deleteMany({where: {readContentId: uri}}),
-        ctx.db.hasReacted.deleteMany({where: {recordId: uri}}),
-        ctx.db.voteReject.deleteMany({where: {reaction: {subjectId: uri}}}),
-        ctx.db.reaction.deleteMany({where: {subjectId: uri}}),
-        ctx.db.reference.deleteMany({where: {referencingContentId: uri}}),
-        ctx.db.topicVersion.deleteMany({where: {uri}}),
-        ctx.db.content.deleteMany({where: {uri}}),
-        ctx.db.record.deleteMany({where: {uri}}),
-        ctx.db.topic.update({
-            where: {
-                id,
-            },
-            data: {
-                lastEdit: new Date(),
-                currentVersionId
-            }
-        })
-    ]
-
-    const su = new SyncUpdate(ctx.db)
-    su.addUpdatesAsTransaction(updates)
-    console.log("applying transaction")
-    await su.apply()
-
-    console.log("udpating topic contr")
-    await addUpdateContributionsJobForTopics(ctx, [id])
-
-    return {}
-}
-
-
-export async function updateTopicsLastEdit(ctx: AppContext) {
-    const topics = await ctx.db.topic.findMany({
-        select: {
-            id: true,
-            versions: {
-                select: {
-                    content: {
-                        select: {
-                            record: {
-                                select: {
-                                    createdAt: true
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    const updates = topics
-        .map(t => ({
-            id: t.id,
-            lastEdit: getTopicLastEditFromVersions(t)
-        }))
-        .filter(t => t.lastEdit !== null);
-
-    if (updates.length === 0) return;
-
-    const ids = updates.map(({id}) => id);
-    const lastEdits = updates.map(({lastEdit}) => lastEdit);
-
-    const query = `
-        UPDATE "Topic"
-        SET "lastEdit" = CASE
-            ${updates.map((_, i) => `WHEN "id" = $${i * 2 + 2} THEN $${i * 2 + 1}`).join(" ")}
-            END
-        WHERE "id" IN (${ids.map((_, i) => `$${i * 2 + 2}`).join(", ")});
-    `;
-
-    await ctx.db.$executeRawUnsafe(query, ...lastEdits.flatMap((date, i) => [date, ids[i]]));
 }
 
 
@@ -211,4 +105,151 @@ export const getTopicTitleHandler: CAHandlerNoAuth<{ params: { id: string } }, {
 }
 
 
+export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB> | AppContext["kysely"], topicIds: string[]) {
+    topicIds = unique(topicIds)
+    if (topicIds.length == 0) return
 
+    type VersionWithVotes = {
+        topicId: string
+        uri: string
+        reactions: { uri: string, editorStatus: string }[] | null
+        protection: string
+        editorStatus: string
+        currentVersionId: string | null
+        accCharsAdded: number | null
+        created_at: Date
+    }
+
+    let allVersions: VersionWithVotes[]
+
+    try {
+        allVersions = await trx
+            .selectFrom('Record')
+            .innerJoin('Content', 'Content.uri', 'Record.uri')
+            .innerJoin('TopicVersion', 'TopicVersion.uri', 'Content.uri')
+            .innerJoin("User", "Record.authorId", "User.did")
+            .innerJoin("Topic", "Topic.id", "TopicVersion.topicId")
+            .leftJoin("Reaction", "Reaction.subjectId", "TopicVersion.uri")
+            .leftJoin("Record as ReactionRecord", "Reaction.uri", "ReactionRecord.uri")
+            .leftJoin("User as ReactionAuthor", "ReactionAuthor.did", "ReactionRecord.authorId")
+            .select([
+                "Record.created_at",
+                'TopicVersion.topicId',
+                "Topic.currentVersionId",
+                'Record.uri',
+                "Topic.protection",
+                "User.editorStatus",
+                "accCharsAdded",
+                eb => eb.fn.jsonAgg(
+                    sql<{ uri: string; editorStatus: string }>`json_build_object
+                    ('uri', "Reaction"."uri", 'editorStatus', "ReactionAuthor"."editorStatus")`
+                ).filterWhere("Reaction.uri", "is not", null).as("reactions")
+            ])
+            .where('TopicVersion.topicId', 'in', topicIds)
+            .where('Record.cid', 'is not', null)
+            .groupBy([
+                "Record.created_at",
+                'TopicVersion.topicId',
+                "Topic.currentVersionId",
+                'Record.uri',
+                "Topic.protection",
+                "User.editorStatus",
+                "accCharsAdded",
+            ])
+            .orderBy('Record.created_at', 'asc')
+            .execute();
+    } catch (err) {
+        console.error("Error getting topics for update current version", err)
+        return
+    }
+
+    const versionsByTopic = new Map<string, VersionWithVotes[]>()
+    allVersions.forEach(version => {
+        versionsByTopic.set(version.topicId, [...versionsByTopic.get(version.topicId) ?? [], version])
+    })
+
+    let lastEdit = new Date()
+    let updates: {
+        id: string
+        currentVersionId: string | null
+        lastEdit: Date
+    }[] = []
+    for (let i = 0; i < topicIds.length; i++) {
+        const id = topicIds[i]
+        const versions = versionsByTopic.get(id)
+        if (!versions) continue
+
+        if (versions.length == 0) {
+            updates.push({
+                id,
+                currentVersionId: null,
+                lastEdit
+            })
+        } else {
+            const status = versions
+                .map(v => ({
+                        author: {
+                            editorStatus: v.editorStatus
+                        },
+                        status: getTopicVersionStatusFromReactions(v.reactions ?? [])
+                    })
+                )
+
+            const currentVersion = getTopicCurrentVersion(
+                versions[0].protection,
+                status
+            )
+            if (currentVersion == null) {
+                updates.push({
+                    id,
+                    currentVersionId: null,
+                    lastEdit
+                })
+            } else {
+                const newCurrentVersion = versions[currentVersion].uri
+                const currentCurrentVersion = versions[0].currentVersionId
+
+                if (newCurrentVersion != currentCurrentVersion) {
+                    updates.push({
+                        id,
+                        currentVersionId: newCurrentVersion,
+                        lastEdit
+                    })
+                }
+            }
+        }
+    }
+
+    if (updates.length == 0) {
+        return
+    }
+
+    try {
+        await trx
+            .insertInto("Topic")
+            .values(updates)
+            .onConflict((oc) =>
+                oc.column("id").doUpdateSet({
+                    currentVersionId: (eb) => eb.ref('excluded.currentVersionId'),
+                    lastEdit: (eb) => eb.ref('excluded.lastEdit')
+                })
+            )
+            .execute()
+    } catch (err) {
+        console.error("Error updating topics current version:", err)
+    }
+}
+
+export async function updateAllTopicsCurrentVersions(ctx: AppContext) {
+    const topics = await ctx.kysely.selectFrom("Topic").select("id").execute()
+
+    const batchSize = 500
+
+    for (let i = 0; i < topics.length; i += batchSize) {
+        console.log("Updating all topics current version", i)
+        await updateTopicsCurrentVersionBatch(
+            ctx.kysely,
+            topics.slice(i, i + batchSize).map(x => x.id)
+        )
+    }
+}

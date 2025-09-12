@@ -51,6 +51,7 @@
     "jszip": "^3.10.1",
     "kysely": "^0.27.4",
     "lexical": "0.27.2",
+    "lru-cache": "^11.2.1",
     "mercadopago": "^2.7.0",
     "morgan": "^1.10.0",
     "multiformats": "^9.9.0",

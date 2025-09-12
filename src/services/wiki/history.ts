@@ -1,10 +1,10 @@
 import {CAHandler} from "#/utils/handler"
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {SessionAgent} from "#/utils/session-agent"
-import {PrismaTransactionClient} from "#/services/sync/sync-update"
 import {CategoryVotes, TopicHistory, TopicVersionStatus, VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {getCollectionFromUri} from "#/utils/uri"
 import {dbUserToProfileViewBasic} from "#/services/wiki/topics"
+import {AppContext} from "#/setup";
 
 
 function getViewerForTopicVersionInHistory(reactions: {uri: string, subjectId: string | null}[]): VersionInHistory["viewer"] {
@@ -27,8 +27,8 @@ function getViewerForTopicVersionInHistory(reactions: {uri: string, subjectId: s
 }
 
 
-export async function getTopicHistory(db: PrismaTransactionClient, id: string, agent?: SessionAgent) {
-    const versions = await db.record.findMany({
+export async function getTopicHistory(ctx: AppContext, id: string, agent?: SessionAgent) {
+    const versions = await ctx.db.record.findMany({
         select: {
             uri: true,
             cid: true,
@@ -155,7 +155,7 @@ export const getTopicHistoryHandler: CAHandler<{
 }, TopicHistory> = async (ctx, agent, {params}) => {
     const {id} = params
     try {
-        const topicHistory = await getTopicHistory(ctx.db, id, agent)
+        const topicHistory = await getTopicHistory(ctx, id, agent)
         return {data: topicHistory}
     } catch (e) {
         console.error("Error getting topic " + id)

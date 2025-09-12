@@ -3,7 +3,7 @@ import {Dataplane} from "#/services/hydration/dataplane";
 import {CAHandler} from "#/utils/handler";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {sql} from "kysely";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {v4 as uuidv4} from 'uuid'
 import {logTimes} from "#/utils/utils";
 import {getCAUsersDids} from "#/services/user/users";
@@ -20,13 +20,9 @@ import {getCAUsersDids} from "#/services/user/users";
 
 
 async function getRecommendationRankingForUser(ctx: AppContext, did: string, ignoreCache: boolean = false): Promise<string[]> {
-    const redisKey = `follow-suggestions:${did}`
-
     if(!ignoreCache){
-        const inCache = await ctx.ioredis.get(redisKey)
-        if(inCache != null){
-            return JSON.parse(inCache)
-        }
+        const inCache = await ctx.redisCache.followSuggestions.get(did)
+        if(inCache != null) return inCache
     }
 
     const lastTwoWeeks = new Date(Date.now() - 1000*3600*24*14)
@@ -114,7 +110,7 @@ async function getRecommendationRankingForUser(ctx: AppContext, did: string, ign
 
     const dids = recommendations.map(r => r.did)
 
-    await ctx.ioredis.set(redisKey, JSON.stringify(dids))
+    await ctx.redisCache.followSuggestions.set(did, dids)
     return dids
 }
 
@@ -175,57 +171,6 @@ export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: s
 }
 
 
-export async function redisDeleteByPrefix(ctx: AppContext, prefix: string) {
-    const stream = ctx.ioredis.scanStream({
-        match: `${prefix}*`,
-        count: 100
-    })
-
-    stream.on("data", async (keys) => {
-        if (keys.length) {
-            const pipeline = ctx.ioredis.pipeline();
-            keys.forEach((key: string) => pipeline.del(key));
-            await pipeline.exec();
-        }
-    })
-}
-
-
-export async function redisGetByPrefix(ctx: AppContext, prefix: string): Promise<[string, string][]> {
-    const keys = await ctx.ioredis.keys(`${prefix}*`);
-    if (keys.length === 0) return []
-
-    const values = await ctx.ioredis.mget(...keys);
-
-    return keys
-        .map((k, i): [string, string] | null => {
-            const v = values[i]
-            return v != null ? [k, v] : null
-        })
-        .filter(x => x != null)
-}
-
-
-export async function redisGetKeysByPrefix(ctx: AppContext, prefix: string): Promise<string[]> {
-    return ctx.ioredis.keys(`${prefix}*`);
-}
-
-
-export async function setFollowSuggestionsDirty(ctx: AppContext, did: string) {
-   await ctx.ioredis.sadd("follow-suggestions-dirty", did)
-}
-
-
-export async function setFollowSuggestionsNotDirty(ctx: AppContext, did: string) {
-    await ctx.ioredis.srem("follow-suggestions-dirty", did)
-}
-
-
-export function getDirtyFollowSuggestions(ctx: AppContext) {
-    return ctx.ioredis.smembers("follow-suggestions-dirty");
-}
-
-
 export const setNotInterested: CAHandler<{params: {subject: string}}, {}> = async (ctx, agent, {params}) => {
     await ctx.kysely
         .insertInto("NotInterested")
@@ -236,30 +181,28 @@ export const setNotInterested: CAHandler<{params: {subject: string}}, {}> = asyn
         }])
         .execute()
 
-    await setFollowSuggestionsDirty(ctx, agent.did)
+    await ctx.redisCache.onEvent("follow-suggestions-dirty", [agent.did])
 
     return {data: {}}
 }
 
 
 export async function updateFollowSuggestions(ctx: AppContext){
-    const dids = await getDirtyFollowSuggestions(ctx)
+    let dids = await ctx.redisCache.followSuggestionsDirty.getDirty()
     console.log(`${dids.length} follow suggestions to update`)
-
-    const requested = new Set(await redisGetKeysByPrefix(ctx, `follow-suggestions:`))
 
     const caUsers = new Set(await getCAUsersDids(ctx))
 
+    dids = dids.filter(d => caUsers.has(d))
+
     for(let i = 0; i < dids.length; i++) {
         const did = dids[i]
-        if(requested.has(`follow-suggestions:${did}`) && caUsers.has(did)){
-            console.log(`updating follow-suggestions ${i} of ${dids.length}: ${did}`)
-            const t1 = Date.now()
-            await setFollowSuggestionsNotDirty(ctx, did)
-            const t2 = Date.now()
-            await getRecommendationRankingForUser(ctx, did, true)
-            const t3 = Date.now()
-            logTimes(`updated follow-suggestions ${i}`, [t1, t2, t3])
-        }
+        console.log(`updating follow-suggestions ${i} of ${dids.length}: ${did}`)
+        const t1 = Date.now()
+        await ctx.redisCache.onEvent("follow-suggestions-ready", [did])
+        const t2 = Date.now()
+        await getRecommendationRankingForUser(ctx, did, true)
+        const t3 = Date.now()
+        logTimes(`updated follow-suggestions ${i}`, [t1, t2, t3])
     }
 }

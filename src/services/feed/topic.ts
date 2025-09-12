@@ -1,7 +1,7 @@
 import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {FeedSkeleton, getFeed, GetSkeletonProps} from "#/services/feed/feed";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {Agent} from "#/utils/session-agent";
 import {creationDateSortKey} from "#/services/feed/utils";
 import {hydrateFeedViewContent} from "#/services/hydration/hydrate";
@@ -20,17 +20,13 @@ import {
     isView as isSelectionQuoteEmbed
 } from "#/lex-api/types/ar/cabildoabierto/embed/selectionQuote"
 import {
-    enDiscusionFeedCursorToScore, enDiscusionFeedScoreToCursor,
     EnDiscusionMetric, EnDiscusionSkeletonElement,
     EnDiscusionTime,
     FeedFormatOption,
     getEnDiscusionStartDate, getNextCursorEnDiscusion
 } from "#/services/feed/inicio/discusion";
-import {sql} from "kysely";
 import {
-    followingFeedCursorToScore,
-    followingFeedScoreToCursor,
-    getCachedSkeleton, SkeletonQuery
+    SkeletonQuery
 } from "#/services/feed/inicio/following";
 
 
@@ -84,7 +80,8 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
             if(limit == 0) return []
 
             const res = await ctx.kysely
-                .selectFrom("Record")
+                .selectFrom("Content")
+                .innerJoin("Record", "Record.uri", "Content.uri")
                 .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
                 .leftJoin("Post", "Post.uri", "Record.uri")
                 .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
@@ -97,23 +94,9 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
                 .where("Record.created_at", ">", startDate)
                 .select(eb => [
                     'Record.uri',
-                    "Record.created_at as createdAt",
-                    eb(
-                        "Record.uniqueLikesCount",
-                        "-",
-                        eb.case()
-                            .when(
-                                eb.exists(eb.selectFrom('Reaction')
-                                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
-                                    .whereRef("Reaction.subjectId", "=", "Record.uri")
-                                    .where('ReactionRecord.collection', '=', 'app.bsky.feed.like')
-                                    .whereRef('ReactionRecord.authorId', '=', 'Record.authorId'))
-                            )
-                            .then(1).else(0)
-                            .end()
-                    ).as("score")
+                    "Record.created_at as createdAt"
                 ])
-                .orderBy(["score desc", "Record.created_at desc"])
+                .orderBy(["likesScore desc", "Content.created_at desc"])
                 .limit(limit)
                 .offset(offsetFrom)
                 .execute()
@@ -131,7 +114,8 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
 
             if(limit == 0) return []
             const res = await ctx.kysely
-                .selectFrom("Record")
+                .selectFrom("Content")
+                .innerJoin("Record", "Record.uri", "Content.uri")
                 .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
                 .leftJoin("Post", "Post.uri", "Record.uri")
                 .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
@@ -144,37 +128,9 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
                 .where("Record.created_at", ">", startDate)
                 .select([
                     'Record.uri',
-                    "Record.created_at as createdAt",
-                    sql<number>`
-                    "Record"."uniqueLikesCount" + 
-                    "Record"."uniqueRepostsCount" +
-                    (select count("Post"."uri") as "count" from "Post"
-                    inner join "Record" as "ReplyRecord" on "Post"."uri" = "ReplyRecord"."uri"
-                    where 
-                        "Post"."replyToId" = "Record"."uri" and
-                        "ReplyRecord"."authorId" != "Record"."authorId"
-                    )
-                    - (
-                        case when exists (
-                            select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
-                            where
-                                "ReactionRecord"."collection" = 'app.bsky.feed.repost'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
-                        ) then 1 else 0 end
-                    )
-                    - (
-                        case when exists (
-                            select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
-                            where
-                                "ReactionRecord"."collection" = 'app.bsky.feed.like'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
-                        ) then 1 else 0 end
-                    )
-                `.as("score")
+                    "Record.created_at as createdAt"
                 ])
-                .orderBy(["score desc", "created_at desc"])
+                .orderBy(["interactionsScore desc", "Content.created_at desc"])
                 .limit(limit)
                 .offset(offsetFrom)
                 .execute()
@@ -193,7 +149,8 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
             if(limit == 0) return []
 
             const res = await ctx.kysely
-                .selectFrom("Record")
+                .selectFrom("Content")
+                .innerJoin("Record", "Record.uri", "Content.uri")
                 .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
                 .leftJoin("Post", "Post.uri", "Record.uri")
                 .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
@@ -206,43 +163,9 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
                 .where("Record.created_at", ">", startDate)
                 .select([
                     'Record.uri',
-                    "Record.created_at as createdAt",
-                    sql<number>`
-                    ("Record"."uniqueLikesCount" + 
-                    "Record"."uniqueRepostsCount" +
-                    (select count("Post"."uri") as "count" from "Post"
-                    inner join "Record" as "ReplyRecord" on "Post"."uri" = "ReplyRecord"."uri"
-                    where 
-                        "Post"."replyToId" = "Record"."uri" and
-                        "ReplyRecord"."authorId" != "Record"."authorId"
-                    )
-                    - (
-                        case when exists (
-                            select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
-                            where
-                                "ReactionRecord"."collection" = 'app.bsky.feed.repost'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
-                        ) then 1 else 0 end
-                    )
-                    - (
-                        case when exists (
-                            select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
-                            where
-                                "ReactionRecord"."collection" = 'app.bsky.feed.like'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
-                        ) then 1 else 0 end
-                    ))::numeric / sqrt(1 + (
-                        select count(distinct "Follower"."did") from "Follow"
-                        inner join "Record" as "FollowRecord" on "Follow"."uri" = "FollowRecord"."uri"
-                        inner join "User" as "Follower" on "FollowRecord"."authorId" = "Follower"."did"
-                        where "Follower"."inCA" = true
-                        and "Follow"."userFollowedId" = "Record"."authorId"
-                    ))
-                `.as("score"),
+                    "Record.created_at as createdAt"
                 ])
-                .orderBy(["score desc", "createdAt desc"])
+                .orderBy(["relativePopularityScore desc", "Content.created_at desc"])
                 .limit(limit)
                 .offset(offsetFrom)
                 .execute()
@@ -289,16 +212,6 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
 }
 
 
-export function topicMentionsSkeletonRedisKey(id: string, metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption){
-    return `topic-mentions-skeleton:${id}:${metric}:${time}:${format}`
-}
-
-
-export function topicMentionsSkeletonRedisKeyTopicPrefix(id: string){
-    return `topic-mentions-skeleton:${id}:`
-}
-
-
 const getTopicMentionsSkeleton = async (
     ctx: AppContext,
     agent: Agent,
@@ -310,21 +223,15 @@ const getTopicMentionsSkeleton = async (
     format: FeedFormatOption
 ): Promise<{skeleton: FeedSkeleton, cursor: string | undefined}> => {
 
-    const skeleton = await getCachedSkeleton(
-        ctx,
-        agent,
-        topicMentionsSkeletonRedisKey(id, metric, time, format),
-        getTopicMentionsSkeletonQuery(id, metric, time, format),
-        getNextCursorEnDiscusion(metric, time, format),
-        metric == "Recientes" ? followingFeedCursorToScore : enDiscusionFeedCursorToScore,
-        metric == "Recientes" ? followingFeedScoreToCursor : enDiscusionFeedScoreToCursor,
-        25,
-        cursor
-    )
+    const limit = 25
+
+    const skeleton = await getTopicMentionsSkeletonQuery(
+        id, metric, time, format
+    )(ctx, agent, cursor, undefined, limit)
 
     return {
-        skeleton: skeleton.skeleton.map(x => ({post: x.uri})),
-        cursor: skeleton.cursor
+        skeleton: skeleton.map(x => ({post: x.uri})),
+        cursor: getNextCursorEnDiscusion(metric, time, format)(cursor, skeleton, limit)
     }
 }
 
@@ -394,7 +301,7 @@ export const getTopicFeed: CAHandlerNoAuth<{ params: {kind: "mentions" | "discus
         if(!did || !rkey){
             return {error: "Se requiere un id o un par did y rkey."}
         } else {
-            id = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey) ?? undefined
+            id = await getTopicIdFromTopicVersionUri(ctx, did, rkey) ?? undefined
             if(!id){
                 return {error: "No se encontró esta versión del tema."}
             }
@@ -454,7 +361,7 @@ export const getTopicMentionsInTopicsFeed: CAHandler<{ query: { i?: string, did?
         if(!did || !rkey){
             return {error: "Se requiere un id o un par did y rkey."}
         } else {
-            id = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey) ?? undefined
+            id = await getTopicIdFromTopicVersionUri(ctx, did, rkey) ?? undefined
             if(!id){
                 return {error: "No se encontró esta versión del tema."}
             }

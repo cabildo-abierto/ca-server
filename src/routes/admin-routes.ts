@@ -11,7 +11,7 @@ import {
     getTopicsWhereTitleIsNotSetAsSynonym
 } from "#/services/wiki/topics";
 import {sessionAgent} from "#/utils/session-agent";
-import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration";
+import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration/migration";
 import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation";
 import {updateTopicContributionsHandler} from "#/services/wiki/contributions";
 import {getActivityStats, getStatsDashboard} from "#/services/admin/stats";

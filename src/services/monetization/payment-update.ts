@@ -1,4 +1,4 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 
 
 export async function updatePayments(ctx: AppContext) {

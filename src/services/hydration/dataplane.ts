@@ -1,4 +1,4 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {NoSessionAgent, SessionAgent} from "#/utils/session-agent";
 import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs";
 import {ProfileViewBasic, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";

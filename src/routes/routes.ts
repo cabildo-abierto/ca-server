@@ -1,5 +1,4 @@
 import express from 'express'
-import type {AppContext} from '#/index'
 import {cookieOptions, handler, Session, sessionAgent} from "#/utils/session-agent";
 import {CAHandlerNoAuth, makeHandler, makeHandlerNoAuth} from "#/utils/handler";
 import {searchTopics, searchUsers} from "#/services/search/search";
@@ -17,7 +16,8 @@ import {
     getFollowers,
     getFollows,
     getProfile,
-    getSession, setSeenTutorial,
+    getSession,
+    setSeenTutorial,
     unfollow,
     updateAlgorithmConfig,
     updateProfile
@@ -63,6 +63,7 @@ import {getDraft, getDrafts, saveDraft } from '#/services/write/drafts';
 import { getNextMeeting } from '#/services/admin/meetings';
 import { getAuthorDashboardHandler } from '#/services/monetization/author-dashboard';
 import { getFollowSuggestions, setNotInterested } from '#/services/user/follow-suggestions';
+import {AppContext} from "#/setup";
 
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {

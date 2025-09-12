@@ -1,10 +1,10 @@
-import {processDataset} from "../sync/process-event";
 import {SessionAgent} from "#/utils/session-agent";
 import {CAHandler} from "#/utils/handler";
 import {uploadStringBlob} from "#/services/blob";
 import {Record as DatasetRecord} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
 import {BlobRef} from "@atproto/lexicon";
 import {compress} from "#/utils/compression";
+import {DatasetRecordProcessor} from "#/services/sync/event-processing/dataset";
 
 
 export async function createDatasetATProto(agent: SessionAgent, params: CreateDatasetProps) {
@@ -66,7 +66,7 @@ export const createDataset: CAHandler<CreateDatasetProps> = async (ctx, agent, p
     const {error, record, ref} = await createDatasetATProto(agent, params)
     if (error || !record || !ref) return {error}
 
-    await processDataset(ctx, ref, record)
+    await new DatasetRecordProcessor(ctx).processValidated([{ref, record}])
 
     return {}
 }

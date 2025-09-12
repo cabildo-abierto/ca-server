@@ -1,7 +1,7 @@
 import {CAHandler} from "#/utils/handler";
 import {Notification as BskyNotification} from "#/lex-api/types/app/bsky/notification/listNotifications"
 import {Notification} from "#/lex-api/types/ar/cabildoabierto/notification/listNotifications"
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {v4 as uuidv4} from "uuid";
 import {NotificationType} from "../../../prisma/generated/types";
 import {Dataplane} from "#/services/hydration/dataplane";

@@ -1,4 +1,4 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {getTopicCategories} from "#/services/wiki/utils";
 import {
     TopicProp
