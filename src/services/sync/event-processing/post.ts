@@ -20,6 +20,11 @@ import {processDirtyRecordsBatch, processRecordsBatch} from "#/services/sync/eve
 import {processContentsBatch} from "#/services/sync/event-processing/content";
 import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
 import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
+import {isMain as isMainRecordEmbed} from "#/lex-api/types/app/bsky/embed/record";
+import {isMain as isMainRecordEmbedWithMedia} from "#/lex-api/types/app/bsky/embed/recordWithMedia";
+import type {$Typed} from "#/lex-api/util";
+import type * as AppBskyEmbedRecord from "#/lex-api/types/app/bsky/embed/record";
+import type * as AppBskyEmbedRecordWithMedia from "#/lex-api/types/app/bsky/embed/recordWithMedia";
 
 
 export class PostRecordProcessor extends RecordProcessor<Post.Record> {
@@ -30,10 +35,21 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
         const insertedPosts = await this.ctx.kysely.transaction().execute(async (trx) => {
             await processRecordsBatch(trx, records)
             const referencedRefs: ATProtoStrongRef[] = records.reduce((acc, r) => {
+                let quoteRef: ATProtoStrongRef | undefined = undefined
+                if (isMainRecordEmbed(r.record.embed)){
+                    quoteRef = {uri: r.record.embed.record.uri, cid: r.record.embed.record.cid}
+                }
+                else {
+                    if (isMainRecordEmbedWithMedia(r.record.embed)){
+                        quoteRef = {uri: r.record.embed.record.record.uri, cid: r.record.embed.record.record.cid}
+                    }
+                }
+
                 return [
                     ...acc,
                     ...(r.record.reply?.root ? [{uri: r.record.reply.root.uri, cid: r.record.reply.root.cid}] : []),
                     ...(r.record.reply?.parent ? [{uri: r.record.reply.parent.uri, cid: r.record.reply.parent.cid}] : []),
+                    ...(quoteRef? [quoteRef] : [])
                 ]
             }, [] as ATProtoStrongRef[])
             await processDirtyRecordsBatch(trx, referencedRefs)

@@ -291,10 +291,12 @@ model Record {
 
   uniqueLikesCount   Int @default(0)
   uniqueRepostsCount Int @default(0)
+  quotesCount        Int @default(0)
   uniqueAcceptsCount Int @default(0)
   uniqueRejectsCount Int @default(0)
 
   replies Post[] @relation("reply")
+  quotes  Post[] @relation("quote")
   rootOf  Post[] @relation("root")
 
   CAProfileOf User? @relation("CAProfile")
@@ -381,11 +383,15 @@ model Post {
   replyToId String?
   replyTo   Record? @relation("reply", fields: [replyToId], references: [uri])
 
+  quoteToId String?
+  quoteTo   Record? @relation("quote", fields: [quoteToId], references: [uri])
+
   rootId String?
   root   Record?  @relation("root", fields: [rootId], references: [uri])
   langs  String[]
 
   @@index([replyToId])
+  @@index([quoteToId])
   @@index([rootId])
 }
 

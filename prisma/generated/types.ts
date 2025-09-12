@@ -173,7 +173,6 @@ export type Post = {
     facets: string | null;
     embed: string | null;
     replyToId: string | null;
-    quote: string | null;
     rootId: string | null;
     langs: string[];
 };
