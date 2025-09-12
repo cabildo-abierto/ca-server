@@ -1,34 +1,24 @@
 import {cleanText} from "#/utils/strings";
 import {CAHandler} from "#/utils/handler";
 import {FeedPipelineProps, getFeed, GetFeedOutput, GetSkeletonProps} from "#/services/feed/feed";
+import {sql} from "kysely";
 
 
 const getSearchContentsSkeleton: (q: string) => GetSkeletonProps = (q) => async (ctx, agent, data, cursor) => {
-    // solo los posts tienen atributo text en content, el resto suelen usar blobs
-    const postUris: {uri: string}[] = await ctx.db.$queryRaw`
-      SELECT "uri"
-      FROM "Content"
-      WHERE to_tsvector('simple', immutable_unaccent("text")) @@ plainto_tsquery('simple', immutable_unaccent(${q}))
-      ORDER BY ts_rank(to_tsvector('simple', immutable_unaccent("text")), plainto_tsquery('simple', immutable_unaccent(${q}))) DESC
-      LIMIT 10
-    `;
-    const articleUris: {uri: string}[] = await ctx.db.$queryRaw`
-      SELECT "uri"
-      FROM "Article"
-      WHERE to_tsvector('simple', immutable_unaccent("title")) @@ plainto_tsquery('simple', immutable_unaccent(${q}))
-      ORDER BY ts_rank(to_tsvector('simple', immutable_unaccent("title")), plainto_tsquery('simple', immutable_unaccent(${q}))) DESC
-      LIMIT 10
-    `;
+    const uris = await ctx.kysely
+        .selectFrom("Content")
+        .innerJoin("Record", "Record.uri", "Content.uri")
+        .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"])
+        .select("Content.uri")
+        .limit(25)
+        .where(sql`to_tsvector('simple', immutable_unaccent("text"))`,"@@" , sql`plainto_tsquery('simple', immutable_unaccent(${q}))`)
+        .orderBy(sql`ts_rank(to_tsvector('simple', immutable_unaccent("text")), plainto_tsquery('simple', immutable_unaccent(${q}))) DESC`)
+        .execute()
 
-    const res: string[] = []
-    let i = 0
-    while(i < postUris.length || i < articleUris.length){
-        if(i < postUris.length) res.push(postUris[i].uri)
-        if(i < articleUris.length) res.push(articleUris[i].uri)
-        i++
+    return {
+        skeleton: uris.map(u => ({post: u.uri})),
+        cursor: undefined
     }
-
-    return {skeleton: res.map(u => ({post: u})), cursor: undefined}
 }
 
 

@@ -23,13 +23,25 @@ primary_region = 'gru'
   force_https = true
   auto_stop_machines = 'suspend'
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 2
   processes = ['app']
 
 [[vm]]
-  size = 'shared-cpu-2x'
+  size = 'shared-cpu-1x'
+  memory = '1gb'
+  processes = ['app']
+
+[[vm]]
+  size = 'shared-cpu-1x'
   memory = '2gb'
+  processes = ['worker']
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+  processes = ['mirror']
 
 [processes]
   app = "node dist/index.js"
-  worker = "node dist/worker-mirror.js"
+  mirror = "node dist/mirror.js"
+  worker = "node dist/worker.js"

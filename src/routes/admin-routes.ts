@@ -11,13 +11,13 @@ import {
     getTopicsWhereTitleIsNotSetAsSynonym
 } from "#/services/wiki/topics";
 import {sessionAgent} from "#/utils/session-agent";
-import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration";
+import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration/migration";
 import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation";
 import {updateTopicContributionsHandler} from "#/services/wiki/contributions";
 import {getActivityStats, getStatsDashboard} from "#/services/admin/stats";
 import {getRepoCounts} from "#/services/admin/repo";
 import {startJob} from "#/jobs/worker";
-import {getUsersSyncStatus} from "#/services/admin/sync";
+import {clearRedisHandler} from "#/services/admin/cache";
 
 
 function isAdmin(did: string) {
@@ -150,7 +150,7 @@ export const adminRoutes = (ctx: AppContext) => {
 
     router.post("/access-request-sent/:id", makeAdminHandler(ctx, markAccessRequestSent))
 
-    router.get("/sync-status", makeAdminHandler(ctx, getUsersSyncStatus))
+    router.post("/clear-redis/:prefix", makeAdminHandler(ctx, clearRedisHandler))
 
     return router
 }

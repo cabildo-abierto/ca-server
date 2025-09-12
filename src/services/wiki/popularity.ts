@@ -1,10 +1,10 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {getDidFromUri} from "#/utils/uri";
 import {logTimes} from "#/utils/utils";
 import {testUsers} from "#/services/admin/stats";
 import {
     createContentInteractions,
-    getEditedTopics, getLastContentInteractionsUpdate,
+    getEditedTopics,
     updateContentInteractionsForTopics
 } from "#/services/wiki/interactions";
 import {updateReferences} from "#/services/wiki/references";
@@ -79,8 +79,6 @@ export async function updateTopicPopularities(ctx: AppContext, topicIds: string[
             popularityScoreLastMonth: x[1].interactionsLastMonth.size
         }))
 
-        console.log("values", values.length)
-
         if(values.length == 0) continue
 
         await ctx.kysely
@@ -101,8 +99,7 @@ export async function updateTopicPopularityScores(ctx: AppContext) {
     await updateReferences(ctx)
 
     console.log("creating interactions")
-
-    const since = await getLastContentInteractionsUpdate(ctx)
+    const since = await ctx.redisCache.lastTopicInteractionsUpdate.get()
     const topicIds = await getEditedTopics(ctx, since)
 
     console.log(`found ${topicIds} edited topics`)

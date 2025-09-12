@@ -3,7 +3,7 @@ import {getFollowingFeedPipeline} from "#/services/feed/inicio/following";
 import {Agent} from "#/utils/session-agent";
 import {hydrateFeed} from "#/services/hydration/hydrate";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {
     EnDiscusionMetric,
     EnDiscusionTime,
@@ -23,6 +23,7 @@ export type FollowingFeedFilter = "Todos" | "Solo Cabildo Abierto"
 
 export const getFeedByKind: CAHandler<{params: {kind: string}, query: {cursor?: string, metric?: EnDiscusionMetric, time?: EnDiscusionTime, format?: FeedFormatOption, filter?: FollowingFeedFilter}}, GetFeedOutput> = async (ctx, agent, {params, query}) => {
     let pipeline: FeedPipelineProps
+    
     const {kind} = params
     const {cursor, metric, time, filter, format} = query
     if(kind == "discusion"){

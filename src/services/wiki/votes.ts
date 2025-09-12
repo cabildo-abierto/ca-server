@@ -1,6 +1,6 @@
 import {ATProtoStrongRef} from "#/lib/types";
 import {SessionAgent} from "#/utils/session-agent";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {getUri} from "#/utils/uri";
 import {CAHandler} from "#/utils/handler";
 import {addReaction, removeReactionAT} from "#/services/reactions/reactions";

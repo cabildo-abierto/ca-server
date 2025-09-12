@@ -1,4 +1,4 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {getChunksReadByContent} from "#/services/monetization/user-months";
 import {sum} from "#/utils/arrays";
 import {getMonthlyValue} from "#/services/monetization/donations";
@@ -181,11 +181,11 @@ type PaymentPromiseCreation = {
 
 async function createPaymentPromisesForTopicVersion(ctx: AppContext, uri: string, value: number, monthId: string): Promise<PaymentPromiseCreation[]> {
     const {did, rkey} = splitUri(uri)
-    const id = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey)
+    const id = await getTopicIdFromTopicVersionUri(ctx, did, rkey)
     if (!id) {
         throw Error(`No se encontró el tema asociado a ${uri}`)
     }
-    const history = await getTopicHistory(ctx.db, id)
+    const history = await getTopicHistory(ctx, id)
     const idx = history.versions.findIndex(v => v.uri == uri)
     if (idx == -1) {
         throw Error(`No se encontró la versión en el tema ${uri} ${id}`)

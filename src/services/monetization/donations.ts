@@ -1,6 +1,6 @@
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import MercadoPagoConfig, {Preference} from "mercadopago";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {getUsersWithReadSessions} from "#/services/monetization/user-months";
 import {count} from "#/utils/arrays";
 import {v4 as uuidv4} from "uuid";

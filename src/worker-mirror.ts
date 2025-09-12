@@ -1,3 +1,3 @@
-import {run} from "#/worker";
+import {run} from "#/index-worker";
 
 run(["worker", "mirror"])

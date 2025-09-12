@@ -1,4 +1,4 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {Record as PostRecord} from "#/lex-api/types/app/bsky/feed/post"
 
 

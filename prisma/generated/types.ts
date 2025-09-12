@@ -4,13 +4,6 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   : ColumnType<T, T | undefined, T>;
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
-export const MirrorStatus = {
-    Dirty: "Dirty",
-    InProcess: "InProcess",
-    Sync: "Sync",
-    Failed: "Failed"
-} as const;
-export type MirrorStatus = (typeof MirrorStatus)[keyof typeof MirrorStatus];
 export const ModerationState = {
     Ok: "Ok",
     ShadowBan: "ShadowBan"
@@ -89,6 +82,10 @@ export type Content = {
     lastReferencesUpdate: Timestamp | null;
     selfLabels: string[];
     embeds: unknown[];
+    created_at: Generated<Timestamp>;
+    likesScore: number | null;
+    interactionsScore: number | null;
+    relativePopularityScore: number | null;
 };
 export type ContentToDataset = {
     A: string;
@@ -232,6 +229,7 @@ export type TopicCategory = {
 export type TopicInteraction = {
     recordId: string;
     topicId: string;
+    touched: Generated<Timestamp>;
 };
 export type TopicToCategory = {
     topicId: string;
@@ -264,7 +262,6 @@ export type User = {
     hasAccess: Generated<boolean>;
     inCA: Generated<boolean>;
     CAProfileUri: string | null;
-    mirrorStatus: Generated<MirrorStatus>;
     created_at: Generated<Timestamp>;
     editorStatus: Generated<EditorStatus>;
     platformAdmin: Generated<boolean>;
@@ -278,6 +275,8 @@ export type User = {
     lastSeenNotifications: Generated<Timestamp>;
     moderationState: Generated<ModerationState>;
     algorithmConfig: unknown | null;
+    articleLastMonth: Generated<boolean>;
+    postLastTwoWeeks: Generated<boolean>;
 };
 export type UserMonth = {
     id: string;

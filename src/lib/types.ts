@@ -3,7 +3,6 @@ import {ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor
 import {AlgorithmConfig} from "#/services/user/users";
 
 
-
 export type ATProtoStrongRef = {
     uri: string
     cid: string
@@ -132,16 +131,4 @@ export type CommitEvent = JetstreamEvent & {
         uri: string
         record?: any
     }
-}
-
-
-export type UserRepo = UserRepoElement[]
-
-export type UserRepoElement = {
-    did: string
-    uri: string
-    collection: string
-    rkey: string
-    record: any
-    cid: string
 }

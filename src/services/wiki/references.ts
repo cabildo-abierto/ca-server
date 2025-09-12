@@ -1,11 +1,10 @@
 import {cleanText} from "#/utils/strings";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {gett, unique} from "#/utils/arrays";
 import {decompress} from "#/utils/compression";
 import {getCollectionFromUri, getDidFromUri, isPost} from "#/utils/uri";
 import {BlobRef} from "#/services/hydration/hydrate";
 import {fetchTextBlobs} from "#/services/blob";
-import {formatIsoDate} from "#/utils/dates";
 import {getCAUsersDids} from "#/services/user/users";
 import {sql} from "kysely";
 import {logTimes} from "#/utils/utils";
@@ -15,6 +14,7 @@ import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {getEditedTopics, updateContentInteractionsForTopics} from "#/services/wiki/interactions";
 import {updateTopicPopularities} from "#/services/wiki/popularity";
 import {updateContentsText} from "#/services/wiki/content";
+
 
 function getSynonymRegex(synonym: string){
     const escapedKey = cleanText(synonym).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -30,29 +30,13 @@ function countSynonymInText(regex: RegExp, textCleaned: string): number {
 }
 
 
-export async function getLastReferencesUpdate(ctx: AppContext){
-    const lastUpdateStr = await ctx.ioredis.get("last-references-update")
-    return lastUpdateStr ? new Date(lastUpdateStr) : new Date(0)
-}
-
-
-export async function setLastReferencesUpdate(ctx: AppContext, date: Date){
-    await ctx.ioredis.set("last-references-update", date.toISOString())
-    console.log("Last references update set to", formatIsoDate(date))
-}
-
-
 export async function updateReferencesForNewContents(ctx: AppContext) {
-    const lastUpdate = await getLastReferencesUpdate(ctx)
+    const lastUpdate = await ctx.redisCache.lastTopicInteractionsUpdate.get()
     console.log("Last references update", lastUpdate)
 
     const batchSize = 10000
     let curOffset = 0
     const synonymsMap = await getSynonymsToTopicsMap(ctx)
-
-    console.log("synonyms", Array.from(synonymsMap)
-        .slice(0, 10)
-    )
 
     const caUsers = await getCAUsersDids(ctx)
 
@@ -195,11 +179,14 @@ export async function applyReferencesUpdate(ctx: AppContext, referencesToInsert:
             await deleteQuery.execute()
 
             if(referencesToInsert.length > 0){
-                await trx
-                    .insertInto("Reference")
-                    .values(referencesToInsert)
-                    .onConflict(ob => ob.columns(["referencingContentId", "referencedTopicId"]).doNothing())
-                    .execute()
+                const batchSize = 5000
+                for(let i = 0; i < referencesToInsert.length; i += batchSize){
+                    await trx
+                        .insertInto("Reference")
+                        .values(referencesToInsert.slice(i, i+batchSize))
+                        .onConflict(ob => ob.columns(["referencingContentId", "referencedTopicId"]).doNothing())
+                        .execute()
+                }
             }
         })
 
@@ -346,7 +333,7 @@ export async function updateReferencesForTopics(ctx: AppContext, topicIds: strin
 
 
 export async function updateReferencesForNewTopics(ctx: AppContext) {
-    const lastUpdate = await getLastReferencesUpdate(ctx)
+    const lastUpdate = await ctx.redisCache.lastReferencesUpdate.get()
     console.log("Last reference update", lastUpdate)
 
     const topicIds = await getEditedTopics(ctx, lastUpdate)
@@ -363,7 +350,7 @@ export async function updateReferencesForNewTopics(ctx: AppContext) {
 
 
 export async function restartReferenceLastUpdate(ctx: AppContext) {
-    await setLastReferencesUpdate(ctx, new Date(Date.now()-1000*3600*24*14))
+    await ctx.redisCache.lastReferencesUpdate.restart()
 }
 
 
@@ -382,7 +369,7 @@ export async function updateReferences(ctx: AppContext){
     const t3 = Date.now()
     console.log("Done after", t3-t2)
 
-    await setLastReferencesUpdate(ctx, updateTime)
+    await ctx.redisCache.lastReferencesUpdate.set(updateTime)
 }
 
 
@@ -466,4 +453,39 @@ export async function updateTopicMentions(ctx: AppContext, id: string) {
     await updateContentInteractionsForTopics(ctx, [id])
 
     await updateTopicPopularities(ctx, [id])
+}
+
+
+async function updateReferencesForContents(ctx: AppContext, uris: string[]) {
+    if(uris.length == 0) return
+
+    const contents: ContentProps[] = await ctx.kysely
+        .selectFrom('Record')
+        .innerJoin('Content', 'Record.uri', 'Content.uri')
+        .leftJoin('Article', 'Record.uri', 'Article.uri')
+        .leftJoin('Reference', 'Reference.referencingContentId', 'Record.uri')
+        .select([
+            'Record.uri',
+            'Record.CAIndexedAt',
+            'Content.text',
+            'Content.textBlobId',
+            'Content.format',
+            'Content.dbFormat',
+            'Article.title'
+        ])
+        .where("Record.uri", "in", uris)
+        .execute()
+
+    const synonymsMap = await getSynonymsToTopicsMap(ctx, undefined)
+    await updateReferencesForContentsAndTopics(
+        ctx,
+        contents,
+        synonymsMap
+    )
+}
+
+
+export async function updateContentsTopicMentions(ctx: AppContext, uris: string[]) {
+    await updateContentsText(ctx, uris)
+    await updateReferencesForContents(ctx, uris)
 }

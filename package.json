@@ -9,6 +9,7 @@
   "scripts": {
     "worker": "tsx watch --clear-screen=false src/worker.ts | pino-pretty",
     "worker-mirror": "tsx watch --clear-screen=false src/worker-mirror.ts | pino-pretty",
+    "mirror": "tsx watch --clear-screen=false src/mirror.ts | pino-pretty",
     "dev": "tsx watch --clear-screen=false src/index.ts | pino-pretty",
     "build": "tsup",
     "typecheck": "tsc --noEmit",
@@ -50,6 +51,7 @@
     "jszip": "^3.10.1",
     "kysely": "^0.27.4",
     "lexical": "0.27.2",
+    "lru-cache": "^11.2.1",
     "mercadopago": "^2.7.0",
     "morgan": "^1.10.0",
     "multiformats": "^9.9.0",

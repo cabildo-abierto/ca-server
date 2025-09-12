@@ -1,4 +1,4 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {Account, ATProtoStrongRef, AuthorStatus, CAProfile, Profile, Session, ValidationState} from "#/lib/types";
 import {Agent, cookieOptions, SessionAgent} from "#/utils/session-agent";
 import {deleteRecords} from "#/services/delete";
@@ -11,7 +11,6 @@ import {getIronSession} from "iron-session";
 import {createCAUser} from "#/services/user/access";
 import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {Record as FollowRecord} from "#/lex-api/types/app/bsky/graph/follow"
-import {processBskyProfile, processFollow} from "#/services/sync/process-event";
 import {
     Record as BskyProfileRecord,
     validateRecord as validateBskyProfile
@@ -21,6 +20,8 @@ import {uploadBase64Blob} from "#/services/blob";
 import {EnDiscusionMetric, EnDiscusionTime, FeedFormatOption} from "#/services/feed/inicio/discusion";
 import {FollowingFeedFilter} from "#/services/feed/feed";
 import {logTimes} from "#/utils/utils";
+import {BskyProfileRecordProcessor} from "#/services/sync/event-processing/profile";
+import {FollowRecordProcessor} from "#/services/sync/event-processing/follow";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -78,18 +79,6 @@ export async function didToHandle(ctx: AppContext, did: string): Promise<string 
 }
 
 
-export const getCAUsersHandles = async (ctx: AppContext) => {
-    return (await ctx.db.user.findMany({
-        select: {
-            handle: true
-        },
-        where: {
-            inCA: true
-        }
-    })).map(({handle}) => handle)
-}
-
-
 export const getCAUsersDids = async (ctx: AppContext) => {
     return (await ctx.db.user.findMany({
         select: {
@@ -110,7 +99,6 @@ type UserAccessStatus = {
     hasAccess: boolean
     inCA: boolean
     inviteCode: string | null
-    mirrorStatus: string
     displayName: string | null
 }
 
@@ -120,7 +108,7 @@ export const getUsers: CAHandler<{}, UserAccessStatus[]> = async (ctx, agent, {}
         const users = await ctx.kysely
             .selectFrom("User")
             .leftJoin("InviteCode", "InviteCode.usedByDid", "User.did")
-            .select(["did", "handle", "displayName", "mirrorStatus", "hasAccess", "CAProfileUri", "User.created_at", "inCA", "InviteCode.code"])
+            .select(["did", "handle", "displayName", "hasAccess", "CAProfileUri", "User.created_at", "inCA", "InviteCode.code"])
             .where(eb => eb.or([
                 eb("InviteCode.code", "is not", null),
                 eb("User.inCA", "=", true),
@@ -153,7 +141,7 @@ export const follow: CAHandler<{ followedDid: string }, { followUri: string }> =
             subject: followedDid,
             createdAt: new Date().toISOString()
         }
-        await processFollow(ctx, res, record)
+        await new FollowRecordProcessor(ctx).processValidated([{ref: res, record}])
         return {data: {followUri: res.uri}}
     } catch {
         return {error: "Error al seguir al usuario."}
@@ -172,12 +160,7 @@ export const unfollow: CAHandler<{ followUri: string }> = async (ctx, agent, {fo
 }
 
 
-async function getCAProfile(ctx: AppContext, agent: Agent, handleOrDid: string): Promise<CAProfile | null> {
-    const t1 = Date.now()
-    const did = await handleToDid(ctx, agent, handleOrDid)
-    if (!did) return null
-
-    const t2 = Date.now()
+async function getCAProfileQuery(ctx: AppContext, did: string){
     const profiles = await ctx.kysely
         .selectFrom("User")
         .select([
@@ -189,7 +172,9 @@ async function getCAProfile(ctx: AppContext, agent: Agent, handleOrDid: string):
                 eb
                     .selectFrom("Follow")
                     .innerJoin("Record", "Record.uri", "Follow.uri")
+                    .innerJoin("User", "User.did", "Record.authorId")
                     .select(eb.fn.countAll<number>().as("count"))
+                    .where("User.inCA", "=", true)
                     .where("Follow.userFollowedId", "=", did)
                     .as("followersCount"),
             (eb) =>
@@ -218,18 +203,12 @@ async function getCAProfile(ctx: AppContext, agent: Agent, handleOrDid: string):
                     .where("Record.collection", "=", "ar.cabildoabierto.wiki.topicVersion")
                     .as("editsCount"),
         ])
-        .where(eb => eb.or([
-            eb("User.did", "=", handleOrDid),
-            eb("User.handle", "=", handleOrDid)
-        ]))
+        .where("User.did", "=", did)
         .execute()
-    const t3 = Date.now()
 
     if (profiles.length == 0) return null
 
     const profile = profiles[0]
-
-    logTimes("ca profile", [t1, t2, t3])
 
     return {
         editorStatus: profile.editorStatus,
@@ -243,28 +222,50 @@ async function getCAProfile(ctx: AppContext, agent: Agent, handleOrDid: string):
 }
 
 
-export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile> = async (ctx, agent, {params}) => {
+async function getCAProfile(ctx: AppContext, agent: Agent, did: string): Promise<CAProfile | null> {
+    return await getCAProfileQuery(ctx, did)
+}
 
+
+export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile> = async (ctx, agent, {params}) => {
     try {
         const t1 = Date.now()
+        const did = await handleToDid(ctx, agent, params.handleOrDid)
+        if (!did) return {error: "No se encontró el usuario."}
+        const t2 = Date.now()
+
+        const cached = await ctx
+            .redisCache
+            .profile
+            .get(did)
+
+        const t3 = Date.now()
+        if(cached) {
+            logTimes(`cache hit en perfil ${did}`, [t1, t2, t3])
+            return {
+                data: cached
+            }
+        }
 
         const [bskyProfile, caProfile] = await Promise.all([
             agent.bsky.getProfile({actor: params.handleOrDid}),
             getCAProfile(ctx, agent, params.handleOrDid)
         ])
 
-        const t2 = Date.now()
+        const t4 = Date.now()
 
         const profile: Profile = {
             bsky: bskyProfile.data,
             ca: caProfile
         }
 
-        logTimes("perfil", [t1, t2])
+        const t5 = Date.now()
 
-        return {
-            data: profile
-        }
+        await ctx.redisCache.profile.set(did, profile)
+
+        logTimes("perfil", [t1, t2, t3, t4, t5])
+
+        return {data: profile}
     } catch (err) {
         console.log("Error getting profile", err)
         return {error: "No se encontró el usuario."}
@@ -613,17 +614,13 @@ export const updateProfile: CAHandler<UpdateProfileProps, {}> = async (ctx, agen
         })
 
         if(data.cid){
-            console.log("starting process bsky profile early")
             const ref: ATProtoStrongRef = {
                 uri: data.uri,
                 cid: data.cid
             }
 
-            await processBskyProfile(
-                ctx,
-                ref,
-                record
-            )
+            await new BskyProfileRecordProcessor(ctx)
+                .processValidated([{ref, record}])
         }
     }
 
@@ -657,6 +654,8 @@ export const updateAlgorithmConfig: CAHandler<AlgorithmConfig, {}> = async (ctx,
 
 
 export async function updateAuthorStatus(ctx: AppContext, dids?: string[]) {
+    if(dids && dids.length == 0) return
+
     const query = ctx.kysely
         .selectFrom("User")
         .select([
@@ -698,6 +697,8 @@ export async function updateAuthorStatus(ctx: AppContext, dids?: string[]) {
             authorStatus: JSON.stringify(newAuthorStatus)
         }
     })
+
+    if(values.length == 0) return
 
     await ctx.kysely
         .insertInto("User")

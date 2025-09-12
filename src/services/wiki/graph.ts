@@ -1,5 +1,5 @@
 import {getCategoriesWithCounts} from "./topics";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {TopicsGraph} from "#/lib/types";
 import {logTimes} from "#/utils/utils";
 import {CAHandler} from "#/utils/handler";

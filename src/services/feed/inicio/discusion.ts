@@ -1,23 +1,35 @@
-import {FeedPipelineProps, FeedSortKey, GetSkeletonProps} from "#/services/feed/feed";
+import {FeedPipelineProps, GetSkeletonProps} from "#/services/feed/feed";
 import {CAHandler} from "#/utils/handler";
-import {Record as PostRecord, validateRecord as validatePostRecord, isRecord as isPostRecord} from "#/lex-api/types/app/bsky/feed/post";
-import {Record as ArticleRecord, validateRecord as validateArticleRecord, isRecord as isArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
-import {processArticle, processPost} from "#/services/sync/process-event";
+import {
+    isRecord as isPostRecord,
+    Record as PostRecord,
+    validateRecord as validatePostRecord
+} from "#/lex-api/types/app/bsky/feed/post";
+import {
+    isRecord as isArticleRecord,
+    Record as ArticleRecord,
+    validateRecord as validateArticleRecord
+} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 import {$Typed} from "@atproto/api";
-import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {sql} from "kysely";
-import {logTimes} from "#/utils/utils";
+import {
+    GetNextCursor,
+    getNextFollowingFeedCursor,
+    SkeletonQuery
+} from "#/services/feed/inicio/following";
+import {PostRecordProcessor} from "#/services/sync/event-processing/post";
+import {ArticleRecordProcessor} from "#/services/sync/event-processing/article";
 
 
-function getEnDiscusionStartDate(time: EnDiscusionTime){
-    const oneDay = 3600*24*1000
-    if(time == "Último día"){
-        return new Date(Date.now()-oneDay)
-    } else if(time == "Última semana"){
-        return new Date(Date.now()-7*oneDay)
-    } else if(time == "Último mes"){
-        return new Date(Date.now()-30*oneDay)
+export function getEnDiscusionStartDate(time: EnDiscusionTime) {
+    const oneDay = 3600 * 24 * 1000
+    if (time == "Último día") {
+        return new Date(Date.now() - oneDay)
+    } else if (time == "Última semana") {
+        return new Date(Date.now() - 7 * oneDay)
+    } else if (time == "Último mes") {
+        return new Date(Date.now() - 30 * oneDay)
     } else {
         throw Error(`Período de tiempo inválido: ${time}`)
     }
@@ -28,267 +40,178 @@ export type EnDiscusionMetric = "Me gustas" | "Interacciones" | "Popularidad rel
 export type EnDiscusionTime = "Último día" | "Última semana" | "Último mes"
 export type FeedFormatOption = "Todos" | "Artículos"
 
+export type EnDiscusionSkeletonElement = {uri: string, createdAt: Date}
 
-export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption) => GetSkeletonProps = (metric, time, format) => async (ctx, agent, data, cursor) => {
-    const startDate = getEnDiscusionStartDate(time)
-    // Me gustas: usamos uniqueLikesCount - autolikes.
-    // Interacciones: usamos uniqueLikesCount + uniqueRepliesCount + uniqueRepostsCount
-    // Popularidad relativa: usamos Interacciones / Cantidad de seguidores del autor en Bsky
+const getEnDiscusionSkeletonQuery: (metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption) => SkeletonQuery<EnDiscusionSkeletonElement> = (metric, time, format) => {
+    return async (ctx, agent, from, to, limit) => {
+        const startDate = getEnDiscusionStartDate(time)
+        const collections = format == "Artículos" ? ["ar.cabildoabierto.feed.article"] : ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
+        const label = 'ca:en discusión'
 
-    const collections = format == "Artículos" ? ["ar.cabildoabierto.feed.article"] : ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
-    const label = 'ca:en discusión'
+        if(limit == 0){
+            return []
+        }
 
-    if(metric == "Me gustas"){
+        if(metric == "Me gustas"){
+            const offsetFrom = from != null ? Number(from)+1 : 0
+            const offsetTo = to != null ? Number(to) : undefined
+            if(offsetTo != null){
+                limit = Math.min(limit, offsetTo - offsetFrom)
+            }
 
-        let skeleton = await ctx.kysely
-            .with("RecordsEnDiscusion", (db => db
-                    .selectFrom("Record")
-                    .select([
-                        "Record.uri",
-                        "Record.created_at",
-                        "Record.uniqueLikesCount",
-                        "Record.authorId"
-                    ])
-                    .where('Record.collection', 'in', collections)
-                    .innerJoin('Content', 'Record.uri', 'Content.uri')
-                    .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
-            ))
-            .with('Autolikes', (db) =>
-                db.selectFrom('Reaction')
-                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
-                    .leftJoin('RecordsEnDiscusion as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
-                    .where('ReactionRecord.collection', 'in', [
-                        'app.bsky.feed.like'
-                    ])
-                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
-                    .select(['Reaction.uri', 'Reaction.subjectId'])
-            )
-            .selectFrom('RecordsEnDiscusion as Record')
-            .leftJoin('Autolikes', 'Record.uri', 'Autolikes.subjectId')
-            .select([
-                'Record.uri',
-                'Record.uniqueLikesCount',
-                'Record.created_at',
-                'Autolikes.uri as autolikes_uri',
-            ])
-            .execute();
+            if(limit == 0) return []
 
-        skeleton = sortByKey(skeleton, e => {
-            return [
-                e.created_at > startDate ? 1 : 0,
-                (e.uniqueLikesCount ?? 0) - (e.autolikes_uri ? 1 : 0),
-                e.created_at.getTime()
-            ];
-        }, listOrderDesc);
-
-        return {
-            skeleton: skeleton.map(e => ({ post: e.uri })),
-            cursor: undefined
-        };
-
-    } else if(metric == "Interacciones"){
-
-        // Contamos cantidad de likes, reposts y respuestas. Pendiente: contar citas
-        let skeleton = await ctx.kysely
-            .with("RecordsEnDiscusion", (db => db
-                .selectFrom("Record")
-                .select([
-                    "Record.uri",
-                    "Record.created_at",
-                    "Record.uniqueLikesCount",
-                    "Record.uniqueRepostsCount",
-                    "Record.authorId"
-                ])
+            const res = await ctx.kysely
+                .selectFrom('Content')
+                .innerJoin('Record', 'Record.uri', 'Content.uri')
                 .where('Record.collection', 'in', collections)
+                .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
+                .where("Record.created_at", ">", startDate)
+                .select([
+                    "Content.uri",
+                    "Content.created_at as createdAt"
+                ])
+                .orderBy(["likesScore desc", "Content.created_at desc"])
+                .limit(limit)
+                .offset(offsetFrom)
+                .execute()
+
+            return res.map((r, i) => ({
+                ...r,
+                score: -(i + offsetFrom)
+            }))
+        } else if(metric == "Interacciones"){
+            const offsetFrom = from != null ? Number(from)+1 : 0
+            const offsetTo = to != null ? Number(to) : undefined
+            if(offsetTo != null){
+                limit = Math.min(limit, offsetTo - offsetFrom)
+            }
+
+            if(limit == 0) return []
+            const res = await ctx.kysely
+                .selectFrom('Record')
+                .where('Record.collection', 'in', collections)
+                .where("Record.created_at", ">", startDate)
                 .innerJoin('Content', 'Record.uri', 'Content.uri')
                 .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
-            ))
-            .with('Autolikes', (db) =>
-                db.selectFrom('Reaction')
-                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
-                    .leftJoin('RecordsEnDiscusion as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
-                    .where('ReactionRecord.collection', 'in', [
-                        'app.bsky.feed.like'
-                    ])
-                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
-                    .select(['Reaction.uri', 'Reaction.subjectId'])
-            )
-            .with('Autoreposts', (db) =>
-                db.selectFrom('Reaction')
-                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
-                    .leftJoin('RecordsEnDiscusion as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
-                    .where('ReactionRecord.collection', 'in', [
-                        'app.bsky.feed.repost',
-                    ])
-                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
-                    .select(['Reaction.uri', 'Reaction.subjectId'])
-            )
-            .with('RepliesFromOthers', (db) =>
-                db.selectFrom('Record as RecordsEnDiscusion')
-                    .leftJoin('Post', 'RecordsEnDiscusion.uri', 'Post.replyToId')
-                    .innerJoin('Record as ReplyRecord', 'Post.uri', 'ReplyRecord.uri')
-                    .whereRef('ReplyRecord.authorId', '!=', 'RecordsEnDiscusion.authorId')
-                    .select(['RecordsEnDiscusion.uri as reply_to_uri',
-                            (eb) => eb.fn.count<number>('Post.uri').as('reply_count')
-                            ])
-                    .groupBy(['RecordsEnDiscusion.uri'])
-            )
-            .selectFrom('RecordsEnDiscusion as Record')
-            .leftJoin('Autolikes', 'Record.uri', 'Autolikes.subjectId')
-            .leftJoin('Autoreposts', 'Record.uri', 'Autoreposts.subjectId')
-            .leftJoin('RepliesFromOthers', 'Record.uri', 'RepliesFromOthers.reply_to_uri')
-            .select([
-                'Record.uri',
-                'Record.uniqueLikesCount',
-                'Record.uniqueRepostsCount',
-                'Record.created_at',
-                'Autolikes.uri as autolikes_uri',
-                'Autoreposts.uri as autoreposts_uri',
-                'RepliesFromOthers.reply_count as replies_from_others_count'
-            ])
-            .execute();
+                .select([
+                    "Content.uri",
+                    "Content.created_at as createdAt"
+                ])
+                .orderBy(["interactionsScore desc", "Content.created_at desc"])
+                .limit(limit)
+                .offset(offsetFrom)
+                .execute()
 
-        skeleton = sortByKey(skeleton, e => {
-            return [
-                e.created_at > startDate ? 1 : 0,
-                (e.uniqueLikesCount ?? 0) +
-                (e.uniqueRepostsCount ?? 0) +
-                (Number(e.replies_from_others_count) ?? 0) -
-                (e.autolikes_uri ? 1 : 0) -
-                (e.autoreposts_uri ? 1 : 0),
-                e.created_at.getTime()
-            ];
-        }, listOrderDesc);
+            return res.map((r, i) => ({
+                ...r,
+                score: -(i + offsetFrom)
+            }))
+        } else if(metric == "Popularidad relativa"){
+            const offsetFrom = from != null ? Number(from)+1 : 0
+            const offsetTo = to != null ? Number(to) : undefined
+            if(offsetTo != null){
+                limit = Math.min(limit, offsetTo - offsetFrom)
+            }
 
-        return {
-            skeleton: skeleton.map(e => ({ post: e.uri })),
-            cursor: undefined
-        };
+            if(limit == 0) return []
 
-    } else if(metric == "Popularidad relativa") {
-        // Contamos cantidad de likes, reposts y respuestas. Pendiente: contar citas
+            const res = await ctx.kysely.selectFrom('Record')
+                .where('Record.collection', 'in', collections)
+                .where("Record.created_at", ">", startDate)
+                .innerJoin('Content', 'Record.uri', 'Content.uri')
+                .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
+                .select(eb => [
+                    'Record.uri',
+                    "Record.created_at as createdAt"
+                ])
+                .orderBy(["relativePopularityScore desc", "Content.created_at desc"])
+                .limit(limit)
+                .offset(offsetFrom)
+                .execute()
 
-        let skeleton = await ctx.kysely
-            .with("RecordsEnDiscusion", (db => db
-                    .selectFrom("Record")
-                    .select([
-                        "Record.uri",
-                        "Record.created_at",
-                        "Record.uniqueLikesCount",
-                        "Record.uniqueRepostsCount",
-                        "Record.authorId"
-                    ])
-                    .where('Record.collection', 'in', collections)
-                    .innerJoin('Content', 'Record.uri', 'Content.uri')
-                    .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
-            ))
-            .with('Autolikes', (db) =>
-                db.selectFrom('Reaction')
-                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
-                    .leftJoin('RecordsEnDiscusion as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
-                    .where('ReactionRecord.collection', 'in', [
-                        'app.bsky.feed.like'
-                    ])
-                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
-                    .select(['Reaction.uri', 'Reaction.subjectId'])
-            )
-            .with('Autoreposts', (db) =>
-                db.selectFrom('Reaction')
-                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
-                    .leftJoin('RecordsEnDiscusion as SubjectRecord', 'Reaction.subjectId', 'SubjectRecord.uri')
-                    .where('ReactionRecord.collection', 'in', [
-                        'app.bsky.feed.repost',
-                    ])
-                    .whereRef('ReactionRecord.authorId', '=', 'SubjectRecord.authorId')
-                    .select(['Reaction.uri', 'Reaction.subjectId'])
-            )
-            .with('RepliesFromOthers', (db) =>
-                db.selectFrom('Record as RecordsEnDiscusion')
-                    .leftJoin('Post', 'RecordsEnDiscusion.uri', 'Post.replyToId')
-                    .innerJoin('Record as ReplyRecord', 'Post.uri', 'ReplyRecord.uri')
-                    .whereRef('ReplyRecord.authorId', '!=', 'RecordsEnDiscusion.authorId')
-                    .select(['RecordsEnDiscusion.uri as reply_to_uri',
-                        (eb) => eb.fn.count<number>('Post.uri').as('reply_count')
-                    ])
-                    .groupBy(['RecordsEnDiscusion.uri'])
-            )
-            .with('AuthorFollowers', (db) =>
-                db.selectFrom('User')
-                    .leftJoin('Follow', 'User.did', 'Follow.userFollowedId')
-                    .leftJoin('Record', 'Follow.uri', 'Record.uri' )
-                    .leftJoin('User as Follower', 'Record.authorId', 'Follower.did')
-                    .select(['User.did',
-                        (eb) => eb.fn.count<number>('Follower.did').distinct().as('followers_count')
-                    ])
-                    .where("User.inCA", "=", true)
-                    .groupBy(['User.did'])
-            )
-            .selectFrom('RecordsEnDiscusion as Record')
-            .leftJoin('Autolikes', 'Record.uri', 'Autolikes.subjectId')
-            .leftJoin('Autoreposts', 'Record.uri', 'Autoreposts.subjectId')
-            .leftJoin('RepliesFromOthers', 'Record.uri', 'RepliesFromOthers.reply_to_uri')
-            .leftJoin('AuthorFollowers', 'Record.authorId', 'AuthorFollowers.did')
-            .select([
-                'Record.uri',
-                'Record.uniqueLikesCount',
-                'Record.uniqueRepostsCount',
-                'Record.created_at',
-                'Autolikes.uri as autolikes_uri',
-                'Autoreposts.uri as autoreposts_uri',
-                "AuthorFollowers.followers_count",
-                'RepliesFromOthers.reply_count as replies_from_others_count'
-            ])
-            .execute();
+            return res.map((r, i) => ({
+                ...r,
+                score: -(i + offsetFrom)
+            }))
+        } else if(metric == "Recientes"){
+            const offsetFrom = from != null ? new Date(from) : undefined
+            const offsetTo = to != null ? new Date(to) : undefined
 
-            skeleton = sortByKey(skeleton, e => {
-                return [
-                    e.created_at > startDate ? 1 : 0,
-                    ((e.uniqueLikesCount ?? 0) +
-                    (e.uniqueRepostsCount ?? 0) +
-                    (Number(e.replies_from_others_count) ?? 0) -
-                    (e.autolikes_uri ? 1 : 0) -
-                    (e.autoreposts_uri ? 1 : 0)) /
-                    ((e.followers_count ?? 0) + 1) ** (1/2),
-                    e.created_at.getTime()
-                ];
-            }, listOrderDesc);
+            if(offsetFrom && offsetTo && offsetFrom.getTime() <= offsetTo.getTime()) return []
 
-            return {
-                skeleton: skeleton.map(e => ({ post: e.uri })),
-                cursor: undefined
-            };
-    }
-    else {
-        const skeleton = await ctx.kysely.selectFrom('Record')
-            .where('Record.collection', 'in', collections)
-            .innerJoin('Content', 'Record.uri', 'Content.uri')
-            .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
-            .select(['Record.uri'])
-            .orderBy('Record.created_at', 'desc')
-            .execute()
-        return {
-            skeleton: skeleton.map(e => ({ post: e.uri })),
-            cursor: undefined
+            const res = await ctx.kysely.selectFrom('Record')
+                .where('Record.collection', 'in', collections)
+                .$if(offsetFrom != null, qb => qb.where("Record.created_at", "<", offsetFrom!))
+                .$if(offsetTo != null, qb => qb.where("Record.created_at", ">", offsetTo!))
+                .innerJoin('Content', 'Record.uri', 'Content.uri')
+                .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
+                .select([
+                    'Record.uri',
+                    "Record.created_at as createdAt"
+                ])
+                .orderBy('Record.created_at', 'desc')
+                .limit(limit)
+                .execute()
+            return res.map(r => ({
+                uri: r.uri,
+                createdAt: r.createdAt,
+                score: r.createdAt.getTime()
+            }))
+        } else {
+            throw Error(`Métrica desconocida! ${metric}`)
         }
     }
 }
 
 
-const enDiscusionSortKey = (metric: EnDiscusionMetric): FeedSortKey => {
-    return null
+export const getNextCursorEnDiscusion: (metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption) => GetNextCursor<EnDiscusionSkeletonElement> = (metric, time, format) => {
+    return (cursor, skeleton, limit) => {
+        if(metric == "Recientes"){
+            return getNextFollowingFeedCursor(
+                cursor,
+                skeleton.map(s => ({
+                    ...s,
+                    repostedRecordUri: undefined
+                })),
+                limit
+            )
+        } else {
+            const cur = cursor ? Number(cursor) : 0
+            if(skeleton.length < limit) return undefined
+            return (cur - 1 + skeleton.length).toString()
+        }
+    }
+}
+
+
+export const getEnDiscusionSkeleton: (metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption) => GetSkeletonProps = (metric, time, format) => async (
+    ctx, agent, data, cursor
+) => {
+    const limit = 25
+
+    const res = await getEnDiscusionSkeletonQuery(metric, time, format)(
+        ctx, agent, cursor, undefined, limit
+    )
+
+    return {
+        skeleton: res.map(r => ({post: r.uri})),
+        cursor: getNextCursorEnDiscusion(metric, time, format)(cursor, res, limit)
+    }
 }
 
 
 export const getEnDiscusionFeedPipeline = (
     metric: EnDiscusionMetric = "Me gustas", time: EnDiscusionTime = "Último día", format: FeedFormatOption = "Todos"): FeedPipelineProps => {
     return {
-        getSkeleton: getEnDiscusionSkeleton(metric, time, format),
-        sortKey: enDiscusionSortKey(metric),
+        getSkeleton: getEnDiscusionSkeleton(metric, time, format)
     }
 }
 
 
-export const addToEnDiscusion: CAHandler<{params: {collection: string, rkey: string}}, {}> = async (ctx, agent, {params} ) => {
+export const addToEnDiscusion: CAHandler<{
+    params: { collection: string, rkey: string }
+}, {}> = async (ctx, agent, {params}) => {
     // TO DO: Pasar a processUpdate
     const {collection, rkey} = params
     const did = agent.did
@@ -299,7 +222,7 @@ export const addToEnDiscusion: CAHandler<{params: {collection: string, rkey: str
         rkey
     })
 
-    if(!res.success){
+    if (!res.success) {
         return {error: "No se pudo agregar a en discusión."}
     }
 
@@ -309,16 +232,16 @@ export const addToEnDiscusion: CAHandler<{params: {collection: string, rkey: str
     const validateArticle = validateArticleRecord(record)
 
     let validRecord: $Typed<PostRecord> | $Typed<ArticleRecord> | undefined
-    if(validatePost.success) {
+    if (validatePost.success) {
         validRecord = {...validatePost.value, $type: "app.bsky.feed.post"}
-    } else if(validateArticle.success){
+    } else if (validateArticle.success) {
         validRecord = {...validateArticle.value, $type: "ar.cabildoabierto.feed.article"}
     }
 
-    if(validRecord) {
-        if(validRecord.labels && isSelfLabels(validRecord.labels)){
+    if (validRecord) {
+        if (validRecord.labels && isSelfLabels(validRecord.labels)) {
             validRecord.labels.values.push({val: "ca:en discusión"})
-        } else if(!validRecord.labels){
+        } else if (!validRecord.labels) {
             validRecord.labels = {
                 $type: "com.atproto.label.defs#selfLabels",
                 values: [{val: "ca:en discusión"}]
@@ -332,21 +255,22 @@ export const addToEnDiscusion: CAHandler<{params: {collection: string, rkey: str
             record: validRecord
         })
 
-        if(isArticleRecord(validRecord)){
-            await processArticle(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
+        if (isArticleRecord(validRecord)) {
+            await new ArticleRecordProcessor(ctx).processValidated([{ref: {uri: ref.data.uri, cid: ref.data.cid}, record: validRecord}])
         } else {
-            await processPost(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord)
+            await new PostRecordProcessor(ctx).processValidated([{ref: {uri: ref.data.uri, cid: ref.data.cid}, record: validRecord}])
         }
     } else {
         return {error: "No se pudo agregar a en discusión."}
     }
 
-
     return {data: {}}
 }
 
 
-export const removeFromEnDiscusion: CAHandler<{params: {collection: string, rkey: string}}, {}> = async (ctx, agent, {params} ) => {
+export const removeFromEnDiscusion: CAHandler<{
+    params: { collection: string, rkey: string }
+}, {}> = async (ctx, agent, {params}) => {
     // TO DO: Pasar a processUpdate
     const {collection, rkey} = params
     const did = agent.did
@@ -357,7 +281,7 @@ export const removeFromEnDiscusion: CAHandler<{params: {collection: string, rkey
         rkey
     })
 
-    if(!res.success){
+    if (!res.success) {
         return {error: "No se pudo remover de en discusión."}
     }
 
@@ -367,14 +291,14 @@ export const removeFromEnDiscusion: CAHandler<{params: {collection: string, rkey
     const validateArticle = validateArticleRecord(record)
 
     let validRecord: PostRecord | ArticleRecord | undefined
-    if(validatePost.success) {
+    if (validatePost.success) {
         validRecord = validatePost.value
-    } else if(validateArticle.success){
+    } else if (validateArticle.success) {
         validRecord = validateArticle.value
     }
 
-    if(validRecord) {
-        if(validRecord.labels && isSelfLabels(validRecord.labels)){
+    if (validRecord) {
+        if (validRecord.labels && isSelfLabels(validRecord.labels)) {
             validRecord.labels.values = validRecord.labels.values.filter(v => v.val != "ca:en discusión")
         }
 
@@ -385,15 +309,14 @@ export const removeFromEnDiscusion: CAHandler<{params: {collection: string, rkey
             record: validRecord
         })
 
-        if(isArticleRecord(record)){
-            await processArticle(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord as ArticleRecord)
-        } else if(isPostRecord(record)){
-            await processPost(ctx, {uri: ref.data.uri, cid: ref.data.cid}, validRecord as PostRecord)
+        if (isArticleRecord(validRecord)) {
+            await new ArticleRecordProcessor(ctx).process([{ref: {uri: ref.data.uri, cid: ref.data.cid}, record: validRecord}])
+        } else if(isPostRecord(validRecord)) {
+            await new PostRecordProcessor(ctx).process([{ref: {uri: ref.data.uri, cid: ref.data.cid}, record: validRecord}])
         }
     } else {
         return {error: "No se pudo remover de en discusión."}
     }
-
 
     return {data: {}}
 }

@@ -1,5 +1,5 @@
 import {GetSkeletonOutput, GetSkeletonProps} from "#/services/feed/feed";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {Agent} from "#/utils/session-agent";
 import {getSkeletonFromTimeline} from "#/services/feed/inicio/following";
 import {Dataplane} from "#/services/hydration/dataplane";

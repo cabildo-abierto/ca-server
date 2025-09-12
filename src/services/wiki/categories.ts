@@ -1,4 +1,4 @@
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {getTopicCategories} from "#/services/wiki/utils";
 import {
     TopicProp
@@ -64,7 +64,7 @@ export async function updateTopicsCategories(ctx: AppContext) {
             console.log("Error getting existing relations", err)
             return
         }
-        const batchSize = 500;
+        const batchSize = 2000;
 
         console.log("Inserting new relations")
 

@@ -2,7 +2,7 @@ import {handleToDid} from "#/services/user/users";
 import {getMainProfileFeedSkeleton} from "#/services/feed/profile/main";
 import {getRepliesProfileFeedSkeleton} from "#/services/feed/profile/replies";
 import {FeedPipelineProps, getFeed, GetFeedOutput} from "#/services/feed/feed";
-import {rootCreationDateSortKey} from "#/services/feed/utils";
+import {creationDateSortKey, rootCreationDateSortKey} from "#/services/feed/utils";
 import {getEditsProfileFeedSkeleton} from "#/services/feed/profile/edits";
 import {CAHandler} from "#/utils/handler";
 import {filterFeed} from "#/services/feed/inicio/following";
@@ -25,7 +25,7 @@ export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: stri
     } else if(kind == "respuestas"){
         pipeline = {
             getSkeleton: getRepliesProfileFeedSkeleton(did),
-            sortKey: rootCreationDateSortKey, // TO DO: Reemplazar por fecha de la última respuesta
+            sortKey: creationDateSortKey,
             filter: (f) => filterFeed(f, true)
         }
     } else if(kind == "ediciones") {

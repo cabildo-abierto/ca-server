@@ -1,6 +1,6 @@
-import {SessionAgent} from "#/utils/session-agent";
+import {Agent, SessionAgent} from "#/utils/session-agent";
 import {getFollowing} from "#/services/user/users";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {FeedPipelineProps, FeedSkeleton, FollowingFeedFilter, GetSkeletonProps} from "#/services/feed/feed";
 import {rootCreationDateSortKey} from "#/services/feed/utils";
 import {FeedViewPost, isFeedViewPost, isReasonRepost, SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
@@ -12,9 +12,9 @@ import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
 import {isTopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-import {min} from "#/utils/arrays";
 import {FeedFormatOption} from "#/services/feed/inicio/discusion";
 import {logTimes} from "#/utils/utils";
+import {FollowingFeedSkeletonKey} from "#/services/redis/cache";
 
 export type RepostQueryResult = {
     uri?: string
@@ -115,7 +115,7 @@ export const getSkeletonFromTimeline = (timeline: FeedViewPost[], following?: st
 }
 
 
-export async function getArticlesForFollowingFeed(ctx: AppContext, agent: SessionAgent): Promise<{
+export async function getArticlesForFollowingFeed(ctx: AppContext, agent: SessionAgent, data: Dataplane, startDate: Date): Promise<{
     created_at: Date,
     uri: string
 }[]> {
@@ -133,6 +133,7 @@ export async function getArticlesForFollowingFeed(ctx: AppContext, agent: Sessio
             eb("FollowRecord.authorId", "=", agent.did),
             eb("Record.authorId", "=", agent.did)
         ]))
+        .where("Record.created_at", "<", startDate)
         .orderBy("Record.created_at", "desc")
         .limit(25)
         .execute()
@@ -142,7 +143,7 @@ export async function getArticlesForFollowingFeed(ctx: AppContext, agent: Sessio
 }
 
 
-export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: SessionAgent, dataplane: Dataplane): Promise<RepostQueryResult[]> {
+export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: SessionAgent, dataplane: Dataplane, startDate: Date): Promise<RepostQueryResult[]> {
     const t1 = Date.now()
     const res = await ctx.kysely
         .selectFrom("Record")
@@ -215,13 +216,23 @@ export async function getBskyTimeline(agent: SessionAgent, limit: number, data: 
 }
 
 
-async function getFollowingFeedSkeletonAllCASide(ctx: AppContext, agent: SessionAgent, data: Dataplane) {
+async function getFollowingFeedSkeletonAllCASide(ctx: AppContext, agent: SessionAgent, data: Dataplane, startDate: Date) {
     const t1 = Date.now()
 
-    const articlesQuery = getArticlesForFollowingFeed(ctx, agent)
+    const articlesQuery = getArticlesForFollowingFeed(
+        ctx,
+        agent,
+        data,
+        startDate
+    )
 
     const t2 = Date.now()
-    const articleRepostsQuery: Promise<RepostQueryResult[]> = getArticleRepostsForFollowingFeed(ctx, agent, data)
+    const articleRepostsQuery: Promise<RepostQueryResult[]> = getArticleRepostsForFollowingFeed(
+        ctx,
+        agent,
+        data,
+        startDate
+    )
 
     const [articles, articleReposts, following] = await Promise.all([
         articlesQuery,
@@ -245,10 +256,12 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
 
     const timelineQuery = getBskyTimeline(agent, 25, data, cursor)
 
+    const cursorDate = cursor ? new Date(cursor) : new Date()
+
     const t1 = Date.now()
     let [timeline, {articles, articleReposts, following}] = await Promise.all([
         timelineQuery,
-        getFollowingFeedSkeletonAllCASide(ctx, agent, data)
+        getFollowingFeedSkeletonAllCASide(ctx, agent, data, cursorDate)
     ])
     const t2 = Date.now()
 
@@ -256,8 +269,8 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
     const lastInTimeline = timeline.feed.length > 0 ? timeline.feed[timeline.feed.length - 1].post.indexedAt : null
     if (lastInTimeline) {
         const lastInTimelineDate = new Date(lastInTimeline)
-        articles = articles.filter(a => a.created_at >= lastInTimelineDate)
-        articleReposts = articleReposts.filter(a => a.createdAt && a.createdAt >= lastInTimelineDate)
+        articles = articles.filter(a => a.created_at >= lastInTimelineDate && a.created_at <= cursorDate)
+        articleReposts = articleReposts.filter(a => a.createdAt && a.createdAt >= lastInTimelineDate && a.createdAt <= cursorDate)
     }
 
     const timelineSkeleton = getSkeletonFromTimeline(timeline.feed, following)
@@ -281,146 +294,293 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
 }
 
 
-function followingFeedOnlyCABaseQueryAll(ctx: AppContext, agent: SessionAgent, cursor?: string) {
-    return ctx.kysely
-        .with("follows", eb => eb
-            .selectFrom("User")
-            .select(["User.did"])
-            .where("User.inCA", "=", true)
-            .where(eb => eb.or([
-                eb("User.did", "=", agent.did),
-                eb.exists(
-                    eb.selectFrom("Follow")
-                        .innerJoin("Record", "Follow.uri", "Record.uri")
-                        .where("Record.authorId", "=", agent.did)
-                        .whereRef("Follow.userFollowedId", "=", "User.did")
-                )
-            ]))
-        )
-        .with("filteredRecords", (eb) =>
-            eb
-                .selectFrom("Record")
-                .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.post", "app.bsky.feed.repost"])
-                .where(eb => eb.exists(
-                        eb
-                            .selectFrom("follows")
-                            .whereRef("follows.did", "=", "Record.authorId")
-                    )
-                )
-                .$if(cursor != null, (qb) => qb.where("Record.created_at", "<", new Date(cursor!)))
-                .select(["Record.uri", "Record.collection", "Record.created_at"])
-        )
-        .selectFrom("filteredRecords as Record")
-        .leftJoin("Post", (join) =>
-            join
-                .onRef("Post.uri", "=", "Record.uri")
-                .on("Record.collection", "=", "app.bsky.feed.post")
-        )
-        .leftJoin("Reaction as Repost", (join) =>
-            join
-                .onRef("Repost.uri", "=", "Record.uri")
-                .on("Record.collection", "=", "app.bsky.feed.repost")
-        )
-        .leftJoin("Record as RepostedRecord", "Repost.subjectId", "RepostedRecord.uri")
-        .select([
-            "Record.uri as uri",
-            "Record.created_at as createdAt",
-            "RepostedRecord.uri as repostedRecordUri"
-        ])
-        .where((eb) =>
-            eb.or([
-                eb.and([
-                    eb("Record.collection", "=", "app.bsky.feed.post"),
-                    eb("Post.replyToId", "is", null)
-                ]),
-                eb("Record.collection", "=", "ar.cabildoabierto.feed.article"),
-                eb.and([
-                    eb("Record.collection", "=", "app.bsky.feed.repost"),
-                    eb.exists(
-                        eb.selectFrom("follows")
-                            .whereRef("follows.did", "=", "RepostedRecord.authorId")
-                    ),
-                ]),
-            ])
-        )
-        .orderBy("createdAt", "desc");
+async function getCAFollows(ctx: AppContext, did: string): Promise<string[]> {
+    await ctx.redisCache.CAFollows.get(did)
+
+    const rows = await ctx.kysely
+        .selectFrom("Follow")
+        .select("Follow.userFollowedId as did")
+        .innerJoin("Record", "Follow.uri", "Record.uri")
+        .innerJoin("User", "User.did", "Follow.userFollowedId")
+        .where("Record.authorId", "=", did)
+        .where("User.inCA", "=", true)
+        .execute();
+
+    const dids = rows.map(x => x.did).filter(x => x != null);
+
+    await ctx.redisCache.CAFollows.set(did, dids)
+
+    return dids
+}
+
+export type SkeletonQuery<T> = (
+    ctx: AppContext,
+    agent: Agent,
+    from: string | undefined,
+    to: string | undefined,
+    limit: number
+) => Promise<(T & {score: number})[]>
+
+export type FollowingFeedSkeletonQuery<T> = (
+    ctx: AppContext,
+    did: string,
+    from: string | undefined,
+    to: string | undefined,
+    limit: number
+) => Promise<(T & {score: number})[]>
+
+
+export type FollowingFeedSkeletonElement = {
+    uri: string
+    createdAt: Date
+    repostedRecordUri: string | undefined
 }
 
 
-function followingFeedOnlyCABaseQueryArticles(ctx: AppContext, agent: SessionAgent, cursor?: string) {
-    return ctx.kysely
-        .with("follows", eb => eb
-            .selectFrom("User")
-            .where("User.inCA", "=", true)
-            .select(["User.did"])
-            .where(eb => eb.or([
-                eb("User.did", "=", agent.did),
-                eb.exists(
-                    eb.selectFrom("Follow")
-                        .innerJoin("Record", "Follow.uri", "Record.uri")
-                        .where("Record.authorId", "=", agent.did)
-                        .whereRef("Follow.userFollowedId", "=", "User.did")
-                )
-            ]))
-        )
-        .with("filteredRecords", (eb) =>
-            eb
-                .selectFrom("Record")
-                .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.repost"])
-                .where(eb => eb.exists(
-                        eb
-                            .selectFrom("follows")
-                            .whereRef("follows.did", "=", "Record.authorId")
-                    )
-                )
-                .$if(cursor != null, (qb) => qb.where("Record.created_at", "<", new Date(cursor!)))
-                .select(["Record.uri", "Record.collection", "Record.created_at"])
-        )
-        .selectFrom("filteredRecords as Record")
-        .leftJoin("Reaction as Repost", (join) =>
-            join
-                .onRef("Repost.uri", "=", "Record.uri")
-                .on("Record.collection", "=", "app.bsky.feed.repost")
-        )
-        .leftJoin("Record as RepostedRecord", "Repost.subjectId", "RepostedRecord.uri")
+const followingFeedOnlyCASkeletonQuery: FollowingFeedSkeletonQuery<FollowingFeedSkeletonElement> = async (ctx, did, from, to, limit) => {
+    const t1 = Date.now()
+    const follows = await getCAFollows(ctx, did)
+    const t2 = Date.now()
+
+    const res = await ctx.kysely
+        .selectFrom("Record")
+        .where("Record.collection", "=", "ar.cabildoabierto.feed.article")
+        .$if(from != null, qb => qb.where("Record.created_at", "<", new Date(from!)))
+        .$if(to != null, qb => qb.where("Record.created_at", ">", new Date(to!)))
+        .where("Record.authorId", "in", [...follows, did])
+        .where("Record.record", "is not", null)
         .select([
             "Record.uri as uri",
             "Record.created_at as createdAt",
-            "RepostedRecord.uri as repostedRecordUri"
+            eb => eb.val<string | null>(null).as("repostedRecordUri")
         ])
-        .where((eb) =>
-            eb.or([
-                eb("Record.collection", "=", "ar.cabildoabierto.feed.article"),
-                eb.exists(
-                    eb.selectFrom("follows")
-                        .whereRef("follows.did", "=", "RepostedRecord.authorId")
-                )
+        .unionAll(eb => eb
+            .selectFrom("Record")
+            .$if(from != null, qb => qb.where("Record.created_at", "<", new Date(from!)))
+            .$if(to != null, qb => qb.where("Record.created_at", ">", new Date(to!)))
+            .where("Record.authorId", "in", [...follows, did])
+            .where("Record.collection", "=", "app.bsky.feed.post")
+            .where("Record.record", "is not", null)
+            .leftJoin("Post", "Post.uri", "Record.uri")
+            .where("Post.replyToId", "is", null)
+            .select([
+                "Record.uri as uri",
+                "Record.created_at as createdAt",
+                eb => eb.val<string | null>(null).as("repostedRecordUri")
             ])
         )
-        .orderBy("createdAt", "desc");
+        .unionAll(eb => eb
+            .selectFrom("Reaction")
+            .innerJoin("Record", "Record.uri", "Reaction.uri")
+            .where("Record.collection", "=", "app.bsky.feed.repost")
+            .innerJoin("Record as SubjectRecord", "SubjectRecord.uri", "Reaction.subjectId")
+            .innerJoin("User as SubjectRecordAuthor", "SubjectRecordAuthor.did", "SubjectRecord.authorId")
+            .$if(from != null, qb => qb.where("Record.created_at", "<", new Date(from!)))
+            .$if(to != null, qb => qb.where("Record.created_at", ">", new Date(to!)))
+            .where("Record.authorId", "in", [...follows, did])
+            .where("Record.record", "is not", null)
+            .where("SubjectRecordAuthor.inCA", "=", true)
+            .where("SubjectRecord.collection", "in", ["app.bsky.feed.post", "ar.cabildoabierto.feed.article"])
+            .where("SubjectRecord.record", "is not", null)
+            .select([
+                "Record.uri as uri",
+                "Record.created_at as createdAt",
+                "Reaction.subjectId as repostedRecordUri"
+            ])
+        )
+        .orderBy("createdAt", "desc")
+        .limit(limit)
+        .execute()
+    const t3 = Date.now()
+    logTimes("following feed only ca skeleton query", [t1, t2, t3])
+    return res.map(r => ({
+        uri: r.uri,
+        repostedRecordUri: r.repostedRecordUri ?? undefined,
+        createdAt: r.createdAt,
+        score: r.createdAt.getTime()
+    }))
+}
+
+
+const followingFeedOnlyArticlesSkeletonQuery: FollowingFeedSkeletonQuery<FollowingFeedSkeletonElement> = async (ctx, did, from, to, limit) => {
+    const follows = await getCAFollows(ctx, did)
+
+    const res = await ctx.kysely
+        .selectFrom("Record")
+        .where("Record.collection", "=", "ar.cabildoabierto.feed.article")
+        .$if(from != null, qb => qb.where("Record.created_at", "<", new Date(from!)))
+        .$if(to != null, qb => qb.where("Record.created_at", ">", new Date(to!)))
+        .where("Record.authorId", "in", [...follows, did])
+        .where("Record.record", "is not", null)
+        .select([
+            "Record.uri as uri",
+            "Record.created_at as createdAt",
+            eb => eb.val<string | null>(null).as("repostedRecordUri")
+        ])
+        .unionAll(eb => eb
+            .selectFrom("Record")
+            .$if(from != null, qb => qb.where("Record.created_at", "<", new Date(from!)))
+            .$if(to != null, qb => qb.where("Record.created_at", ">", new Date(to!)))
+            .where("Record.authorId", "in", [...follows, did])
+            .where("Record.collection", "=", "app.bsky.feed.repost")
+            .where("Record.record", "is not", null)
+            .leftJoin("Reaction", "Reaction.uri", "Record.uri")
+            .leftJoin("Record as SubjectRecord", "SubjectRecord.uri", "Reaction.subjectId")
+            .leftJoin("User as SubjectRecordAuthor", "SubjectRecordAuthor.did", "SubjectRecord.authorId")
+            .where("SubjectRecordAuthor.inCA", "=", true)
+            .where("SubjectRecord.collection", "=", "ar.cabildoabierto.feed.article")
+            .where("SubjectRecord.record", "is not", null)
+            .select([
+                "Record.uri as uri",
+                "Record.created_at as createdAt",
+                "Reaction.subjectId as repostedRecordUri"
+            ])
+        )
+        .orderBy("createdAt", "desc")
+        .limit(limit)
+        .execute()
+    return res.map(r => ({
+        uri: r.uri,
+        repostedRecordUri: r.repostedRecordUri ?? undefined,
+        score: r.createdAt.getTime(),
+        createdAt: r.createdAt
+    }))
+}
+
+
+export type GetCachedSkeletonOutput<T> = {
+    skeleton: T[]
+    cursor: string | undefined
+}
+
+
+export type GetNextCursor<T> = (cursor: string | undefined, skeleton: T[], limit: number) => (string | undefined)
+export type CursorToScore = (cursor: string) => number
+export type ScoreToCursor = (score: number) => string
+
+export async function getCachedFollowingFeedSkeleton(
+    ctx: AppContext,
+    did: string,
+    key: FollowingFeedSkeletonKey,
+    query: FollowingFeedSkeletonQuery<FollowingFeedSkeletonElement>,
+    getNextCursor: GetNextCursor<FollowingFeedSkeletonElement>,
+    cursorToScore: CursorToScore,
+    scoreToCursor: ScoreToCursor,
+    limit: number,
+    cursor?: string,
+    disableCache: boolean = false
+): Promise<GetCachedSkeletonOutput<FollowingFeedSkeletonElement>> {
+    const cursorScore = cursor ? cursorToScore(cursor) : null
+
+    function cachedToRes(cached: string[]) {
+        const skeleton = cached
+            .filter((x, i) => i % 2 == 0)
+            .map(x => {
+                return JSON.parse(x)
+            })
+
+        return {
+            skeleton,
+            cursor: getNextCursor(cursor, skeleton, limit)
+        }
+    }
+
+    const cached: string[] = !disableCache ?
+        await key.get(did, cursorScore, limit) : []
+
+    const topCached: string | undefined = cached.length >= 2 ? scoreToCursor(Number(cached[1])) : undefined
+
+    const res = await query(
+        ctx,
+        did,
+        cursor,
+        topCached,
+        disableCache ? limit : 100
+    )
+
+    console.log("got res with size", res.length, "for", cursor, topCached)
+
+    if(!disableCache) {
+        if(res.length == 0) {
+            return cachedToRes(cached)
+        }
+
+        await key.add(did, res)
+
+        const newCached = await key.get(did, cursorScore, limit)
+        return cachedToRes(newCached)
+    } else {
+        return {
+            skeleton: res,
+            cursor: getNextCursor(cursor, res, limit)
+        }
+    }
+}
+
+
+export function getNextFollowingFeedCursor(cursor: string | undefined, skeleton: FollowingFeedSkeletonElement[], limit: number){
+    if(skeleton.length < limit) return undefined
+    const m = Math.min(...skeleton.map(x => new Date(x.createdAt).getTime()))
+    return new Date(m).toISOString()
+}
+
+
+export function followingFeedCursorToScore(cursor: string) {
+    return new Date(cursor).getTime()
+}
+
+
+export function followingFeedScoreToCursor(score: number) {
+    return new Date(score).toISOString()
+}
+
+
+async function followingFeedOnlyCABaseQueryAll(ctx: AppContext, agent: SessionAgent, limit: number, cursor?: string): Promise<GetCachedSkeletonOutput<FollowingFeedSkeletonElement>> {
+    return await getCachedFollowingFeedSkeleton(
+        ctx,
+        agent.did,
+        ctx.redisCache.followingFeedSkeletonCAAll,
+        followingFeedOnlyCASkeletonQuery,
+        getNextFollowingFeedCursor,
+        followingFeedCursorToScore,
+        followingFeedScoreToCursor,
+        limit,
+        cursor
+    )
+}
+
+
+async function followingFeedOnlyCABaseQueryArticles(ctx: AppContext, agent: SessionAgent, limit: number, cursor?: string): Promise<GetCachedSkeletonOutput<FollowingFeedSkeletonElement>> {
+    return await getCachedFollowingFeedSkeleton(
+        ctx,
+        agent.did,
+        ctx.redisCache.followingFeedSkeletonCAAll,
+        followingFeedOnlyArticlesSkeletonQuery,
+        getNextFollowingFeedCursor,
+        followingFeedCursorToScore,
+        followingFeedScoreToCursor,
+        limit,
+        cursor
+    )
 }
 
 
 const getFollowingFeedSkeletonOnlyCA: (format: FeedFormatOption) => GetSkeletonProps = (format) => async (ctx, agent, data, cursor) => {
     if (!agent.hasSession()) return {skeleton: [], cursor: undefined}
 
-    const query = format == "Todos" ?
-        followingFeedOnlyCABaseQueryAll(ctx, agent, cursor) :
-        followingFeedOnlyCABaseQueryArticles(ctx, agent, cursor)
-
     const limit = 25
 
     const t1 = Date.now()
-    const posts = await query
-        .limit(limit)
-        .execute()
+    const posts = await (format == "Todos" ?
+        followingFeedOnlyCABaseQueryAll(ctx, agent, limit, cursor) :
+        followingFeedOnlyCABaseQueryArticles(ctx, agent, limit, cursor))
+
     const t2 = Date.now()
     logTimes("posts for skeleton only ca", [t1, t2])
 
     function queryToSkeletonElement(e: {
         uri: string,
-        repostedRecordUri: string | null,
-        createdAt: Date
+        repostedRecordUri?: string | null
     }): SkeletonFeedPost {
         if (!e.repostedRecordUri) {
             return {
@@ -439,9 +599,8 @@ const getFollowingFeedSkeletonOnlyCA: (format: FeedFormatOption) => GetSkeletonP
         }
     }
 
-    const skeleton = posts.map(queryToSkeletonElement)
-
-    const newCursor = posts.length < limit ? undefined : min(posts, p => p.createdAt.getTime())?.createdAt.toISOString()
+    const skeleton = posts.skeleton.map(queryToSkeletonElement)
+    const newCursor = posts.cursor
 
     return {
         skeleton,

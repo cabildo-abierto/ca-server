@@ -1,7 +1,7 @@
 import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {FeedSkeleton, getFeed} from "#/services/feed/feed";
-import {AppContext} from "#/index";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
+import {FeedSkeleton, getFeed, GetSkeletonProps} from "#/services/feed/feed";
+import {AppContext} from "#/setup";
 import {Agent} from "#/utils/session-agent";
 import {creationDateSortKey} from "#/services/feed/utils";
 import {hydrateFeedViewContent} from "#/services/hydration/hydrate";
@@ -9,6 +9,25 @@ import {listOrderDesc, sortByKey} from "#/utils/arrays";
 import {isNotFoundPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
+import {getTopicTitle} from "#/services/wiki/utils";
+import {
+    TopicProp,
+} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {getUri} from "#/utils/uri";
+import {isPostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {
+    isView as isSelectionQuoteEmbed
+} from "#/lex-api/types/ar/cabildoabierto/embed/selectionQuote"
+import {
+    EnDiscusionMetric, EnDiscusionSkeletonElement,
+    EnDiscusionTime,
+    FeedFormatOption,
+    getEnDiscusionStartDate, getNextCursorEnDiscusion
+} from "#/services/feed/inicio/discusion";
+import {
+    SkeletonQuery
+} from "#/services/feed/inicio/following";
 
 
 const getTopicRepliesSkeleton = async (ctx: AppContext, id: string) => {
@@ -42,58 +61,208 @@ const getTopicRepliesSkeleton = async (ctx: AppContext, id: string) => {
 }
 
 
-const getTopicMentionsSkeleton = async (ctx: AppContext, agent: Agent, data: Dataplane, id: string): Promise<FeedSkeleton> => {
-    const collections = [
-        "app.bsky.feed.post",
-        "ar.cabildoabierto.feed.article"
-    ]
+const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption) => SkeletonQuery<EnDiscusionSkeletonElement> = (id, metric, time, format) => {
+    return async (ctx, agent, from, to, limit) => {
+        const startDate = getEnDiscusionStartDate(time)
+        const collections = format == "Artículos" ? ["ar.cabildoabierto.feed.article"] : ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
 
-    const mentions = await ctx.kysely
-        .selectFrom("Record")
-        .select(["Record.uri"])
-        .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
-        .leftJoin("Post", "Post.uri", "Record.uri")
-        .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
-        .where("Reference.referencedTopicId", "=", id)
-        .where("Record.collection", "in", collections)
-        .where(eb => eb.or([
-            eb("TopicVersion.topicId", "!=", id),
-            eb("TopicVersion.uri", "is", null)
-        ]))
-        .orderBy("created_at", "desc")
-        .limit(25)
-        .execute()
-    return mentions.map(r => ({post: r.uri}))
+        if(limit == 0){
+            return []
+        }
+
+        if(metric == "Me gustas"){
+            const offsetFrom = from != null ? Number(from)+1 : 0
+            const offsetTo = to != null ? Number(to) : undefined
+            if(offsetTo != null){
+                limit = Math.min(limit, offsetTo - offsetFrom)
+            }
+
+            if(limit == 0) return []
+
+            const res = await ctx.kysely
+                .selectFrom("Content")
+                .innerJoin("Record", "Record.uri", "Content.uri")
+                .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
+                .leftJoin("Post", "Post.uri", "Record.uri")
+                .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
+                .where("Reference.referencedTopicId", "=", id)
+                .where("Record.collection", "in", collections)
+                .where(eb => eb.or([
+                    eb("TopicVersion.topicId", "!=", id),
+                    eb("TopicVersion.uri", "is", null)
+                ]))
+                .where("Record.created_at", ">", startDate)
+                .select(eb => [
+                    'Record.uri',
+                    "Record.created_at as createdAt"
+                ])
+                .orderBy(["likesScore desc", "Content.created_at desc"])
+                .limit(limit)
+                .offset(offsetFrom)
+                .execute()
+
+            return res.map((r, i) => ({
+                ...r,
+                score: -(i + offsetFrom)
+            }))
+        } else if(metric == "Interacciones"){
+            const offsetFrom = from != null ? Number(from)+1 : 0
+            const offsetTo = to != null ? Number(to) : undefined
+            if(offsetTo != null){
+                limit = Math.min(limit, offsetTo - offsetFrom)
+            }
+
+            if(limit == 0) return []
+            const res = await ctx.kysely
+                .selectFrom("Content")
+                .innerJoin("Record", "Record.uri", "Content.uri")
+                .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
+                .leftJoin("Post", "Post.uri", "Record.uri")
+                .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
+                .where("Reference.referencedTopicId", "=", id)
+                .where("Record.collection", "in", collections)
+                .where(eb => eb.or([
+                    eb("TopicVersion.topicId", "!=", id),
+                    eb("TopicVersion.uri", "is", null)
+                ]))
+                .where("Record.created_at", ">", startDate)
+                .select([
+                    'Record.uri',
+                    "Record.created_at as createdAt"
+                ])
+                .orderBy(["interactionsScore desc", "Content.created_at desc"])
+                .limit(limit)
+                .offset(offsetFrom)
+                .execute()
+
+            return res.map((r, i) => ({
+                ...r,
+                score: -(i + offsetFrom)
+            }))
+        } else if(metric == "Popularidad relativa"){
+            const offsetFrom = from != null ? Number(from)+1 : 0
+            const offsetTo = to != null ? Number(to) : undefined
+            if(offsetTo != null){
+                limit = Math.min(limit, offsetTo - offsetFrom)
+            }
+
+            if(limit == 0) return []
+
+            const res = await ctx.kysely
+                .selectFrom("Content")
+                .innerJoin("Record", "Record.uri", "Content.uri")
+                .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
+                .leftJoin("Post", "Post.uri", "Record.uri")
+                .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
+                .where("Reference.referencedTopicId", "=", id)
+                .where("Record.collection", "in", collections)
+                .where(eb => eb.or([
+                    eb("TopicVersion.topicId", "!=", id),
+                    eb("TopicVersion.uri", "is", null)
+                ]))
+                .where("Record.created_at", ">", startDate)
+                .select([
+                    'Record.uri',
+                    "Record.created_at as createdAt"
+                ])
+                .orderBy(["relativePopularityScore desc", "Content.created_at desc"])
+                .limit(limit)
+                .offset(offsetFrom)
+                .execute()
+
+            return res.map((r, i) => ({
+                ...r,
+                score: -(i + offsetFrom)
+            }))
+        } else if(metric == "Recientes"){
+            const offsetFrom = from != null ? new Date(from) : undefined
+            const offsetTo = to != null ? new Date(to) : undefined
+
+            if(offsetFrom && offsetTo && offsetFrom.getTime() <= offsetTo.getTime()) return []
+
+            const res = await ctx.kysely
+                .selectFrom("Record")
+                .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
+                .leftJoin("Post", "Post.uri", "Record.uri")
+                .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
+                .where("Reference.referencedTopicId", "=", id)
+                .where("Record.collection", "in", collections)
+                .where(eb => eb.or([
+                    eb("TopicVersion.topicId", "!=", id),
+                    eb("TopicVersion.uri", "is", null)
+                ]))
+                .$if(offsetFrom != null, qb => qb.where("Record.created_at", "<", offsetFrom!))
+                .$if(offsetTo != null, qb => qb.where("Record.created_at", ">", offsetTo!))
+                .select([
+                    'Record.uri',
+                    "Record.created_at as createdAt"
+                ])
+                .orderBy('Record.created_at', 'desc')
+                .limit(limit)
+                .execute()
+            return res.map(r => ({
+                uri: r.uri,
+                createdAt: r.createdAt,
+                score: r.createdAt.getTime()
+            }))
+        } else {
+            throw Error(`Métrica desconocida! ${metric}`)
+        }
+    }
 }
 
 
-// TO DO: Solo mostrar versiones actuales.
+const getTopicMentionsSkeleton = async (
+    ctx: AppContext,
+    agent: Agent,
+    data: Dataplane,
+    id: string,
+    cursor: string | undefined,
+    metric: EnDiscusionMetric,
+    time: EnDiscusionTime,
+    format: FeedFormatOption
+): Promise<{skeleton: FeedSkeleton, cursor: string | undefined}> => {
+
+    const limit = 25
+
+    const skeleton = await getTopicMentionsSkeletonQuery(
+        id, metric, time, format
+    )(ctx, agent, cursor, undefined, limit)
+
+    return {
+        skeleton: skeleton.map(x => ({post: x.uri})),
+        cursor: getNextCursorEnDiscusion(metric, time, format)(cursor, skeleton, limit)
+    }
+}
+
+
 export async function getTopicMentionsInTopics(ctx: AppContext, id: string){
-    return ctx.db.content.findMany({
-        select: {
-            topicVersion: {
-                select: {
-                    topicId: true
-                }
-            }
-        },
-        where: {
-            references: {
-                some: {
-                    referencedTopicId: id
-                }
-            },
-            record: {
-                collection: "ar.com.cabildoabierto.topic"
-            }
+    const topics = await ctx.kysely
+        .selectFrom("TopicVersion")
+        .innerJoin("Record", "Record.uri", "TopicVersion.uri")
+        .where("Record.collection", "=", "ar.cabildoabierto.wiki.topicVersion")
+        .select("topicId")
+        .where(eb => eb.exists(eb => eb
+            .selectFrom("Reference")
+            .where("Reference.referencedTopicId", "=", id)
+            .whereRef("Reference.referencingContentId", "=", "TopicVersion.uri")
+        ))
+        .innerJoin("Topic", "Topic.currentVersionId", "TopicVersion.uri")
+        .select(["TopicVersion.topicId", "TopicVersion.props"])
+        .orderBy("created_at", "desc")
+        .limit(25)
+        .execute()
+
+    return topics.map(t => {
+        return {
+            id: t.topicId,
+            title: getTopicTitle({id: t.topicId, props: t.props as TopicProp[]})
         }
     })
 }
 
 
-export const getTopicVersionReplies = async (ctx: AppContext, agent: Agent, id: string): Promise<{data?: FeedViewContent[], error?: string}> => {
-    const skeleton = await getTopicRepliesSkeleton(ctx, id)
-
+async function hydrateRepliesSkeleton(ctx: AppContext, agent: Agent, skeleton: FeedSkeleton){
     const data = new Dataplane(ctx, agent)
     await data.fetchFeedHydrationData(skeleton)
 
@@ -109,67 +278,125 @@ export const getTopicVersionReplies = async (ctx: AppContext, agent: Agent, id: 
 
     res = sortByKey(res, creationDateSortKey, listOrderDesc)
 
+    return res
+}
+
+
+export const getTopicVersionReplies = async (ctx: AppContext, agent: Agent, id: string): Promise<{data?: FeedViewContent[], error?: string}> => {
+    const skeleton = await getTopicRepliesSkeleton(ctx, id)
+    const res = await hydrateRepliesSkeleton(ctx, agent, skeleton)
+
     return {data: res}
 }
 
 
-async function getTopicHistoryReferences(ctx: AppContext, id: string) {
-    return await ctx.kysely
-        .selectFrom("TopicVersion")
-        .innerJoin("Record", "Record.uri", "TopicVersion.uri")
-        .select(["TopicVersion.uri", "Record.created_at"])
-        .where("TopicVersion.topicId", "=", id)
-        .orderBy("Record.created_at", "desc")
-        .execute()
-}
+export const getTopicFeed: CAHandlerNoAuth<{ params: {kind: "mentions" | "discussion"}, query: { i?: string, did?: string, rkey?: string, cursor?: string, metric?: EnDiscusionMetric, time?: EnDiscusionTime, format?: FeedFormatOption } }, {
+    feed: FeedViewContent[],
+    cursor?: string
+}> = async (ctx, agent, {query, params}) => {
+    let {i: id, did, rkey, cursor, metric, time, format} = query
+    const {kind} = params
 
-
-export const getTopicFeed: CAHandlerNoAuth<{ query: { i?: string, did?: string, rkey?: string } }, {
-    mentions: FeedViewContent[],
-    replies: FeedViewContent[],
-    topics: string[],
-    history: {uri: string, created_at: Date}[]
-}> = async (ctx, agent, {query}) => {
-    let {i: id, did, rkey} = query
     if(!id){
         if(!did || !rkey){
             return {error: "Se requiere un id o un par did y rkey."}
         } else {
-            id = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey) ?? undefined
+            id = await getTopicIdFromTopicVersionUri(ctx, did, rkey) ?? undefined
             if(!id){
                 return {error: "No se encontró esta versión del tema."}
             }
         }
     }
 
-    try {
-        const [replies, mentions, topicMentions, history] = await Promise.all([
-            getTopicVersionReplies(ctx, agent, id),
-            getFeed({
-                ctx,
-                agent,
-                pipeline: {
-                    getSkeleton: async (ctx, agent, data, cursor) => ({skeleton: await getTopicMentionsSkeleton(ctx, agent, data, id), cursor: undefined}),
-                    sortKey: creationDateSortKey
-                }
-            }),
-            getTopicMentionsInTopics(ctx, id),
-            getTopicHistoryReferences(ctx, id)
-        ])
-
-        if(!mentions.data) return {error: mentions.error}
+    if(kind == "discussion"){
+        const replies = await getTopicVersionReplies(ctx, agent, id)
         if(!replies.data) return {error: replies.error}
+
         return {
             data: {
-                mentions: mentions.data.feed,
-                replies: replies.data,
-                topics: topicMentions.map(t => t.topicVersion?.topicId).filter(x => x != null),
-                history
+                feed: replies.data,
+                cursor: undefined
             }
         }
-    } catch (e) {
-        console.error("Error getting topic feed for", id)
-        console.error(e)
-        return {error: "Ocurrió un error al obtener el feed del tema " + id}
+    } else if(kind == "mentions"){
+
+        const getSkeleton: GetSkeletonProps = async (ctx, agent, data, cursor) => {
+            return await getTopicMentionsSkeleton(
+                ctx,
+                agent,
+                data,
+                id,
+                cursor,
+                metric ?? "Interacciones",
+                time ?? "Última semana",
+                format ?? "Todos"
+            )
+        }
+
+        const mentions = await getFeed({
+            ctx,
+            agent,
+            pipeline: {
+                getSkeleton
+            },
+            cursor
+        })
+
+        return {
+            data: mentions.data
+        }
+    } else {
+        return {error: "Solicitud inválida."}
+    }
+}
+
+
+export const getTopicMentionsInTopicsFeed: CAHandler<{ query: { i?: string, did?: string, rkey?: string } }, {
+    feed: {id: string, title: string}[],
+    cursor: string | undefined
+}> = async (ctx, agent, {query}) => {
+    let {i: id, did, rkey} = query
+
+    if(!id){
+        if(!did || !rkey){
+            return {error: "Se requiere un id o un par did y rkey."}
+        } else {
+            id = await getTopicIdFromTopicVersionUri(ctx, did, rkey) ?? undefined
+            if(!id){
+                return {error: "No se encontró esta versión del tema."}
+            }
+        }
+    }
+
+    const topicMentions = await getTopicMentionsInTopics(ctx, id)
+
+    return {
+        data: {
+            feed: topicMentions,
+            cursor: undefined
+        }
+    }
+}
+
+
+export const getTopicQuoteReplies: CAHandler<{params: {did: string, rkey: string}}, PostView[]> = async (ctx, agent, {params}) => {
+    const {did, rkey} = params
+    const uri = getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey)
+
+    const skeleton = (await ctx.kysely
+        .selectFrom("Post")
+        .where("Post.replyToId", "=", uri)
+        .select("uri")
+        .execute()).map(p => ({post: p.uri}))
+
+    const hydrated = await hydrateRepliesSkeleton(ctx, agent, skeleton)
+
+    const posts: PostView[] = hydrated
+        .map(c => c.content)
+        .filter(c => isPostView(c))
+        .filter(c => isSelectionQuoteEmbed(c.embed))
+
+    return {
+        data: posts
     }
 }

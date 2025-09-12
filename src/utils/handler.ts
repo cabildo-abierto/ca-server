@@ -1,5 +1,5 @@
 import {Agent, sessionAgent, SessionAgent} from "#/utils/session-agent";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import express from "express";
 
 export type CAHandlerOutput<Output> = Promise<{error?: string, data?: Output}>

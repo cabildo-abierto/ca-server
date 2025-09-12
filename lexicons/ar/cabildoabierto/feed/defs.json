@@ -46,6 +46,7 @@
             "#postView",
             "#articleView",
             "#fullArticleView",
+            "ar.cabildoabierto.wiki.topicVersion#topicViewBasic",
             "ar.cabildoabierto.data.dataset#datasetView"
           ]
         },

@@ -3,7 +3,7 @@ import {Column, DatasetView, DatasetViewBasic, TopicsDatasetView} from "#/lex-ap
 import {CAHandler} from "#/utils/handler";
 import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {getUri} from "#/utils/uri";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {getObjectKey, listOrderDesc, sortByKey} from "#/utils/arrays";
 import {

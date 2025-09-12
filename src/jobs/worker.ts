@@ -1,11 +1,11 @@
 import {updateCategoriesGraph} from "#/services/wiki/graph";
 import {Worker} from 'bullmq';
-import {AppContext} from "#/index";
-import {syncAllUsers, syncAllUsersAndFollows, syncUser} from "#/services/sync/sync-user";
+import {AppContext} from "#/setup";
+import {syncAllUsers, syncUser, updateRecordsCreatedAt} from "#/services/sync/sync-user";
 import {dbHandleToDid, updateAuthorStatus} from "#/services/user/users";
 import {
     cleanNotCAReferences,
-    restartReferenceLastUpdate,
+    restartReferenceLastUpdate, updateContentsTopicMentions,
     updateReferences,
     updateTopicMentions
 } from "#/services/wiki/references";
@@ -29,7 +29,9 @@ import {updateThreads} from "#/services/wiki/threads";
 import {restartLastContentInteractionsUpdate} from "#/services/wiki/interactions";
 import {updatePostLangs} from "#/services/admin/posts";
 import {createPaymentPromises} from "#/services/monetization/promise-creation";
-import {updateAllTopicsCurrentVersions} from "#/services/sync/process-batch";
+import {updateFollowSuggestions} from "#/services/user/follow-suggestions";
+import {updateInteractionsScore} from "#/services/feed/feed-scores";
+import {updateAllTopicsCurrentVersions} from "#/services/wiki/current-version";
 
 const mins = 60 * 1000
 
@@ -116,7 +118,6 @@ export class CAWorker {
         })
         this.registerJob("update-topics-popularity", () => updateTopicPopularityScores(ctx))
         this.registerJob("sync-all-users", (data) => syncAllUsers(ctx, (data as { mustUpdateCollections: string[] }).mustUpdateCollections))
-        this.registerJob("sync-all-follows", (data) => syncAllUsersAndFollows(ctx, (data as { mustUpdateCollections: string[] }).mustUpdateCollections))
         this.registerJob("delete-collection", (data) => deleteCollection(ctx, (data as { collection: string }).collection))
         this.registerJob("update-topics-categories", () => updateTopicsCategories(ctx))
         this.registerJob("update-topic-contributions", (data) => updateTopicContributions(ctx, data.topicIds as string[]))
@@ -132,22 +133,28 @@ export class CAWorker {
         this.registerJob("clean-not-ca-references", () => cleanNotCAReferences(ctx))
         this.registerJob("assign-invite-codes", () => assignInviteCodesToUsers(ctx))
         this.registerJob("update-topic-mentions", (data) => updateTopicMentions(ctx, data.id as string))
+        this.registerJob("update-contents-topic-mentions", (data) => updateContentsTopicMentions(ctx, data.uris as string[]))
         this.registerJob("update-contents-text", () => updateContentsText(ctx))
         this.registerJob("update-num-words", () => updateContentsNumWords(ctx))
         this.registerJob("reset-contents-format", () => resetContentsFormat(ctx))
         this.registerJob("update-threads", () => updateThreads(ctx))
         this.registerJob("update-post-langs", () => updatePostLangs(ctx))
         this.registerJob("update-author-status-all", () => updateAuthorStatus(ctx))
-        this.registerJob("update-author-status", (data) => updateAuthorStatus(ctx, [data.did]))
+        this.registerJob("update-author-status", (data) => updateAuthorStatus(ctx, data.dids))
         this.registerJob("create-payment-promises", () => createPaymentPromises(ctx))
         this.registerJob("update-topics-current-versions", () => updateAllTopicsCurrentVersions(ctx))
+        this.registerJob("update-follow-suggestions", () => updateFollowSuggestions(ctx))
+        this.registerJob("update-records-created-at", () => updateRecordsCreatedAt(ctx))
+        this.registerJob("update-interactions-score", (data) => updateInteractionsScore(ctx, data.uris))
+        this.registerJob("update-all-interactions-score", () => updateInteractionsScore(ctx))
 
         await this.removeAllRepeatingJobs()
-        await this.addRepeatingJob("update-topics-popularity", 60 * 24 * mins, 60 * mins)
-        await this.addRepeatingJob("update-topics-categories", 60 * 24 * mins, 60 * mins + 5)
-        await this.addRepeatingJob("update-categories-graph", 60 * 24 * mins, 60 * mins + 7)
-        await this.addRepeatingJob("create-user-months", 60 * 24 * mins, 60 * mins + 15)
+        await this.addRepeatingJob("update-topics-popularity", 30 * mins, 60 * mins)
+        await this.addRepeatingJob("update-topics-categories", 30 * mins, 60 * mins + 5)
+        await this.addRepeatingJob("update-categories-graph", 30 * mins, 60 * mins + 7)
+        await this.addRepeatingJob("create-user-months", 30 * mins, 60 * mins + 15)
         await this.addRepeatingJob("batch-jobs", mins / 2, 0)
+        await this.addRepeatingJob("update-follow-suggestions", 30 * mins, 30 * mins + 18)
 
         const waitingJobs = await this.queue.getJobs(['waiting'])
         const delayedJobs = await this.queue.getJobs(['delayed'])

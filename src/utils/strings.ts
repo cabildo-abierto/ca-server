@@ -8,14 +8,6 @@ export function cleanText(s: string): string {
 }
 
 
-export function pxToNumber(x: string | number): number {
-    if (typeof x == "string") {
-        return parseInt(x, 10)
-    }
-    return x
-}
-
-
 export function prettyPrintJSON(obj: any): void {
     try {
         const prettyJSON = JSON.stringify(obj, null, 2); // 2-space indentation

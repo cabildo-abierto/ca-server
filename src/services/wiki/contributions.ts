@@ -1,5 +1,5 @@
 import {CAHandler} from "#/utils/handler"
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {Dataplane, getBlobKey} from "#/services/hydration/dataplane";
 import {BlobRef} from "#/services/hydration/hydrate";
 import {nodesCharDiff} from "#/services/wiki/diff";

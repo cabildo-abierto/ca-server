@@ -282,23 +282,18 @@ export const setValidationRequestResult: CAHandler<ValidationRequestResultProps,
             if (!result.dni) {
                 return {error: "Falta el número de DNI."}
             }
+            const userValidationHash = await getHashFromDNI(result.dni)
             await ctx.db.user.update({
-                data: {
-                    userValidationHash: await getHashFromDNI(result.dni)
-                },
-                where: {
-                    did: user.did
-                }
+                data: { userValidationHash },
+                where: { did: user.did }
             })
+            await ctx.redisCache.onEvent("verification-update", [user.did])
         } else {
             await ctx.db.user.update({
-                data: {
-                    orgValidation: JSON.stringify(user)
-                },
-                where: {
-                    did: user.did
-                }
+                data: { orgValidation: JSON.stringify(user) },
+                where: { did: user.did }
             })
+            await ctx.redisCache.onEvent("verification-update", [user.did])
         }
         return {data: {}}
     })

@@ -1,5 +1,5 @@
 import {getDidFromUri, getRkeyFromUri} from "#/utils/uri";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 
 
 export function createRecord({ctx, uri, cid, createdAt, collection}: {

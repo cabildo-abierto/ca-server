@@ -1,7 +1,7 @@
 import {CAHandler} from "#/utils/handler";
 import {Notification as BskyNotification} from "#/lex-api/types/app/bsky/notification/listNotifications"
 import {Notification} from "#/lex-api/types/ar/cabildoabierto/notification/listNotifications"
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {v4 as uuidv4} from "uuid";
 import {NotificationType} from "../../../prisma/generated/types";
 import {Dataplane} from "#/services/hydration/dataplane";
@@ -235,11 +235,14 @@ export const createNotificationsBatchJob = async (ctx: AppContext, data: Notific
             .with('InputVersions', (qb) =>
                 qb
                     .selectFrom('TopicVersion')
-                    .select(['uri', 'topicId'])
-                    .where('uri', 'in', data.uris)
+                    .innerJoin("Record", "Record.uri", "TopicVersion.uri")
+                    .select(['Record.uri', 'topicId', "Record.created_at"])
+                    .where('Record.uri', 'in', data.uris)
             )
             .selectFrom("InputVersions")
             .innerJoin('TopicVersion as tv', 'InputVersions.topicId', 'tv.topicId')
+            .innerJoin("Record as tvRecord", "tvRecord.uri", "InputVersions.uri")
+            .whereRef("InputVersions.created_at", ">", "tvRecord.created_at")
             .select([
                 'InputVersions.uri as causeUri',
                 'tv.uri as notifiedVersionUri',

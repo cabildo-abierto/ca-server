@@ -25,7 +25,7 @@ export const storeReadSession: CAHandler<{
 
     let topicId: string | null = null
     if(isTopicVersion(collection)){
-        topicId = await getTopicIdFromTopicVersionUri(ctx.db, did, rkey)
+        topicId = await getTopicIdFromTopicVersionUri(ctx, did, rkey)
     }
 
     try {

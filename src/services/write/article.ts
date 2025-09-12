@@ -1,16 +1,10 @@
-import {processArticle} from "#/services/sync/process-event";
 import {uploadStringBlob} from "#/services/blob";
 import {CAHandler} from "#/utils/handler";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {SessionAgent} from "#/utils/session-agent";
-import {getTopicsMentioned} from "#/services/wiki/topics";
-import {Transaction} from "kysely";
-import {DB, ReferenceType} from "../../../prisma/generated/types";
-import {v4 as uuidv4} from 'uuid'
-import {ATProtoStrongRef} from "#/lib/types";
-import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
 import {ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {EmbedContext, getEmbedsFromEmbedViews} from "#/services/write/topic";
+import {ArticleRecordProcessor} from "#/services/sync/event-processing/article";
 
 export type CreateArticleProps = {
     title: string
@@ -52,54 +46,23 @@ export const createArticleAT = async (agent: SessionAgent, article: CreateArticl
 }
 
 export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, article) => {
-    let ref: ATProtoStrongRef
-    let record: ArticleRecord
-    let mentions: TopicMention[] | undefined
+
     try {
-        const [res, {data}] = await Promise.all([
-            createArticleAT(agent, article),
-            getTopicsMentioned(ctx, agent, article)
-        ])
+        const res = await createArticleAT(agent, article)
         if(res.error || !res.ref || !res.record) return {error: res.error}
 
-        ref = res.ref
-        record = res.record
-        mentions = data
-    } catch {
+        await Promise.all([
+            article.draftId ? ctx.kysely
+                .deleteFrom("Draft")
+                .where("id", "=", article.draftId)
+                .execute() : undefined,
+            new ArticleRecordProcessor(ctx).processValidated([res])
+        ])
+    } catch (e) {
+        console.log("error al publicar arículo", e)
         return {error: "Ocurrió un error al publicar el artículo."}
     }
 
-    const afterTransaction = mentions && mentions.length > 0 ? async (trx: Transaction<DB>) => {
-
-        const values = mentions.map(m => {
-            return {
-                id: uuidv4(),
-                referencedTopicId: m.id,
-                referencingContentId: ref.uri,
-                type: "Weak" as ReferenceType,
-                count: m.count
-            }
-        })
-
-        await trx
-            .insertInto("Reference")
-            .values(values)
-            .execute()
-
-    } : undefined
-
-    try {
-        await Promise.all([
-            processArticle(ctx, ref, record, afterTransaction),
-            article.draftId ? ctx.kysely.deleteFrom("Draft").where("id", "=", article.draftId).execute() : null,
-            await ctx.worker?.addJob("update-author-status", {did: agent.did})
-        ])
-    } catch (err) {
-        console.error(err)
-        return {
-            error: "El artículo se publicó, pero hubo un error al procesarlo. Si no lo ves publicado dentro de unas horas, comunicate con el soporte."
-        }
-    }
 
     return {data: {}}
 }

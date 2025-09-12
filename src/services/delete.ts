@@ -1,10 +1,10 @@
 import {getCollectionFromUri, getRkeyFromUri, getUri} from "#/utils/uri";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {SessionAgent} from "#/utils/session-agent";
 import {CAHandler} from "#/utils/handler";
 import {handleToDid} from "#/services/user/users";
-import {processDelete} from "#/services/sync/process-event";
-import {SyncUpdate} from "#/services/sync/sync-update";
+import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor";
+import {batchDeleteRecords} from "#/services/sync/event-processing/get-record-processor";
 
 
 export async function deleteRecordsForAuthor({ctx, agent, author, collections, atproto}: {ctx: AppContext, agent?: SessionAgent, author: string, collections?: string[], atproto: boolean}){
@@ -57,123 +57,8 @@ export async function deleteCollection(ctx: AppContext, collection: string){
         }
     })).map((r) => (r.uri))
     console.log(`Found ${uris.length} records. Deleting all...`)
-    const su = deleteRecordsDB(ctx, uris)
-    await su.apply()
+    await getDeleteProcessor(ctx, collection).process(uris)
     console.log("Done.")
-}
-
-
-export function deleteRecordsDB(ctx: AppContext, uris: string[]){
-    const su = new SyncUpdate(ctx.db)
-    console.log("Deleting from DB")
-    su.addUpdatesAsTransaction([
-        ctx.db.topicInteraction.deleteMany({
-            where: {
-                recordId: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.notification.deleteMany({
-            where: {
-                causedByRecordId: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.hasReacted.deleteMany({
-            where: {
-                recordId: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.readSession.deleteMany({
-            where: {
-                readContentId: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.reference.deleteMany({
-            where: {
-                referencingContentId: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.follow.deleteMany({
-            where: {
-                uri: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.post.deleteMany({
-            where: {
-                uri: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.article.deleteMany({
-            where: {
-                uri: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.voteReject.deleteMany({
-            where: {
-                uri: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.reaction.deleteMany({
-            where: {
-                uri: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.topicVersion.deleteMany({
-            where: {
-                uri: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.dataBlock.deleteMany({
-            where: {
-                datasetId: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.dataset.deleteMany({
-            where: {
-                uri: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.content.deleteMany({
-            where: {
-                uri: {
-                    in: uris
-                }
-            }
-        }),
-        ctx.db.record.deleteMany({
-            where: {
-                uri: {
-                    in: uris
-                }
-            }
-        })
-    ])
-    return su
 }
 
 
@@ -185,8 +70,7 @@ export async function deleteRecords({ctx, agent, uris, atproto}: { ctx: AppConte
     }
 
     try {
-        const su = deleteRecordsDB(ctx, uris)
-        await su.apply()
+        await batchDeleteRecords(ctx, uris)
     } catch (err) {
         console.error(err)
         return {error: "Error al borrar los registros."}
@@ -220,6 +104,7 @@ export async function deleteUser(ctx: AppContext, did: string) {
             }
         })
     ])
+    // TO DO: Revisar que cache hace falta actualizar
 }
 
 
@@ -258,7 +143,6 @@ export const deleteRecordHandler: CAHandler<{params: {rkey: string, collection: 
     const {rkey, collection} = params
     const uri = getUri(agent.did, collection, rkey)
     await deleteRecordAT(agent, uri)
-    const {error} = await processDelete(ctx, uri)
-    if(error) return {error}
+    await getDeleteProcessor(ctx, collection).process([uri])
     return {data: {}}
 }

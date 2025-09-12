@@ -1,5 +1,5 @@
 import {ThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {AppContext} from "#/index";
+import {AppContext} from "#/setup";
 import {SessionAgent} from "#/utils/session-agent";
 import {
     getCollectionFromUri,
@@ -21,7 +21,6 @@ import {handleToDid} from "#/services/user/users";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {ThreadViewPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {listOrderDesc, sortByKey} from "#/utils/arrays";
-import {prettyPrintJSON} from "#/utils/strings";
 
 function threadViewPostToThreadSkeleton(thread: ThreadViewPost, isAncestor: boolean = false): ThreadSkeleton {
     return {
@@ -52,19 +51,59 @@ async function getThreadRepliesSkeletonForPostFromBsky(ctx: AppContext, agent: S
 }
 
 
+function buildParentFromAncestorsList(uri: string, ancestors: {uri: string, replyToId: string | null}[]): ThreadSkeleton | undefined {
+    const p = ancestors
+        .find(p => p.uri == uri)
+
+    if(!p || !p.replyToId) return undefined
+
+    return {
+        post: p.replyToId,
+        parent: buildParentFromAncestorsList(p.replyToId, ancestors)
+    }
+}
+
+
 export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, agent: SessionAgent, dataplane: Dataplane, uri: string): Promise<ThreadSkeleton> {
     // necesario solo porque getPostThread de Bsky no funciona con posts que tienen selection quote
+
     const replies = (await ctx.db.post.findMany({
         select: {
             uri: true
         },
         where: {
             replyToId: uri
-        },
-        take: 20
+        }
     }))
 
+    const collection = getCollectionFromUri(uri)
+
+    let parent: ThreadSkeleton | undefined = undefined
+
+    if(isPost(collection)){
+        const ancestors = await ctx.kysely
+            .withRecursive("ancestors", (db) => {
+                const base = db
+                    .selectFrom("Post")
+                    .where("Post.uri", "=", uri)
+                    .select(["Post.replyToId", "Post.uri"])
+
+                const recursive = db
+                    .selectFrom("ancestors")
+                    .innerJoin("Post", "Post.uri", "ancestors.replyToId")
+                    .select(["Post.replyToId", "Post.uri"])
+
+                return base.unionAll(recursive)
+            })
+            .selectFrom("ancestors")
+            .selectAll()
+            .execute()
+
+        parent = buildParentFromAncestorsList(uri, ancestors)
+    }
+
     return {
+        parent,
         post: uri,
         replies: replies.map(x => ({post: x.uri}))
     }
@@ -131,7 +170,7 @@ export const getThread: CAHandler<{params: {handleOrDid: string, collection: str
 
     await data.fetchThreadHydrationData(skeleton)
 
-    let thread = hydrateThreadViewContent(skeleton, data, true)
+    let thread = hydrateThreadViewContent(skeleton, data, true, true)
 
     return thread ? {data: thread} : {error: "Ocurrió un error al obtener el contenido."}
 }

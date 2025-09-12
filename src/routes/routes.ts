@@ -1,5 +1,4 @@
 import express from 'express'
-import type {AppContext} from '#/index'
 import {cookieOptions, handler, Session, sessionAgent} from "#/utils/session-agent";
 import {CAHandlerNoAuth, makeHandler, makeHandlerNoAuth} from "#/utils/handler";
 import {searchTopics, searchUsers} from "#/services/search/search";
@@ -17,7 +16,8 @@ import {
     getFollowers,
     getFollows,
     getProfile,
-    getSession, setSeenTutorial,
+    getSession,
+    setSeenTutorial,
     unfollow,
     updateAlgorithmConfig,
     updateProfile
@@ -34,7 +34,7 @@ import {
     getCategories,
     getTopicsMentioned
 } from "#/services/wiki/topics";
-import {getTopicFeed} from "#/services/feed/topic";
+import {getTopicFeed, getTopicMentionsInTopicsFeed, getTopicQuoteReplies} from "#/services/feed/topic";
 import {deleteCAProfile, deleteRecordHandler, deleteRecordsHandler} from "#/services/delete";
 import {getCategoriesGraph, getCategoryGraph} from "#/services/wiki/graph";
 import {createTopicVersion} from "#/services/write/topic";
@@ -64,6 +64,7 @@ import {getDraft, getDrafts, saveDraft } from '#/services/write/drafts';
 import { getNextMeeting } from '#/services/admin/meetings';
 import { getAuthorDashboardHandler } from '#/services/monetization/author-dashboard';
 import { getFollowSuggestions, setNotInterested } from '#/services/user/follow-suggestions';
+import {AppContext} from "#/setup";
 
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
@@ -221,9 +222,20 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/topic-feed',
+        '/topic-feed/:kind',
         makeHandlerNoAuth(ctx, getTopicFeed)
     )
+
+    router.get(
+        '/topic-mentions-in-topics-feed',
+        makeHandler(ctx, getTopicMentionsInTopicsFeed)
+    )
+
+    router.get(
+        '/topic-quote-replies/:did/:rkey',
+        makeHandler(ctx, getTopicQuoteReplies)
+    )
+
 
     router.get(
         '/topic-history/:id',
@@ -395,7 +407,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.post("/delete-ca-profile", makeHandler(ctx, deleteCAProfile))
 
-    router.get("/follow-suggestions/:limit/:offset", makeHandler(ctx, getFollowSuggestions))
+    router.get("/follow-suggestions/:limit/:cursor", makeHandler(ctx, getFollowSuggestions))
 
     router.get("/likes/:did/:collection/:rkey", makeHandler(ctx, getLikes))
 

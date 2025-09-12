@@ -1,5 +1,5 @@
-import {AppContext} from "#/index";
-import {getContentsText} from "#/services/wiki/references";
+import {AppContext} from "#/setup";
+import {getContentsText, TextAndFormat} from "#/services/wiki/references";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import {decompress} from "#/utils/compression";
 import {getAllText} from "#/services/wiki/diff";
@@ -22,7 +22,8 @@ export function getNumWords(text: string, format: string) {
 }
 
 
-export async function updateContentsText(ctx: AppContext) {
+export async function updateContentsText(ctx: AppContext, uris?: string[]) {
+    if(uris && uris.length == 0) return
     const batchSize = 50
     let offset = 0
     while(true){
@@ -33,60 +34,68 @@ export async function updateContentsText(ctx: AppContext) {
             .where("Record.collection", "in", longTextCollections)
             .where("text", "is", null)
             .orderBy("Record.created_at", "desc")
-            .limit(batchSize)
-            .offset(offset)
+            .$if(uris == null, qb => qb.limit(batchSize).offset(offset))
+            .$if(uris != null, qb => qb.where("Record.uri", "in", uris!.slice(offset, offset+batchSize)))
             .execute()
         offset += batchSize
 
+        if(contents.length == 0) break
+
         console.log(`updating ${contents.length} contents text in batch ${offset}`)
         const texts = await getContentsText(ctx, contents, undefined, false)
-        const values: {
-            uri: string
-            selfLabels: string[]
-            embeds: any[]
-            dbFormat: string
-            text: string
-        }[] = texts.map((t, idx) => {
-            if(!t) {
-                t = {
-                    text: "",
-                    format: "plain-text"
-                }
-            }
-            try {
-                const res = anyEditorStateToMarkdownOrLexical(
-                    t.text,
-                    t.format
-                )
-                return {
-                    uri: contents[idx].uri,
-                    selfLabels: [],
-                    embeds: [],
-                    dbFormat: res.format,
-                    text: res.text
-                }
-            } catch (err) {
-                console.log("failed to process", contents[idx].uri)
-                console.log(t.text.length, t.text.slice(0, 100))
-                console.log("Error", err)
-                return null
-            }
-        }).filter(x => x != null)
 
-        if(values.length > 0){
-            await ctx.kysely
-                .insertInto("Content")
-                .values(values)
-                .onConflict((oc) => oc.column("uri").doUpdateSet({
-                    text: eb => eb.ref("excluded.text"),
-                    dbFormat: eb => eb.ref("excluded.dbFormat")
-                }))
-                .execute()
-        }
+        await setContentsText(ctx, contents.map(c => c.uri), texts)
 
         if(contents.length < batchSize){
             break
         }
+    }
+}
+
+
+async function setContentsText(ctx: AppContext, uris: string[], texts: (TextAndFormat | null)[]){
+    const values: {
+        uri: string
+        selfLabels: string[]
+        embeds: any[]
+        dbFormat: string
+        text: string
+    }[] = texts.map((t, idx) => {
+        if(!t) {
+            t = {
+                text: "",
+                format: "plain-text"
+            }
+        }
+        try {
+            const res = anyEditorStateToMarkdownOrLexical(
+                t.text,
+                t.format
+            )
+            return {
+                uri: uris[idx],
+                selfLabels: [],
+                embeds: [],
+                dbFormat: res.format,
+                text: res.text
+            }
+        } catch (err) {
+            console.log("failed to process", uris[idx])
+            console.log(t.text.length, t.text.slice(0, 100))
+            console.log("Error", err)
+            return null
+        }
+    }).filter(x => x != null)
+
+    if(values.length > 0){
+        await ctx.kysely
+            .insertInto("Content")
+            .values(values)
+            .onConflict((oc) => oc.column("uri").doUpdateSet({
+                text: eb => eb.ref("excluded.text"),
+                dbFormat: eb => eb.ref("excluded.dbFormat")
+            }))
+            .execute()
     }
 }
 
