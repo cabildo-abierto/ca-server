@@ -41,7 +41,8 @@ export class MirrorMachine {
 
     async fetchUsers(){
         const dids = await getCAUsersDids(this.ctx)
-        const extendedUsers = (await getCAUsersAndFollows(this.ctx)).map(x => x.did)
+        const extendedUsers: string[] = []
+        //const extendedUsers = (await getCAUsersAndFollows(this.ctx)).map(x => x.did)
         this.caUsers = new Set(dids)
         this.extendedUsers = new Set(extendedUsers.filter(x => !this.caUsers.has(x)))
         this.tooLargeUsers = new Set()

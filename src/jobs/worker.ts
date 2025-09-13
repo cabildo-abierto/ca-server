@@ -213,38 +213,76 @@ export class CAWorker {
         const batchSize = 500
 
         try {
-            const contributionJobs = allJobs.filter(job =>
-                job && job.name == 'update-topic-contributions'
-            );
-
-            console.log(`Filtered jobs: ${contributionJobs.length}.`)
-
-
-            if (contributionJobs.length <= 1) {
-                console.log("No jobs require batching.")
-                return
-            }
-
-            const topicIds = contributionJobs.flatMap(job => job.data as string[])
-
-            console.log(`Removing ${contributionJobs.length} jobs.`)
-            await Promise.all(contributionJobs.map(async job => {
-                try {
-                    await job.remove()
-                } catch (err) {
-                    console.log(`Error removing job ${job.name}:`, err)
-                }
-            }));
-
-            for (let i = 0; i < topicIds.length; i += batchSize) {
-                const batchIds = topicIds.slice(i, i + batchSize)
-                console.log(`Adding update-topic-contributions job with ${batchIds.length} topics.`)
-                await this.addJob('update-topic-contributions', {topicIds: batchIds})
-            }
+            await this.batchContributionsJobs(allJobs, batchSize)
+            await this.batchInteractionsScoreJobs(allJobs, batchSize)
 
             console.log(`Done after ${Date.now()-t1}s`)
         } catch (err) {
             console.log("Error batching jobs:", err)
+        }
+    }
+
+
+    async batchInteractionsScoreJobs(allJobs: any[], batchSize: number) {
+        const scoresJobs = allJobs.filter(job =>
+            job && job.name == 'update-interactions-score'
+        );
+
+        const jobsRequireBatching = scoresJobs.filter(job => job.data.length < batchSize)
+
+        if (jobsRequireBatching.length <= 1) {
+            console.log("update-interactions-score doesn't require batching")
+            return
+        }
+
+        console.log("Batching update-interactions-score...")
+        const uris = jobsRequireBatching.flatMap(job => job.data as string[])
+
+        await Promise.all(jobsRequireBatching.map(async job => {
+            try {
+                await job.remove()
+            } catch (err) {
+                console.log(`Error removing job ${job.name}:`, err)
+            }
+        }))
+
+        for (let i = 0; i < uris.length; i += batchSize) {
+            const batchIds = uris.slice(i, i + batchSize)
+            console.log(`Adding update-interactions-score job with ${batchIds.length} uris.`)
+            await this.addJob('update-interactions-score', {uris: batchIds})
+        }
+    }
+
+
+    async batchContributionsJobs(allJobs: any[], batchSize: number) {
+        const contributionJobs = allJobs.filter(job =>
+            job && job.name == 'update-topic-contributions'
+        )
+
+        const jobsRequireBatching = contributionJobs
+            .filter(job => job.data.length < batchSize)
+
+        if (jobsRequireBatching.length <= 1) {
+            console.log("update-topic-contributions doesn't require batching")
+            return
+        }
+
+        console.log("Batching update-topic-contributions...")
+        const topicIds = jobsRequireBatching.flatMap(job => job.data as string[])
+
+        console.log(`Removing ${jobsRequireBatching.length} jobs.`)
+        await Promise.all(jobsRequireBatching.map(async job => {
+            try {
+                await job.remove()
+            } catch (err) {
+                console.log(`Error removing job ${job.name}:`, err)
+            }
+        }));
+
+        for (let i = 0; i < topicIds.length; i += batchSize) {
+            const batchIds = topicIds.slice(i, i + batchSize)
+            console.log(`Adding update-topic-contributions job with ${batchIds.length} topics.`)
+            await this.addJob('update-topic-contributions', {topicIds: batchIds})
         }
     }
 }

@@ -39,6 +39,7 @@ class ProfileCacheKey extends CacheKey {
     // Cambia el record del perfil de Bluesky o Cabildo Abierto
     // Se verifica al usuario
     // Cambia el nivel de edicion del usuario (todavía no)
+    // Cuando
 
     async onUpdateRecord(uri: string) {
         const {did, collection, rkey} = splitUri(uri)
@@ -59,7 +60,17 @@ class ProfileCacheKey extends CacheKey {
 
     async get(did: string): Promise<Profile | null> {
         const cached = await this.cache.redis.get(this.key(did))
-        return cached ? JSON.parse(cached) : null
+        if(!cached) return null
+        const profile: Profile = JSON.parse(cached)
+
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const {viewer, ...bskyNoViewer} = profile.bsky
+
+        // sacamos al viewer porque depende del agent
+        return {
+            ca: profile.ca,
+            bsky: bskyNoViewer
+        }
     }
 
     async set(did: string, profile: Profile) {

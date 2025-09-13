@@ -2,7 +2,7 @@ import {processRecordsBatch} from "#/services/sync/event-processing/record";
 import {processContentsBatch} from "#/services/sync/event-processing/content";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 import {getDidFromUri} from "#/utils/uri";
-import {RefAndRecord, SyncContentProps} from "#/services/sync/types";
+import {SyncContentProps} from "#/services/sync/types";
 import {ATProtoStrongRef} from "#/lib/types";
 import * as Article from "#/lex-api/types/ar/cabildoabierto/feed/article"
 import {getCidFromBlobRef} from "#/services/sync/utils";
@@ -50,8 +50,11 @@ export class ArticleRecordProcessor extends RecordProcessor<Article.Record> {
         })
 
         const authors = unique(records.map(r => getDidFromUri(r.ref.uri)))
-        await this.ctx.worker?.addJob("update-author-status", {dids: authors})
-        await this.ctx.worker?.addJob("update-contents-topic-mentions", {uris: records.map(r => r.ref.uri)})
+        await Promise.all([
+            this.ctx.worker?.addJob("update-author-status", {dids: authors}),
+            this.ctx.worker?.addJob("update-contents-topic-mentions", {uris: records.map(r => r.ref.uri)}),
+            this.ctx.worker?.addJob("update-interactions-score", {uris: records.map(r => r.ref.uri)})
+        ])
     }
 }
 

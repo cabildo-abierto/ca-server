@@ -33,7 +33,10 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
                 return [
                     ...acc,
                     ...(r.record.reply?.root ? [{uri: r.record.reply.root.uri, cid: r.record.reply.root.cid}] : []),
-                    ...(r.record.reply?.parent ? [{uri: r.record.reply.parent.uri, cid: r.record.reply.parent.cid}] : []),
+                    ...(r.record.reply?.parent ? [{
+                        uri: r.record.reply.parent.uri,
+                        cid: r.record.reply.parent.cid
+                    }] : []),
                 ]
             }, [] as ATProtoStrongRef[])
             await processDirtyRecordsBatch(trx, referencedRefs)
@@ -94,15 +97,26 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
         })
 
         if (insertedPosts) {
+            const insertedUris = insertedPosts
+                .map(r => r.uri)
+            const replyToUris = insertedPosts
+                .map(p => p.replyToId)
+                .filter(x => x != null)
             await Promise.all([
                 this.createNotifications(insertedPosts),
-                this.ctx.worker?.addJob("update-contents-topic-mentions", {uris: insertedPosts.map(r => r.uri)})
+                this.ctx.worker?.addJob("update-contents-topic-mentions", {uris: insertedUris}),
+                this.ctx.worker?.addJob("update-interactions-score", {
+                    uris: [
+                        ...insertedUris,
+                        ...replyToUris
+                    ]
+                })
             ])
         }
     }
 
-    async createNotifications(posts: {replyToId: string | null, uri: string}[]) {
-        for(const p of posts) {
+    async createNotifications(posts: { replyToId: string | null, uri: string }[]) {
+        for (const p of posts) {
             if (p.replyToId) {
                 const replyToDid = getDidFromUri(p.replyToId)
                 if (replyToDid != getDidFromUri(p.uri)) {
@@ -125,7 +139,7 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
 
 
 export class PostDeleteProcessor extends DeleteProcessor {
-    async deleteRecordsFromDB(uris: string[]){
+    async deleteRecordsFromDB(uris: string[]) {
         await this.ctx.kysely.transaction().execute(async (trx) => {
             await trx
                 .deleteFrom("TopicInteraction")

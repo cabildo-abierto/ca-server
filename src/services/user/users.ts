@@ -22,6 +22,8 @@ import {FollowingFeedFilter} from "#/services/feed/feed";
 import {logTimes} from "#/utils/utils";
 import {BskyProfileRecordProcessor} from "#/services/sync/event-processing/profile";
 import {FollowRecordProcessor} from "#/services/sync/event-processing/follow";
+import {ViewerState} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+import {getDidFromUri} from "#/utils/uri";
 
 
 export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
@@ -227,6 +229,33 @@ async function getCAProfile(ctx: AppContext, agent: Agent, did: string): Promise
 }
 
 
+async function getViewerForProfile(ctx: AppContext, agent: SessionAgent, did: string): Promise<ViewerState | null> {
+    const status = await ctx.redisCache.mirrorStatus.get(agent.did, true)
+    if(status != "Sync"){
+        return null
+    }
+    const follows = await ctx.kysely
+        .selectFrom("Follow")
+        .innerJoin("Record", "Record.uri", "Follow.uri")
+        .select("Follow.uri")
+        .where("Follow.userFollowedId", "in", [did, agent.did])
+        .where("Record.authorId", "in", [did, agent.did])
+        .execute()
+
+    if(follows.length == 0){
+        return null
+    }
+
+    const following = follows.find(f => getDidFromUri(f.uri) == agent.did)
+    const followedBy = follows.find(f => getDidFromUri(f.uri) == did)
+
+    return {
+        following: following ? following.uri : undefined,
+        followedBy: followedBy ? followedBy.uri : undefined
+    }
+}
+
+
 export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile> = async (ctx, agent, {params}) => {
     try {
         const t1 = Date.now()
@@ -234,16 +263,24 @@ export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile>
         if (!did) return {error: "No se encontró el usuario."}
         const t2 = Date.now()
 
-        const cached = await ctx
-            .redisCache
-            .profile
-            .get(did)
+        const [cached, viewer] = await Promise.all([
+            ctx.redisCache.profile.get(did),
+            getViewerForProfile(ctx, agent, did)
+        ])
+
+        console.log(`in profile ${params.handleOrDid} found`, cached?.bsky.viewer, viewer)
 
         const t3 = Date.now()
-        if(cached) {
+        if(cached && viewer != null) {
             logTimes(`cache hit en perfil ${did}`, [t1, t2, t3])
             return {
-                data: cached
+                data: {
+                    ca: cached.ca,
+                    bsky: {
+                        ...cached.bsky,
+                        viewer
+                    }
+                }
             }
         }
 

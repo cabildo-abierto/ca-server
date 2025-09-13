@@ -45,7 +45,9 @@ export type EnDiscusionSkeletonElement = {uri: string, createdAt: Date}
 const getEnDiscusionSkeletonQuery: (metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption) => SkeletonQuery<EnDiscusionSkeletonElement> = (metric, time, format) => {
     return async (ctx, agent, from, to, limit) => {
         const startDate = getEnDiscusionStartDate(time)
-        const collections = format == "Artículos" ? ["ar.cabildoabierto.feed.article"] : ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
+        const collections = format == "Artículos" ?
+            ["ar.cabildoabierto.feed.article"] :
+            ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
         const label = 'ca:en discusión'
 
         if(limit == 0){

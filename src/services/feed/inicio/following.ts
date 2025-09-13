@@ -554,7 +554,7 @@ async function followingFeedOnlyCABaseQueryArticles(ctx: AppContext, agent: Sess
     return await getCachedFollowingFeedSkeleton(
         ctx,
         agent.did,
-        ctx.redisCache.followingFeedSkeletonCAAll,
+        ctx.redisCache.followingFeedSkeletonCAArticles,
         followingFeedOnlyArticlesSkeletonQuery,
         getNextFollowingFeedCursor,
         followingFeedCursorToScore,

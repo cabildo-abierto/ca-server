@@ -1,11 +1,11 @@
 import {AppContext} from "#/setup";
 import {sql} from "kysely";
 import {logTimes} from "#/utils/utils";
-import {getCollectionFromUri, getDidFromUri, getRkeyFromUri} from "#/utils/uri";
 
 
 export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) {
-    const batchSize = 5000
+    if(uris && uris.length == 0) return
+    const batchSize = 500
     let offset = 0
     const lastMonth = new Date(Date.now() - 1000*3600*24*30)
     while(true){
@@ -48,19 +48,23 @@ export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) 
                     - (
                         case when exists (
                             select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
+                            inner join "Record" as "ReactionRecord" on 
+                                "Reaction"."uri" = "ReactionRecord"."uri"
                             where
                                 "ReactionRecord"."collection" = 'app.bsky.feed.repost'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
+                                 and "ReactionRecord"."authorId" = "Record"."authorId"
+                                 and "Reaction"."subjectId" = "Record"."uri"
                         ) then 1 else 0 end
                     )
                     - (
                         case when exists (
                             select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
+                            inner join "Record" as "ReactionRecord" on 
+                                "Reaction"."uri" = "ReactionRecord"."uri"
                             where
                                 "ReactionRecord"."collection" = 'app.bsky.feed.like'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
+                                 and "ReactionRecord"."authorId" = "Record"."authorId"  
+                                 and "Reaction"."subjectId" = "Record"."uri"  
                         ) then 1 else 0 end
                     )
                 `.as("interactionsScore"),
@@ -76,19 +80,23 @@ export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) 
                     - (
                         case when exists (
                             select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
+                            inner join "Record" as "ReactionRecord" on 
+                                    "Reaction"."uri" = "ReactionRecord"."uri"
                             where
                                 "ReactionRecord"."collection" = 'app.bsky.feed.repost'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
+                                 and "ReactionRecord"."authorId" = "Record"."authorId"
+                                 and "Reaction"."subjectId" = "Record"."uri"  
                         ) then 1 else 0 end
                     )
                     - (
                         case when exists (
                             select * from "Reaction"
-                            inner join "Record" as "ReactionRecord" on "Reaction"."uri" = "Record"."uri"
+                            inner join "Record" as "ReactionRecord" on 
+                                "Reaction"."uri" = "ReactionRecord"."uri"
                             where
                                 "ReactionRecord"."collection" = 'app.bsky.feed.like'
-                                 and "ReactionRecord"."authorId" = "Record"."authorId"    
+                                 and "ReactionRecord"."authorId" = "Record"."authorId"
+                                 and "Reaction"."subjectId" = "Record"."uri"    
                         ) then 1 else 0 end
                     ))::numeric / sqrt(1 + (
                         select count(distinct "Follower"."did") from "Follow"

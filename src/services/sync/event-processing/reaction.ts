@@ -127,6 +127,23 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
             this.ctx.worker?.addJob("batch-create-notifications", data)
             await addUpdateContributionsJobForTopics(this.ctx, res.topicIdsList)
         }
+
+        function isLikeOrRepost(r: RefAndRecord) {
+            return ["app.bsky.feed.like", "app.bsky.feed.repost"].includes(getCollectionFromUri(r.ref.uri))
+        }
+
+        const likeAndRepostsSubjects = records
+            .filter(isLikeOrRepost)
+            .map(r => r.record.subject.uri)
+
+        console.log(`processing reaction with subjects.`, likeAndRepostsSubjects)
+
+        if(likeAndRepostsSubjects.length > 0) {
+            await this.ctx.worker?.addJob(
+                "update-interactions-score",
+                {uris: likeAndRepostsSubjects}
+            )
+        }
     }
 
     async batchIncrementReactionCounter(
