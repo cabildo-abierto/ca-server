@@ -13,32 +13,22 @@ import {SessionAgent} from "#/utils/session-agent";
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
 import {$Typed} from "@atproto/api";
 import {sql} from "kysely";
+import {logTimes} from "#/utils/utils";
 
 
 export async function searchUsersInCA(ctx: AppContext, query: string, dataplane: Dataplane): Promise<string[]> {
-    let caUsers: {did: string, handle: string, displayName?: string, avatar?: string, CAProfileUri?: string}[] = (await ctx.db.$queryRaw`
-        SELECT 
-            u."did",
-            u."handle",
-            u."displayName",
-            u."avatar",
-            u."CAProfileUri"
-        FROM "User" u
-        WHERE u."displayName" ILIKE '%' || ${query} || '%'
-           OR u."handle" ILIKE '%' || ${query} || '%'
-    `)
+    let users = await ctx.kysely
+        .selectFrom("User")
+        .select(["did"])
+        .where("User.inCA", "=", true)
+        .where(eb => eb.or([
+            eb("User.displayName", "ilike", `%${query}%`),
+            eb("User.handle", "ilike", `%${query}%`)
+        ]))
+        .limit(25)
+        .execute()
 
-    const views = caUsers.map(u => ({
-        ...u,
-        caProfile: u.CAProfileUri
-    }))
-
-    dataplane.caUsers = joinMaps(
-        dataplane.caUsers,
-        new Map<string, CAProfileViewBasic>(views.map(a => [a.did, a]))
-    )
-
-    return views.map(a => a.did)
+    return users.map(a => a.did)
 }
 
 
@@ -63,10 +53,12 @@ export const searchUsers: CAHandler<{
 
     const dataplane = new Dataplane(ctx, agent)
 
+    const t1 = Date.now()
     let [caSearchResults, bskySearchResults] = await Promise.all([
         searchUsersInCA(ctx, query, dataplane),
         searchUsersInBsky(agent, query, dataplane)
     ])
+    const t2 = Date.now()
 
     const userList = unique([
         ...caSearchResults,
@@ -74,6 +66,9 @@ export const searchUsers: CAHandler<{
     ]).slice(0, 25)
 
     await dataplane.fetchUsersHydrationData(userList)
+    const t3 = Date.now()
+
+    logTimes(`search users ${query}`, [t1, t2, t3])
 
     const users = userList.map(did => hydrateProfileViewBasic(did, dataplane))
 

@@ -58,10 +58,9 @@ class ProfileCacheKey extends CacheKey {
         return `profile:${did}`
     }
 
-    async get(did: string): Promise<Profile | null> {
-        const cached = await this.cache.redis.get(this.key(did))
-        if(!cached) return null
-        const profile: Profile = JSON.parse(cached)
+    formatCached(p: string | null): Profile | null {
+        if(p == null) return null
+        const profile: Profile = JSON.parse(p)
 
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const {viewer, ...bskyNoViewer} = profile.bsky
@@ -71,6 +70,18 @@ class ProfileCacheKey extends CacheKey {
             ca: profile.ca,
             bsky: bskyNoViewer
         }
+    }
+
+    async get(did: string): Promise<Profile | null> {
+        const cached = await this.cache.redis.get(this.key(did))
+        if(!cached) return null
+        return this.formatCached(cached)
+    }
+
+    async getMany(dids: string[]) {
+        const cached = await this.cache.redis.mget(dids.map(this.key))
+        const profiles: (Profile | null)[] = cached.map(this.formatCached)
+        return profiles
     }
 
     async set(did: string, profile: Profile) {

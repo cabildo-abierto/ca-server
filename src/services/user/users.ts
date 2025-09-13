@@ -268,8 +268,6 @@ export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile>
             getViewerForProfile(ctx, agent, did)
         ])
 
-        console.log(`in profile ${params.handleOrDid} found`, cached?.bsky.viewer, viewer)
-
         const t3 = Date.now()
         if(cached && viewer != null) {
             logTimes(`cache hit en perfil ${did}`, [t1, t2, t3])
@@ -286,7 +284,7 @@ export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile>
 
         const [bskyProfile, caProfile] = await Promise.all([
             agent.bsky.getProfile({actor: params.handleOrDid}),
-            getCAProfile(ctx, agent, params.handleOrDid)
+            getCAProfile(ctx, agent, did)
         ])
 
         const t4 = Date.now()
