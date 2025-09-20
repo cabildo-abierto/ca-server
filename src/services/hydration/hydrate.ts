@@ -174,7 +174,10 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
     const viewer = hydrateViewer(e.uri, data)
     const authorId = getDidFromUri(e.uri)
     const author = hydrateProfileViewBasic(authorId, data)
-    if (!author) return {error: "No se encontró el autor del contenido."}
+    if (!author) {
+        console.log("No se enconctró el autor del contenido.", uri)
+        return {error: "No se encontró el autor del contenido."}
+    }
 
     let text: string | null = null
     let format: string | null = null

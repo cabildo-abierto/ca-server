@@ -136,8 +136,6 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
             .filter(isLikeOrRepost)
             .map(r => r.record.subject.uri)
 
-        console.log(`processing reaction with subjects.`, likeAndRepostsSubjects)
-
         if(likeAndRepostsSubjects.length > 0) {
             await this.ctx.worker?.addJob(
                 "update-interactions-score",

@@ -1,4 +1,4 @@
-import {CAHandler} from "#/utils/handler";
+import {CAHandlerNoAuth} from "#/utils/handler";
 import {getDidFromUri, getUri, isTopicVersion} from "#/utils/uri";
 import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
 
@@ -15,7 +15,7 @@ export type ReadChunksAttr = {
     totalChunks: number
 }
 
-export const storeReadSession: CAHandler<{
+export const storeReadSession: CAHandlerNoAuth<{
     chunks: ReadChunks
     totalChunks: number
     params: { did: string, collection: string, rkey: string }
@@ -31,7 +31,7 @@ export const storeReadSession: CAHandler<{
     try {
         await ctx.db.readSession.create({
             data: {
-                userId: agent.did,
+                userId: agent.hasSession() ? agent.did : "anonymous",
                 readContentId: uri,
                 readChunks: {
                     chunks: params.chunks,

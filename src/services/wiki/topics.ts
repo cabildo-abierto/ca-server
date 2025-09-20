@@ -1,7 +1,7 @@
 import {fetchTextBlobs} from "../blob";
 import {getDidFromUri, getUri} from "#/utils/uri";
 import {AppContext} from "#/setup";
-import {CAHandler, CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
+import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
 import {TopicProp, TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion";
 import {getTopicCurrentVersion, getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
@@ -27,8 +27,8 @@ import {cleanText} from "#/utils/strings";
 
 export type TimePeriod = "day" | "week" | "month" | "all"
 
-export const getTrendingTopics: CAHandler<{params: {time: TimePeriod}}, TopicViewBasic[]> = async (ctx, agent, {params}) => {
-    return await getTopics(ctx, [], "popular", params.time, 10, agent.did)
+export const getTrendingTopics: CAHandlerNoAuth<{params: {time: TimePeriod}}, TopicViewBasic[]> = async (ctx, agent, {params}) => {
+    return await getTopics(ctx, [], "popular", params.time, 10, agent.hasSession() ? agent.did : undefined)
 }
 
 
@@ -120,7 +120,7 @@ export async function getTopics(
                 .select(
                     [eb => eb.fn.max("ReadSession.created_at").as("lastRead")
                 ])
-                .where("ReadSession.userId", "=", did ?? "sin did")
+                .where("ReadSession.userId", "=", did ?? "no did")
                 .whereRef("ReadSession.readContentId", "=", "TopicVersion.uri").as("lastRead")
             )
         ])
@@ -171,7 +171,7 @@ export async function getTopics(
 }
 
 
-export const getTopicsHandler: CAHandler<{
+export const getTopicsHandler: CAHandlerNoAuth<{
     params: { sort: string, time: string },
     query: { c: string[] | string }
 }, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
@@ -191,12 +191,12 @@ export const getTopicsHandler: CAHandler<{
         sort,
         time as TimePeriod,
         50,
-        agent.did
+        agent.hasSession() ? agent.did : undefined
     )
 }
 
 
-export const getCategories: CAHandler<{}, string[]> = async (ctx, _, {}) => {
+export const getCategories: CAHandlerNoAuth<{}, string[]> = async (ctx, _, {}) => {
     const categories = await ctx.db.topicCategory.findMany({
         select: {
             id: true
@@ -235,7 +235,7 @@ async function countTopicsInEachCategory(ctx: AppContext) {
 }
 
 
-export const getCategoriesWithCounts: CAHandler<{}, { category: string, size: number }[]> = async (ctx, _, {}) => {
+export const getCategoriesWithCounts: CAHandlerNoAuth<{}, { category: string, size: number }[]> = async (ctx, _, {}) => {
     let [categories, noCategoryCount] = await Promise.all([
         countTopicsInEachCategory(ctx),
         countTopicsNoCategories(ctx)
@@ -485,7 +485,7 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
 }
 
 
-export const getTopicVersionHandler: CAHandler<{
+export const getTopicVersionHandler: CAHandlerNoAuth<{
     params: { did: string, rkey: string }
 }, TopicView> = async (ctx, _, {params}) => {
     const {did, rkey} = params
@@ -513,7 +513,7 @@ export async function getTopicsTitles(ctx: AppContext, ids: string[]) {
 }
 
 
-export const getTopicsMentioned: CAHandler<{title: string, text: string}, TopicMention[]> = async (ctx, agent, {title, text}) => {
+export const getTopicsMentioned: CAHandlerNoAuth<{title: string, text: string}, TopicMention[]> = async (ctx, agent, {title, text}) => {
     const t1 = Date.now()
     const m = await getSynonymsToTopicsMap(ctx)
     const t2 = Date.now()

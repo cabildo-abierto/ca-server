@@ -6,7 +6,6 @@ import {processRecordsBatch} from "#/services/sync/event-processing/record";
 import {ATProtoStrongRef} from "#/lib/types";
 import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
 import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
-import {RefAndRecord} from "#/services/sync/types";
 
 
 

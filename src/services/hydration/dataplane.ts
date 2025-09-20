@@ -583,7 +583,6 @@ export class Dataplane {
     async fetchBskyPosts(uris: string[]) {
         uris = uris.filter(u => !this.bskyPosts?.has(u))
         const agent = this.agent
-        if (!agent.hasSession()) return
 
         const postsList = postUris(uris)
         if (postsList.length == 0) return
@@ -597,7 +596,7 @@ export class Dataplane {
             const t1 = Date.now()
             if(batches.length > 1) console.log(`Warning: get bsky posts has ${batches.length} batches.`)
             for(const b of batches) {
-                const res = await agent.bsky.getPosts({uris: b})
+                const res = await agent.bsky.app.bsky.feed.getPosts({uris: b})
                 postViews.push(...res.data.posts)
             }
             const t2 = Date.now()
@@ -873,7 +872,6 @@ export class Dataplane {
 
     async fetchUsersHydrationDataFromBsky(dids: string[]) {
         const agent = this.agent
-        if (!agent.hasSession()) return
 
         dids = dids.filter(d => !this.bskyUsers.has(d))
         if (dids.length == 0) return
@@ -884,7 +882,7 @@ export class Dataplane {
         const profiles: ProfileViewDetailed[] = []
         for(let i = 0; i < didBatches.length; i++){
             const b = didBatches[i]
-            const res = await agent.bsky.getProfiles({actors: b})
+            const res = await agent.bsky.app.bsky.actor.getProfiles({actors: b})
             profiles.push(...res.data.profiles)
         }
 
@@ -924,7 +922,6 @@ export class Dataplane {
 
     async fetchNotificationsHydrationData(skeleton: NotificationsSkeleton) {
         if(!this.agent.hasSession() || skeleton.length == 0) return
-
 
         const reqAuthors = skeleton.map(n => getDidFromUri(n.causedByRecordId))
 

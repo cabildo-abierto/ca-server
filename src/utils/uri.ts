@@ -144,19 +144,5 @@ export function topicVersionUris(uris: string[]){
     return uris.filter(u => isTopicVersion(getCollectionFromUri(u)))
 }
 
-export function collectionToDisplay(c: string){
-    if(isPost(c)){
-        return "Publicación"
-    } else if (isArticle(c)){
-        return "Artículo"
-    } else if (isTopicVersion(c)){
-        return "Tema"
-    } else if (isDataset(c)){
-        return "Dataset"
-    } else if (isVisualization(c)){
-        return "Visualización"
-    }
-}
-
 
 export const articleCollections = ["ar.com.cabildoabierto.article", "ar.cabildoabierto.feed.article"]

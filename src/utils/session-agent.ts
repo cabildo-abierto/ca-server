@@ -1,10 +1,10 @@
 import type {IncomingMessage, ServerResponse} from "node:http";
-import type {AppContext} from "#/index";
 import {getIronSession, SessionOptions} from "iron-session";
 import express from "express";
 import {AtpBaseClient} from "src/lex-api";
 import {Agent as BskyAgent} from "@atproto/api";
 import {env} from "#/lib/env";
+import {AppContext} from "#/setup";
 
 export type Session = { did: string }
 
@@ -74,7 +74,7 @@ export async function sessionAgent(
             await session.destroy()
         }
     }
-    return new NoSessionAgent(CAAgent, new AtpBaseClient("https://bsky.social"))
+    return new NoSessionAgent(CAAgent, new AtpBaseClient("https://public.api.bsky.app"))
 }
 
 

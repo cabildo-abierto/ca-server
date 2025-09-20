@@ -2,7 +2,7 @@ import {getCategoriesWithCounts} from "./topics";
 import {AppContext} from "#/setup";
 import {TopicsGraph} from "#/lib/types";
 import {logTimes} from "#/utils/utils";
-import {CAHandler} from "#/utils/handler";
+import {CAHandlerNoAuth} from "#/utils/handler";
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {getTopicCategories} from "#/services/wiki/utils";
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
@@ -100,7 +100,7 @@ export const updateCategoriesGraph = async (ctx: AppContext) => {
     // revalidateTag("categoriesgraph")
 }
 
-export const getCategoriesGraph: CAHandler<{}, TopicsGraph> = async (ctx, agent, {}) => {
+export const getCategoriesGraph: CAHandlerNoAuth<{}, TopicsGraph> = async (ctx, agent, {}) => {
     const links = await ctx.db.categoryLink.findMany({
         select: {
             idCategoryA: true,
@@ -130,7 +130,7 @@ export const getCategoriesGraph: CAHandler<{}, TopicsGraph> = async (ctx, agent,
 }
 
 
-export const getCategoryGraph: CAHandler<{ query: { c: string[] | string } }, TopicsGraph> = async (ctx, agent, {query}) => {
+export const getCategoryGraph: CAHandlerNoAuth<{ query: { c: string[] | string } }, TopicsGraph> = async (ctx, agent, {query}) => {
     const categories = typeof query.c == "string" ? [query.c] : query.c
 
     const baseQuery = ctx.kysely

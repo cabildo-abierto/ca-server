@@ -1,6 +1,6 @@
 import {decompress} from "#/utils/compression";
 import {Column, DatasetView, DatasetViewBasic, TopicsDatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
-import {CAHandler} from "#/utils/handler";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {getUri} from "#/utils/uri";
 import {AppContext} from "#/setup";
@@ -62,7 +62,7 @@ export function hydrateTopicsDatasetView(filters: $Typed<ColumnFilter>[], datapl
 }
 
 
-export const getDataset: CAHandler<{
+export const getDataset: CAHandlerNoAuth<{
     params: { did: string, collection: string, rkey: string }
 }, DatasetView> = async (ctx, agent, {params}) => {
     const {did, collection, rkey} = params
@@ -130,7 +130,7 @@ export function inFilterCond(name: string, values: string[]) {
 
 
 
-export const getTopicsDatasetHandler: CAHandler<TopicDatasetSpec, TopicsDatasetView> = async (ctx, agent, params) => {
+export const getTopicsDatasetHandler: CAHandlerNoAuth<TopicDatasetSpec, TopicsDatasetView> = async (ctx, agent, params) => {
     const filters = params.filters ? params.filters.filter(f => isColumnFilter(f)): []
     if(filters.length == 0) return {error: "Aplicá al menos un filtro."}
 
@@ -219,7 +219,7 @@ export const hydrateDatasetViewBasic = (uri: string, data: Dataplane): DatasetVi
 }
 
 
-export const getDatasets: CAHandler<{}, DatasetViewBasic[]> = async (ctx, agent, {}) => {
+export const getDatasets: CAHandlerNoAuth<{}, DatasetViewBasic[]> = async (ctx, agent, {}) => {
     const data = new Dataplane(ctx, agent)
 
     const datasetList: string[] = await getDatasetList(ctx)

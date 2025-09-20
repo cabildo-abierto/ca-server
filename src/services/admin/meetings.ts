@@ -1,4 +1,4 @@
-import {CAHandler} from "#/utils/handler";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 
 
 export type NextMeeting = {show: false} | {
@@ -10,7 +10,7 @@ export type NextMeeting = {show: false} | {
 }
 
 
-export const getNextMeeting: CAHandler<{}, NextMeeting> = async (ctx, agent, {}) => {
+export const getNextMeeting: CAHandlerNoAuth<{}, NextMeeting> = async (ctx, agent, {}) => {
     const meetings = await ctx.kysely
         .selectFrom("Meeting")
         .select(["Meeting.date", "Meeting.title", "Meeting.description", "Meeting.url", "Meeting.show"])

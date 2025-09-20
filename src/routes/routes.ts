@@ -106,7 +106,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get(
         '/feed/:kind',
-        handler(makeHandler(ctx, getFeedByKind))
+        handler(makeHandlerNoAuth(ctx, getFeedByKind))
     )
 
     router.get(
@@ -136,7 +136,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get(
         '/search-users/:query',
-        handler(makeHandler(ctx, searchUsers))
+        handler(makeHandlerNoAuth(ctx, searchUsers))
     )
 
     router.post(
@@ -161,16 +161,16 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get(
         '/thread/:handleOrDid/:collection/:rkey',
-        handler(makeHandler(ctx, getThread))
+        handler(makeHandlerNoAuth(ctx, getThread))
     )
 
     router.get(
         '/trending-topics/:time',
-        handler(makeHandler(ctx, getTrendingTopics))
+        handler(makeHandlerNoAuth(ctx, getTrendingTopics))
     )
     router.get(
         '/profile/:handleOrDid',
-        handler(makeHandler(ctx, getProfile))
+        handler(makeHandlerNoAuth(ctx, getProfile))
     )
 
     router.get("/test", makeHandlerNoAuth(ctx, serverStatusRouteHandler))
@@ -191,18 +191,13 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get(
-        '/visualizations',
-        makeHandler(ctx, async () => ({data: []})),
-    )
-
-    router.get(
         '/follows/:handleOrDid',
-        makeHandler(ctx, getFollows)
+        makeHandlerNoAuth(ctx, getFollows)
     )
 
     router.get(
         '/followers/:handleOrDid',
-        makeHandler(ctx, getFollowers)
+        makeHandlerNoAuth(ctx, getFollowers)
     )
 
     router.get(
@@ -217,7 +212,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get(
         '/topic-version/:did/:rkey',
-        makeHandler(ctx, getTopicVersionHandler)
+        makeHandlerNoAuth(ctx, getTopicVersionHandler)
     )
 
     router.get(
@@ -227,28 +222,28 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get(
         '/topic-mentions-in-topics-feed',
-        makeHandler(ctx, getTopicMentionsInTopicsFeed)
+        makeHandlerNoAuth(ctx, getTopicMentionsInTopicsFeed)
     )
 
     router.get(
         '/topic-quote-replies/:did/:rkey',
-        makeHandler(ctx, getTopicQuoteReplies)
+        makeHandlerNoAuth(ctx, getTopicQuoteReplies)
     )
 
 
     router.get(
         '/topic-history/:id',
-        makeHandler(ctx, getTopicHistoryHandler)
+        makeHandlerNoAuth(ctx, getTopicHistoryHandler)
     )
 
     router.get(
         '/topic-version-changes/:curDid/:curRkey/:prevDid/:prevRkey',
-        makeHandler(ctx, getTopicVersionChanges)
+        makeHandlerNoAuth(ctx, getTopicVersionChanges)
     )
 
     router.post(
         '/diff',
-        makeHandler(ctx, getNewVersionDiff)
+        makeHandlerNoAuth(ctx, getNewVersionDiff)
     )
 
     router.post(
@@ -263,32 +258,32 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get(
         '/categories-graph',
-        makeHandler(ctx, getCategoriesGraph)
+        makeHandlerNoAuth(ctx, getCategoriesGraph)
     )
 
     router.get(
         '/category-graph',
-        makeHandler(ctx, getCategoryGraph)
+        makeHandlerNoAuth(ctx, getCategoryGraph)
     )
 
     router.get(
         '/categories',
-        makeHandler(ctx, getCategories)
+        makeHandlerNoAuth(ctx, getCategories)
     )
 
     router.get(
         '/topics/:sort/:time',
-        makeHandler(ctx, getTopicsHandler)
+        makeHandlerNoAuth(ctx, getTopicsHandler)
     )
 
     router.get(
         '/search-topics/:q',
-        makeHandler(ctx, searchTopics)
+        makeHandlerNoAuth(ctx, searchTopics)
     )
 
     router.get(
         '/search-contents/:q',
-        makeHandler(ctx, searchContents)
+        makeHandlerNoAuth(ctx, searchContents)
     )
 
     router.post(
@@ -306,15 +301,15 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get('/datasets',
-        makeHandler(ctx, getDatasets)
+        makeHandlerNoAuth(ctx, getDatasets)
     )
 
     router.get('/dataset/:did/:collection/:rkey',
-        makeHandler(ctx, getDataset)
+        makeHandlerNoAuth(ctx, getDataset)
     )
 
     router.post('/topics-dataset',
-        makeHandler(ctx, getTopicsDatasetHandler)
+        makeHandlerNoAuth(ctx, getTopicsDatasetHandler)
     )
 
     router.post('/dataset',
@@ -331,7 +326,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.post(
         '/get-topics-mentioned',
-        handler(makeHandler(ctx, getTopicsMentioned))
+        makeHandlerNoAuth(ctx, getTopicsMentioned)
     )
 
     router.post(
@@ -358,15 +353,15 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get('/donation-history', makeHandler(ctx, getDonationHistory))
 
-    router.get('/monthly-value', makeHandler(ctx, getMonthlyValueHandler))
+    router.get('/monthly-value', makeHandlerNoAuth(ctx, getMonthlyValueHandler))
 
-    router.get('/funding-state', makeHandler(ctx, getFundingStateHandler))
+    router.get('/funding-state', makeHandlerNoAuth(ctx, getFundingStateHandler))
 
     router.post('/donate/create-preference', makeHandler(ctx, createPreference))
 
     router.post('/notify-payment', makeHandlerNoAuth(ctx, processPayment))
 
-    router.post('/read-session/:did/:collection/:rkey', makeHandler(ctx, storeReadSession))
+    router.post('/read-session/:did/:collection/:rkey', makeHandlerNoAuth(ctx, storeReadSession))
 
     router.get("/topic-title/:id", makeHandlerNoAuth(ctx, getTopicTitleHandler))
 
@@ -394,7 +389,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.post('/draft', makeHandler(ctx, saveDraft))
 
-    router.get("/next-meeting", makeHandler(ctx, getNextMeeting))
+    router.get("/next-meeting", makeHandlerNoAuth(ctx, getNextMeeting))
 
     router.get("/invite-codes-to-share", makeHandler(ctx, getInviteCodesToShare))
 

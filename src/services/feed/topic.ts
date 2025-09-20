@@ -351,7 +351,7 @@ export const getTopicFeed: CAHandlerNoAuth<{ params: {kind: "mentions" | "discus
 }
 
 
-export const getTopicMentionsInTopicsFeed: CAHandler<{ query: { i?: string, did?: string, rkey?: string } }, {
+export const getTopicMentionsInTopicsFeed: CAHandlerNoAuth<{ query: { i?: string, did?: string, rkey?: string } }, {
     feed: {id: string, title: string}[],
     cursor: string | undefined
 }> = async (ctx, agent, {query}) => {
@@ -379,7 +379,7 @@ export const getTopicMentionsInTopicsFeed: CAHandler<{ query: { i?: string, did?
 }
 
 
-export const getTopicQuoteReplies: CAHandler<{params: {did: string, rkey: string}}, PostView[]> = async (ctx, agent, {params}) => {
+export const getTopicQuoteReplies: CAHandlerNoAuth<{params: {did: string, rkey: string}}, PostView[]> = async (ctx, agent, {params}) => {
     const {did, rkey} = params
     const uri = getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey)
 

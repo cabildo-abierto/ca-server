@@ -7,7 +7,7 @@ import {getMainProfileFeedSkeletonCA} from "#/services/feed/profile/main";
 
 
 const getRepliesProfileFeedSkeletonBsky = async (agent: SessionAgent, data: Dataplane, did: string, cursor?: string): Promise<GetSkeletonOutput> => {
-    const res = await agent.bsky.getAuthorFeed({actor: did, filter: "posts_with_replies", cursor})
+    const res = await agent.bsky.app.bsky.feed.getAuthorFeed({actor: did, filter: "posts_with_replies", cursor})
     const feed = res.data.feed
     data.storeFeedViewPosts(feed)
 

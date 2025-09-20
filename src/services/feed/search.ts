@@ -1,5 +1,5 @@
 import {cleanText} from "#/utils/strings";
-import {CAHandler} from "#/utils/handler";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {FeedPipelineProps, getFeed, GetFeedOutput, GetSkeletonProps} from "#/services/feed/feed";
 import {sql} from "kysely";
 
@@ -22,7 +22,7 @@ const getSearchContentsSkeleton: (q: string) => GetSkeletonProps = (q) => async 
 }
 
 
-export const searchContents: CAHandler<{params: {q: string}}, GetFeedOutput> = async (ctx, agent, {params}) => {
+export const searchContents: CAHandlerNoAuth<{params: {q: string}}, GetFeedOutput> = async (ctx, agent, {params}) => {
     let {q} = params
     if(q.length == 0) return {data: {feed: [], cursor: undefined}}
     q = cleanText(q)

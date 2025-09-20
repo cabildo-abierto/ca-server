@@ -1,6 +1,6 @@
-import {CAHandler} from "#/utils/handler"
+import {CAHandlerNoAuth} from "#/utils/handler"
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-import {SessionAgent} from "#/utils/session-agent"
+import {Agent} from "#/utils/session-agent"
 import {CategoryVotes, TopicHistory, TopicVersionStatus, VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {getCollectionFromUri} from "#/utils/uri"
 import {dbUserToProfileViewBasic} from "#/services/wiki/topics"
@@ -27,7 +27,8 @@ function getViewerForTopicVersionInHistory(reactions: {uri: string, subjectId: s
 }
 
 
-export async function getTopicHistory(ctx: AppContext, id: string, agent?: SessionAgent) {
+export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent) {
+    const did = agent?.hasSession() ? agent.did : null
     const versions = await ctx.db.record.findMany({
         select: {
             uri: true,
@@ -66,7 +67,7 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Sessi
             },
             uniqueAcceptsCount: true,
             uniqueRejectsCount: true,
-            reactions: agent?.did ? {
+            reactions: did ? {
                 select: {
                     uri: true
                 },
@@ -78,7 +79,7 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Sessi
                                 "ar.cabildoabierto.wiki.voteReject"
                             ]
                         },
-                        authorId: agent.did
+                        authorId: did
                     }
                 }
             } : undefined
@@ -150,7 +151,7 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Sessi
     return topicHistory
 }
 
-export const getTopicHistoryHandler: CAHandler<{
+export const getTopicHistoryHandler: CAHandlerNoAuth<{
     params: { id: string }
 }, TopicHistory> = async (ctx, agent, {params}) => {
     const {id} = params

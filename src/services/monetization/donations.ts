@@ -26,7 +26,7 @@ export const getDonationHistory: CAHandler<{}, DonationHistory> = async (ctx, ag
 }
 
 
-export const getMonthlyValueHandler: CAHandler<{}, number> = async (ctx, agent, {}) => {
+export const getMonthlyValueHandler: CAHandlerNoAuth<{}, number> = async (ctx, agent, {}) => {
     return {data: getMonthlyValue()}
 }
 
@@ -81,7 +81,7 @@ export async function getTotalSpending(ctx: AppContext): Promise<number> {
 }
 
 
-export const getFundingStateHandler: CAHandler<{}, number> = async (ctx, agent, {}) => {
+export const getFundingStateHandler: CAHandlerNoAuth<{}, number> = async (ctx, agent, {}) => {
     const [mau, grossIncome, incomeSpent] = await Promise.all([
         getMonthlyActiveUsers(ctx),
         getGrossIncome(ctx),

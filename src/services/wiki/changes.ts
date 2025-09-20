@@ -1,4 +1,4 @@
-import {CAHandler} from "#/utils/handler";
+import {CAHandlerNoAuth} from "#/utils/handler";
 import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {diff, nodesCharDiff} from "#/services/wiki/diff";
 import {getUri} from "#/utils/uri";
@@ -7,7 +7,7 @@ import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import {ProfileViewBasic as ProfileViewBasicCA} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 
 
-export const getNewVersionDiff: CAHandler<{currentText: string, currentFormat: string, markdown: string, embeds: ArticleEmbed[]}, {charsAdded: number, charsDeleted: number}> = async (ctx, agent, params) => {
+export const getNewVersionDiff: CAHandlerNoAuth<{currentText: string, currentFormat: string, markdown: string, embeds: ArticleEmbed[]}, {charsAdded: number, charsDeleted: number}> = async (ctx, agent, params) => {
     const nodes1 = anyEditorStateToNodesForDiff(params.currentText, params.currentFormat)
     const nodes2 = anyEditorStateToNodesForDiff(params.markdown, "markdown")
 
@@ -53,7 +53,7 @@ function anyEditorStateToNodesForDiff(text: string, format?: string | null) {
 }
 
 
-export const getTopicVersionChanges: CAHandler<{
+export const getTopicVersionChanges: CAHandlerNoAuth<{
     params: { curDid: string, curRkey: string, prevDid: string, prevRkey: string }
 }, TopicVersionChangesProps> = async (ctx, agent, {params}) => {
     const {curDid, prevDid, curRkey, prevRkey} = params

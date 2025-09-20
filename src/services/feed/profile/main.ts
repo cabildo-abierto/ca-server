@@ -9,7 +9,7 @@ import {SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
 
 const getMainProfileFeedSkeletonBsky = async (agent: Agent, data: Dataplane, did: string, cursor?: string): Promise<GetSkeletonOutput> => {
     if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
-    const res = await agent.bsky.getAuthorFeed({actor: did, filter: "posts_and_author_threads", cursor})
+    const res = await agent.bsky.app.bsky.feed.getAuthorFeed({actor: did, filter: "posts_and_author_threads", cursor})
     const feed = res.data.feed
     data.storeFeedViewPosts(feed)
 

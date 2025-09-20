@@ -11,7 +11,7 @@ import {
     getEnDiscusionFeedPipeline
 } from "#/services/feed/inicio/discusion";
 import {discoverFeedPipeline} from "#/services/feed/inicio/discover";
-import {CAHandler, CAHandlerOutput} from "#/utils/handler";
+import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {articlesFeedPipeline} from "#/services/feed/inicio/articles";
 import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
@@ -21,7 +21,7 @@ import {logTimes} from "#/utils/utils";
 export type FollowingFeedFilter = "Todos" | "Solo Cabildo Abierto"
 
 
-export const getFeedByKind: CAHandler<{params: {kind: string}, query: {cursor?: string, metric?: EnDiscusionMetric, time?: EnDiscusionTime, format?: FeedFormatOption, filter?: FollowingFeedFilter}}, GetFeedOutput> = async (ctx, agent, {params, query}) => {
+export const getFeedByKind: CAHandlerNoAuth<{params: {kind: string}, query: {cursor?: string, metric?: EnDiscusionMetric, time?: EnDiscusionTime, format?: FeedFormatOption, filter?: FollowingFeedFilter}}, GetFeedOutput> = async (ctx, agent, {params, query}) => {
     let pipeline: FeedPipelineProps
     
     const {kind} = params

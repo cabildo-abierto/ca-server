@@ -229,7 +229,8 @@ async function getCAProfile(ctx: AppContext, agent: Agent, did: string): Promise
 }
 
 
-async function getViewerForProfile(ctx: AppContext, agent: SessionAgent, did: string): Promise<ViewerState | null> {
+async function getViewerForProfile(ctx: AppContext, agent: Agent, did: string): Promise<ViewerState | null> {
+    if(!agent.hasSession()) return null
     const status = await ctx.redisCache.mirrorStatus.get(agent.did, true)
     if(status != "Sync"){
         return null
@@ -256,7 +257,7 @@ async function getViewerForProfile(ctx: AppContext, agent: SessionAgent, did: st
 }
 
 
-export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile> = async (ctx, agent, {params}) => {
+export const getProfile: CAHandlerNoAuth<{ params: { handleOrDid: string } }, Profile> = async (ctx, agent, {params}) => {
     try {
         const t1 = Date.now()
         const did = await handleToDid(ctx, agent, params.handleOrDid)
@@ -283,7 +284,7 @@ export const getProfile: CAHandler<{ params: { handleOrDid: string } }, Profile>
         }
 
         const [bskyProfile, caProfile] = await Promise.all([
-            agent.bsky.getProfile({actor: params.handleOrDid}),
+            agent.bsky.app.bsky.actor.getProfile({actor: params.handleOrDid}),
             getCAProfile(ctx, agent, did)
         ])
 
@@ -561,10 +562,10 @@ async function getFollowxFromCA(ctx: AppContext, did: string, data: Dataplane, k
 }
 
 
-async function getFollowxFromBsky(agent: SessionAgent, did: string, data: Dataplane, kind: "follows" | "followers") {
+async function getFollowxFromBsky(agent: Agent, did: string, data: Dataplane, kind: "follows" | "followers") {
     const users = kind == "follows" ?
-        (await agent.bsky.getFollows({actor: did})).data.follows :
-        (await agent.bsky.getFollowers({actor: did})).data.followers
+        (await agent.bsky.app.bsky.graph.getFollows({actor: did})).data.follows :
+        (await agent.bsky.app.bsky.graph.getFollowers({actor: did})).data.followers
 
     data.bskyUsers = joinMaps(data.bskyUsers,
         new Map(users.map(u => [u.did, {
@@ -575,7 +576,7 @@ async function getFollowxFromBsky(agent: SessionAgent, did: string, data: Datapl
 }
 
 
-export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOrDid, kind}: {
+export const getFollowx = async (ctx: AppContext, agent: Agent, {handleOrDid, kind}: {
     handleOrDid: string,
     kind: "follows" | "followers"
 }): Promise<{ data?: CAProfileViewBasic[], error?: string }> => {
@@ -597,14 +598,14 @@ export const getFollowx = async (ctx: AppContext, agent: SessionAgent, {handleOr
 }
 
 
-export const getFollows: CAHandler<{
+export const getFollows: CAHandlerNoAuth<{
     params: { handleOrDid: string }
 }, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
     return await getFollowx(ctx, agent, {handleOrDid: params.handleOrDid, kind: "follows"})
 }
 
 
-export const getFollowers: CAHandler<{
+export const getFollowers: CAHandlerNoAuth<{
     params: { handleOrDid: string }
 }, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
     return await getFollowx(ctx, agent, {handleOrDid: params.handleOrDid, kind: "followers"})

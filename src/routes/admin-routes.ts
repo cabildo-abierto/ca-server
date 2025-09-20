@@ -1,5 +1,5 @@
 import express from 'express'
-import type {AppContext} from '#/index'
+import type {AppContext} from '#/setup'
 import {CAHandler, CAHandlerNoAuth, makeHandler} from "#/utils/handler";
 import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user";
 import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete";

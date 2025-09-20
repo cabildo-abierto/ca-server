@@ -1,6 +1,6 @@
 import {ThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {AppContext} from "#/setup";
-import {SessionAgent} from "#/utils/session-agent";
+import {Agent} from "#/utils/session-agent";
 import {
     getCollectionFromUri,
     getDidFromUri,
@@ -16,7 +16,7 @@ import {
     ThreadSkeleton
 } from "#/services/hydration/hydrate";
 import {isThreadViewPost} from "#/lex-server/types/app/bsky/feed/defs";
-import {CAHandler} from "#/utils/handler";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {handleToDid} from "#/services/user/users";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {ThreadViewPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
@@ -35,9 +35,9 @@ function threadViewPostToThreadSkeleton(thread: ThreadViewPost, isAncestor: bool
 }
 
 
-async function getThreadRepliesSkeletonForPostFromBsky(ctx: AppContext, agent: SessionAgent, uri: string, dataplane: Dataplane){
+async function getThreadRepliesSkeletonForPostFromBsky(agent: Agent, uri: string, dataplane: Dataplane){
     try {
-        const {data} = await agent.bsky.getPostThread({uri})
+        const {data} = await agent.bsky.app.bsky.feed.getPostThread({uri})
         const thread = isThreadViewPost(data.thread) ? data.thread : null
 
         if(thread){
@@ -64,7 +64,7 @@ function buildParentFromAncestorsList(uri: string, ancestors: {uri: string, repl
 }
 
 
-export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, agent: SessionAgent, dataplane: Dataplane, uri: string): Promise<ThreadSkeleton> {
+export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, uri: string): Promise<ThreadSkeleton> {
     // necesario solo porque getPostThread de Bsky no funciona con posts que tienen selection quote
 
     const replies = (await ctx.db.post.findMany({
@@ -110,17 +110,17 @@ export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, age
 }
 
 
-async function getThreadSkeletonForPost(ctx: AppContext, agent: SessionAgent, uri: string, data: Dataplane): Promise<ThreadSkeleton> {
+async function getThreadSkeletonForPost(ctx: AppContext, agent: Agent, uri: string, data: Dataplane): Promise<ThreadSkeleton> {
     const [skeletonBsky, skeletonCA] = await Promise.all([
-        getThreadRepliesSkeletonForPostFromBsky(ctx, agent, uri, data),
-        getThreadRepliesSkeletonForPostFromCA(ctx, agent, data, uri)
+        getThreadRepliesSkeletonForPostFromBsky(agent, uri, data),
+        getThreadRepliesSkeletonForPostFromCA(ctx, uri)
     ])
 
     return skeletonBsky ?? skeletonCA
 }
 
 
-export async function getThreadSkeletonForArticle(ctx: AppContext, agent: SessionAgent, uri: string): Promise<ThreadSkeleton> {
+export async function getThreadSkeletonForArticle(ctx: AppContext, uri: string): Promise<ThreadSkeleton> {
     const replies = (await ctx.db.record.findMany({
         select: {
             uri: true
@@ -141,13 +141,13 @@ export async function getThreadSkeletonForArticle(ctx: AppContext, agent: Sessio
 }
 
 
-export async function getThreadSkeleton(ctx: AppContext, agent: SessionAgent, uri: string, data: Dataplane): Promise<ThreadSkeleton> {
+export async function getThreadSkeleton(ctx: AppContext, agent: Agent, uri: string, data: Dataplane): Promise<ThreadSkeleton> {
     const collection = getCollectionFromUri(uri)
 
     if(isPost(collection)){
         return await getThreadSkeletonForPost(ctx, agent, uri, data)
     } else if(isArticle(collection)) {
-        return await getThreadSkeletonForArticle(ctx, agent, uri)
+        return await getThreadSkeletonForArticle(ctx, uri)
     } else if(isDataset(collection)){
         return {post: uri}
     } else {
@@ -156,7 +156,7 @@ export async function getThreadSkeleton(ctx: AppContext, agent: SessionAgent, ur
 }
 
 
-export const getThread: CAHandler<{params: {handleOrDid: string, collection: string, rkey: string}}, ThreadViewContent> = async (ctx, agent, {params})  => {
+export const getThread: CAHandlerNoAuth<{params: {handleOrDid: string, collection: string, rkey: string}}, ThreadViewContent> = async (ctx, agent, {params})  => {
     let {handleOrDid, collection, rkey} = params
     collection = shortCollectionToCollection(collection)
     const did = await handleToDid(ctx, agent, handleOrDid)

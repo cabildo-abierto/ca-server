@@ -1,4 +1,4 @@
-import {CAHandler} from "#/utils/handler";
+import {CAHandlerNoAuth} from "#/utils/handler";
 import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
@@ -9,7 +9,7 @@ import {AppContext} from "#/setup";
 import {JsonValue} from "@prisma/client/runtime/library";
 import {topicQueryResultToTopicViewBasic} from "#/services/wiki/topics";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
-import {SessionAgent} from "#/utils/session-agent";
+import {Agent} from "#/utils/session-agent";
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
 import {$Typed} from "@atproto/api";
 import {sql} from "kysely";
@@ -32,8 +32,8 @@ export async function searchUsersInCA(ctx: AppContext, query: string, dataplane:
 }
 
 
-export async function searchUsersInBsky(agent: SessionAgent, query: string, dataplane: Dataplane): Promise<string[]> {
-    const {data} = await agent.bsky.searchActorsTypeahead({q: query})
+export async function searchUsersInBsky(agent: Agent, query: string, dataplane: Dataplane): Promise<string[]> {
+    const {data} = await agent.bsky.app.bsky.actor.searchActorsTypeahead({q: query})
 
     dataplane.bskyUsers = joinMaps(
         dataplane.bskyUsers,
@@ -46,7 +46,7 @@ export async function searchUsersInBsky(agent: SessionAgent, query: string, data
 }
 
 
-export const searchUsers: CAHandler<{
+export const searchUsers: CAHandlerNoAuth<{
     params: { query: string }
 }, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
     const {query} = params
@@ -76,10 +76,12 @@ export const searchUsers: CAHandler<{
 }
 
 
-export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | string[] | undefined}}, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
+export const searchTopics: CAHandlerNoAuth<{params: {q: string}, query: {c: string | string[] | undefined}}, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
     let {q} = params;
     const categories = query.c == undefined ? undefined : (typeof query.c == "string" ? [query.c] : query.c);
     const searchQuery = cleanText(q);
+
+    const did = agent.hasSession() ? agent.did : undefined
 
     const topics = await ctx.kysely
         .with('topics_with_titles', (eb) =>
@@ -100,7 +102,7 @@ export const searchTopics: CAHandler<{params: {q: string}, query: {c: string | s
                             .select(
                                 [eb => eb.fn.max("ReadSession.created_at").as("lastRead")
                                 ])
-                            .where("ReadSession.userId", "=", agent.did)
+                            .where("ReadSession.userId", "=", did ?? "no did")
                             .whereRef("ReadSession.readContentId", "=", "TopicVersion.uri").as("lastRead")
                     ),
                     eb => eb.fn.coalesce(
