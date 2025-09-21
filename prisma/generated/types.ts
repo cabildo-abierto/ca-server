@@ -173,6 +173,7 @@ export type Post = {
     facets: string | null;
     embed: string | null;
     replyToId: string | null;
+    quoteToId: string | null;
     rootId: string | null;
     langs: string[];
 };
@@ -199,6 +200,7 @@ export type Record = {
     record: string | null;
     uniqueLikesCount: Generated<number>;
     uniqueRepostsCount: Generated<number>;
+    quotesCount: Generated<number>;
     uniqueAcceptsCount: Generated<number>;
     uniqueRejectsCount: Generated<number>;
     CAIndexedAt: Generated<Timestamp>;

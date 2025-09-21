@@ -31,7 +31,8 @@ export const reactionsQuery = {
     uniqueRepostsCount: true,
     _count: {
         select: {
-            replies: true
+            replies: true,
+            quotes: true,
         }
     }
 }

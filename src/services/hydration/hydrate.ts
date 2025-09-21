@@ -369,6 +369,8 @@ export function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<P
 
     const rootCreationDate = data.rootCreationDates?.get(uri)
 
+    console.log("QuoteCount", caData?._count.quotes)
+
     return {
         data: {
             ...post,
@@ -379,9 +381,11 @@ export function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<P
             ...(caData ? {
                 likeCount: caData.uniqueLikesCount,
                 repostCount: caData.uniqueRepostsCount,
+                quoteCount: caData._count.quotes
             } : {
                 likeCount: 0,
-                repostCount: 0
+                repostCount: 0,
+                quoteCount: 0
             }),
             bskyLikeCount: post.likeCount,
             bskyRepostCount: post.repostCount,

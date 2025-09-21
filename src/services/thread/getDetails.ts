@@ -2,11 +2,11 @@ import {CAHandler} from "#/utils/handler";
 import {ProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {AppContext} from "#/index";
 import {SessionAgent} from "#/utils/session-agent";
 import {getUri} from "#/utils/uri";
 import {hydratePostView} from "#/services/hydration/hydrate";
 import {PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {AppContext} from "#/setup";
 
 type GetInteractionsType = CAHandler<{params: {did: string, rkey: string, collection: string}, query: {limit?: string, cursor?: string}}, {profiles: ProfileViewBasic[], cursor?: string}>
 type GetQuotesType = CAHandler<{params: {did: string, rkey: string, collection: string}, query: {limit?: string, cursor?: string}}, {posts: PostView[], cursor?: string}>
@@ -87,11 +87,11 @@ export const getQuotes: GetQuotesType = async (ctx, agent, {params, query}) =>  
     const {uris, cursor} = await getQuotesSkeleton(ctx, agent, uri, dataplane, parseInt(query.limit ?? "25"), query.cursor)
     await dataplane.fetchPostAndArticleViewsHydrationData(uris)
 
-    console.log("CA quotes", dataplane.caContents.size)
-    console.log("bsky quotes", dataplane.bskyPosts.size)
-
     const data = {posts: uris.map(d => hydratePostView(d, dataplane).data).filter(x => x != null),
         cursor : cursor
     }
+    console.log("CA quotes", data.posts.map(post => post.quoteCount).length)
+    console.log("bsky quotes", data.posts.map(post => post.bskyQuoteCount).length)
+
     return {data}
 }

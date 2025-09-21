@@ -57,7 +57,8 @@ export type FeedElementQueryResult = {
     createdAt: Date | string,
     record: string | null
     _count: {
-        replies: number
+        replies: number,
+        quotes: number
     }
     uniqueLikesCount: number
     uniqueRepostsCount: number
