@@ -19,7 +19,6 @@ import {BlobRef} from "@atproto/lexicon";
 import {uploadBase64Blob} from "#/services/blob";
 import {EnDiscusionMetric, EnDiscusionTime, FeedFormatOption} from "#/services/feed/inicio/discusion";
 import {FollowingFeedFilter} from "#/services/feed/feed";
-import {logTimes} from "#/utils/utils";
 import {BskyProfileRecordProcessor} from "#/services/sync/event-processing/profile";
 import {FollowRecordProcessor} from "#/services/sync/event-processing/follow";
 import {ViewerState} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
@@ -271,7 +270,7 @@ export const getProfile: CAHandlerNoAuth<{ params: { handleOrDid: string } }, Pr
 
         const t3 = Date.now()
         if(cached && viewer != null) {
-            logTimes(`cache hit en perfil ${did}`, [t1, t2, t3])
+            ctx.logger.logTimes(`cache hit en perfil ${did}`, [t1, t2, t3])
             return {
                 data: {
                     ca: cached.ca,
@@ -299,7 +298,7 @@ export const getProfile: CAHandlerNoAuth<{ params: { handleOrDid: string } }, Pr
 
         await ctx.redisCache.profile.set(did, profile)
 
-        logTimes("perfil", [t1, t2, t3, t4, t5])
+        ctx.logger.logTimes("perfil", [t1, t2, t3, t4, t5])
 
         return {data: profile}
     } catch (err) {

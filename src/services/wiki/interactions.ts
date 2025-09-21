@@ -1,6 +1,5 @@
 import {AppContext} from "#/setup";
 import {unique} from "#/utils/arrays";
-import {logTimes} from "#/utils/utils";
 import {sql} from "kysely";
 
 
@@ -94,7 +93,7 @@ export async function createContentInteractions(ctx: AppContext) {
                 .execute()
         }
         const t3 = Date.now()
-        logTimes("content interactions batch", [t1, t2, t3])
+        ctx.logger.logTimes("content interactions batch", [t1, t2, t3])
 
         if(curOffset < batchSize) {
             break
@@ -108,10 +107,9 @@ export async function createContentInteractions(ctx: AppContext) {
 
 export async function updateContentInteractionsForTopics(ctx: AppContext, topicIds: string[]) {
     const batchSize = 10
+    ctx.logger.pino.info({count: topicIds.length}, "updating content interactions")
 
     for (let i = 0; i < topicIds.length; i += batchSize) {
-
-        console.log(`Updating topic interactions batch ${i} of ${topicIds.length}`)
         const t1 = Date.now()
 
         const batchTopics = topicIds.slice(i, i + batchSize)
@@ -187,16 +185,11 @@ export async function updateContentInteractionsForTopics(ctx: AppContext, topicI
         values = unique(values, v => `${v.recordId}:${v.topicId}`)
         const t2 = Date.now()
 
-        console.log(`adding ${values.length} interactions`)
-
         await ctx.kysely.transaction().execute(async trx => {
-            console.log("deleting current interactions")
-
             const now = new Date()
             if (values.length > 0) {
                 const batchSize = 1000
                 for(let j = 0; j < values.length; j+=batchSize){
-                    console.log("inserting interactions batch", j)
                     await trx.insertInto("TopicInteraction")
                         .values(values.slice(j, j+batchSize).map(v => ({
                             ...v,
@@ -216,7 +209,7 @@ export async function updateContentInteractionsForTopics(ctx: AppContext, topicI
         })
 
         const t3 = Date.now()
-        logTimes("content interactions batch", [t1, t2, t3])
+        ctx.logger.logTimes("content interactions batch", [t1, t2, t3])
     }
 }
 

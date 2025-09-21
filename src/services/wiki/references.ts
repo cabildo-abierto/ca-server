@@ -7,7 +7,6 @@ import {BlobRef} from "#/services/hydration/hydrate";
 import {fetchTextBlobs} from "#/services/blob";
 import {getCAUsersDids} from "#/services/user/users";
 import {sql} from "kysely";
-import {logTimes} from "#/utils/utils";
 import {v4 as uuidv4} from "uuid";
 import {getTopicSynonyms} from "#/services/wiki/utils";
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
@@ -404,7 +403,7 @@ export async function getSynonymsToTopicsMap(
         .execute()
 
     const t2 = Date.now()
-    logTimes("get synonyms map 2", [t1, t2])
+    ctx.logger.logTimes("get synonyms map 2", [t1, t2])
 
     const synonymsToTopicsMap: SynonymsMap = new Map()
 

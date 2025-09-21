@@ -201,7 +201,7 @@ class FollowSuggestionsDirtyCacheKey extends CacheKey {
     async getDirty() {
         const dirty = await this.cache.redis.smembers("follow-suggestions-dirty")
         const requested = new Set(await this.cache.getKeysByPrefix(`follow-suggestions:`))
-        return dirty.filter(did => !requested.has(did))
+        return dirty.filter(did => requested.has(did))
     }
 }
 

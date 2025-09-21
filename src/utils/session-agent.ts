@@ -70,7 +70,7 @@ export async function sessionAgent(
                 return new SessionAgent(CAAgent, bskyAgent, req, res)
             }
         } catch (err) {
-            ctx.logger.warn({err}, 'oauth restore failed')
+            ctx.logger.pino.warn({err}, 'oauth restore failed')
             await session.destroy()
         }
     }

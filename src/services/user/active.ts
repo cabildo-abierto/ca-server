@@ -1,5 +1,4 @@
 import {AppContext} from "#/setup";
-import {logTimes} from "#/utils/utils";
 
 
 export async function updateActiveUsers(ctx: AppContext): Promise<void> {
@@ -72,5 +71,5 @@ export async function updateActiveUsers(ctx: AppContext): Promise<void> {
     })
     const t4 = Date.now()
 
-    logTimes("update active users", [t1, t2, t3, t4])
+    ctx.logger.logTimes("update active users", [t1, t2, t3, t4])
 }

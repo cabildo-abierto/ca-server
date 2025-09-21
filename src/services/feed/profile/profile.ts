@@ -20,13 +20,13 @@ export const getProfileFeed: CAHandler<{params: {handleOrDid: string, kind: stri
         pipeline = {
             getSkeleton: getMainProfileFeedSkeleton(did),
             sortKey: rootCreationDateSortKey,
-            filter: (f) => filterFeed(f, true)
+            filter: (ctx, f) => filterFeed(ctx, f, true)
         }
     } else if(kind == "respuestas"){
         pipeline = {
             getSkeleton: getRepliesProfileFeedSkeleton(did),
             sortKey: creationDateSortKey,
-            filter: (f) => filterFeed(f, true)
+            filter: (ctx, f) => filterFeed(ctx, f, true)
         }
     } else if(kind == "ediciones") {
         pipeline = {

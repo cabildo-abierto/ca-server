@@ -1,6 +1,6 @@
 import {decompress} from "#/utils/compression";
 import {Column, DatasetView, DatasetViewBasic, TopicsDatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
-import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
+import {CAHandlerNoAuth} from "#/utils/handler";
 import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {getUri} from "#/utils/uri";
 import {AppContext} from "#/setup";
@@ -16,11 +16,10 @@ import {$Typed} from "@atproto/api";
 import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 
 
-export function hydrateTopicsDatasetView(filters: $Typed<ColumnFilter>[], dataplane: Dataplane): $Typed<TopicsDatasetView> | null {
+export function hydrateTopicsDatasetView(ctx: AppContext, filters: $Typed<ColumnFilter>[], dataplane: Dataplane): $Typed<TopicsDatasetView> | null {
     const topics = dataplane.topicsDatasets.get(getObjectKey(filters))
     if(!topics) {
-        console.log("stored topics datasets", Array.from(dataplane.topicsDatasets.keys()))
-        console.log("couldn't find", filters)
+        ctx.logger.pino.warn({filters}, "no se encontró el dataset de temas")
         return null
     }
 
@@ -114,7 +113,6 @@ export function equalFilterCond(name: string, value: string) {
     } else {
         path = `$[*] ? (@.name == "${name}" && @.value.value == "${value}")`
     }
-    console.log("path", path)
     return sql<boolean>`
         jsonb_path_exists("props", ${path}::jsonpath)
         `;
@@ -138,7 +136,7 @@ export const getTopicsDatasetHandler: CAHandlerNoAuth<TopicDatasetSpec, TopicsDa
 
     await dataplane.fetchFilteredTopics([filters])
 
-    const dataset = hydrateTopicsDatasetView(filters, dataplane)
+    const dataset = hydrateTopicsDatasetView(ctx, filters, dataplane)
 
     return dataset ? {
         data: dataset

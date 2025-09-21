@@ -1,23 +1,22 @@
 import {AppContext} from "#/setup";
-import {getCAUsersDids, handleToDid} from "#/services/user/users";
-import {JetstreamEvent} from "#/lib/types";
-import {iterateAtpRepo} from "@atcute/car"
+import {dbHandleToDid, getCAUsersDids, handleToDid} from "#/services/user/users";
+import {ATProtoStrongRef, JetstreamEvent} from "#/lib/types";
+import {RepoReader} from "@atcute/car/v4"
 import {getServiceEndpointForDid} from "#/services/blob";
-import {getCollectionFromUri, shortCollectionToCollection} from "#/utils/uri";
+import {getUri, shortCollectionToCollection} from "#/utils/uri";
 import {CAHandler} from "#/utils/handler";
-import {logTimes} from "#/utils/utils";
-import {getProcessorForEvent} from "#/services/sync/event-processing/event-processor";
+import {getProcessorForEvent, processEventsBatch} from "#/services/sync/event-processing/event-processor";
 import {batchDeleteRecords, getRecordProcessor} from "#/services/sync/event-processing/get-record-processor";
+import {RefAndRecord} from "#/services/sync/types";
 
 
 export async function syncAllUsers(ctx: AppContext, mustUpdateCollections?: string[]) {
     let users = await getCAUsersDids(ctx)
 
     for (let i = 0; i < users.length; i++) {
-        console.log("Syncing user", i + 1, "of", users.length, `(did: ${users[i]})`)
+        ctx.logger.pino.info(`Syncing user ${i+1} of ${users.length} (did: ${users[i]})`)
         await ctx.redisCache.mirrorStatus.set(users[i], "InProcess", true)
         await syncUser(ctx, users[i], mustUpdateCollections)
-
     }
 }
 
@@ -35,34 +34,320 @@ export async function getCAUsersAndFollows(ctx: AppContext) {
 }
 
 
-export async function getUserRepo(did: string, doc: string, collections: string[]): Promise<{repo?: any[], error?: string}> {
+export class RepoSync {
+    did: string
+    ctx: AppContext
+    collections: string[]
+    presentRecords: Map<string, {cid: string | null, hasRecord: boolean}> = new Map()
+
+    constructor(ctx: AppContext, did: string, collections?: string[]) {
+        this.ctx = ctx
+        this.did = did
+        this.collections = collections ? collections.map(shortCollectionToCollection) : allCollections
+    }
+
+    async run() {
+        const did = this.did
+        const ctx = this.ctx
+        ctx.logger.pino.info(`${did} sync started ***************`)
+
+        const t1 = Date.now()
+        const inCA = await isCAUser(ctx, did)
+        ctx.logger.pino.info(`${did} inCA: ${inCA}`)
+
+        const t2 = Date.now()
+        const mirrorStatus = await ctx.redisCache.mirrorStatus.get(did, inCA)
+        if(mirrorStatus != "InProcess") {
+            ctx.logger.pino.info(`${did} status is not InProcess: ${mirrorStatus}. Not syncing.`)
+            return
+        }
+
+        ctx.logger.pino.info(`${did} collections to sync: ${this.collections.join(", ")}`)
+
+        const t3 = Date.now()
+        const doc = await getServiceEndpointForDid(did)
+        if (typeof doc != "string") {
+            await ctx.redisCache.mirrorStatus.set(did, "Failed", inCA)
+            return
+        }
+
+        const t4 = Date.now()
+        await this.getPresentRecords()
+        const t5 = Date.now()
+
+        const {error} = await this.processRepo(doc)
+        if(error) {
+            ctx.logger.pino.info(`${did} process repo failed`)
+            if(error == "too large"){
+                await ctx.redisCache.mirrorStatus.set(did, "Failed - Too Large", inCA)
+            } else {
+                await ctx.redisCache.mirrorStatus.set(did, "Failed", inCA)
+            }
+            return
+        }
+
+        const t6 = Date.now()
+        await this.processPendingEvents()
+
+        const t7 = Date.now()
+        await ctx.redisCache.mirrorStatus.set(did, "Sync", inCA)
+        ctx.logger.logTimes(`${did} sync done`, [t1, t2, t3, t4, t5, t6, t7])
+    }
+
+    async getPresentRecords() {
+        const refs = await this.ctx.kysely
+            .selectFrom("Record")
+            .select([
+                "uri",
+                "cid",
+                eb => eb("record", "is not", null).as("hasRecord")
+            ])
+            .where("authorId", "=", this.did)
+            .where("collection", "in", this.collections)
+            .execute()
+        for(const r of refs) {
+            this.presentRecords.set(r.uri, {
+                cid: r.cid,
+                hasRecord: !!(r.hasRecord)
+            })
+        }
+    }
+
+    docToUrl(doc: string){
+        return doc + "/xrpc/com.atproto.sync.getRepo?did=" + this.did
+    }
+
+    maxRepoBytes() {
+        return maxRepoMBs * 1024 * 1024
+    }
+
+    async processRepo(doc: string): Promise<{error?: string}> {
+        const did = this.did
+        const ctx = this.ctx
+        const collections = this.collections
+        const collectionsSet = new Set(collections)
+        const url = this.docToUrl(doc)
+
+        ctx.logger.pino.info(`${did} fetch started from ${url}`)
+        const res = await fetch(url)
+
+        if(!res.ok){
+            ctx.logger.pino.error(`${did} repo fetch error`)
+            return {error: "fetch error"}
+        }
+
+        const stream = res.body
+        if(!stream){
+            return { error: 'no body in response' }
+        }
+
+        const reader = stream.getReader()
+        let receivedBytes = 0;
+        const maxBytes = this.maxRepoBytes()
+
+        const limitedStream = new ReadableStream({
+            async start(controller) {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    receivedBytes += value.byteLength;
+                    if (receivedBytes > maxBytes) {
+                        ctx.logger.pino.info(`${did} exceeded maximum size of ${maxRepoMBs} MBs (${receivedBytes / (1024 * 1024)}mbs received)`)
+                        controller.error(
+                            new Error(`Repo exceeded maximum size of ${maxRepoMBs} MB`)
+                        );
+                        return;
+                    }
+
+                    controller.enqueue(value);
+                }
+                controller.close();
+            },
+        })
+
+        const repoSkeleton: ATProtoStrongRef[] = []
+        try {
+            const repoReader = RepoReader.fromStream(limitedStream);
+
+            let repoBatch: UserRepo = new Map(this.collections.map(c => ([c, []])))
+            const batchSize = 5000
+            let batchCount = 0
+            for await (const { collection, rkey, record, cid } of repoReader) {
+                const uri = getUri(did, collection, rkey);
+                if (collectionsSet.has(collection)) {
+                    const cur = repoBatch.get(collection)
+                    const e: RefAndRecord = { ref: {uri, cid: cid.$link}, record }
+                    repoSkeleton.push({uri, cid: cid.$link})
+
+                    if(this.recordRequiresUpdate(e.ref)){
+                        if(!cur) {
+                            repoBatch.set(collection, [e])
+                        } else {
+                            cur.push(e)
+                        }
+                        batchCount ++
+                    }
+                }
+
+                if(batchCount == batchSize){
+                    ctx.logger.pino.info({batchCount, batchSize}, "sending process batch")
+                    await this.processRepoBatch(repoBatch)
+                    batchCount = 0
+                    for(const c of this.collections) {
+                        const cur = repoBatch.get(c)
+                        if(cur) {
+                            cur.splice(0, cur.length)
+                        }
+                    }
+                }
+            }
+
+            if(batchCount > 0){
+                ctx.logger.pino.info({batchCount, batchSize}, "sending process batch end")
+                await this.processRepoBatch(repoBatch)
+            }
+
+            ctx.logger.pino.info(`${did} finished fetching repo with size ${receivedBytes}`)
+        } catch (err: any) {
+            ctx.logger.pino.error(err, `Error reading repo: ${err.message}`);
+            return { error: "too large" }
+        }
+
+        await this.cleanOutdatedInDB(repoSkeleton)
+
+        return {}
+    }
+
+    async cleanOutdatedInDB(repoSkeleton: ATProtoStrongRef[]) {
+        this.ctx.logger.pino.info(`${this.did} cleaning outdated in db with repo skeleton length ${repoSkeleton.length}`)
+        const t1 = Date.now()
+
+        const repoSkeletonUris = new Set(repoSkeleton.map(x => x.uri))
+        const toDelete: string[] = []
+        for(const [uri] of this.presentRecords.entries()) {
+            if(!repoSkeletonUris.has(uri)) {
+                toDelete.push(uri)
+            }
+        }
+
+        this.ctx.logger.pino.info(`${this.did} db records to delete ${toDelete.length}`)
+
+        const t2 = Date.now()
+        await batchDeleteRecords(
+            this.ctx,
+            toDelete)
+        const t3 = Date.now()
+        this.ctx.logger.logTimes(`${this.did} cleaning outdated in db done:`, [t1, t2, t3])
+    }
+
+    recordRequiresUpdate(ref: ATProtoStrongRef) {
+        const res = this.presentRecords.get(ref.uri)
+        const recordOk = !!res && res.cid == ref.cid && res.hasRecord
+        return !recordOk
+    }
+
+    async processRepoBatch(batch: UserRepo) {
+        const t1 = Date.now()
+
+        for (const collection of this.collections) {
+            const records: RefAndRecord[] = batch.get(collection) ?? []
+            if(records.length == 0) continue
+
+            this.ctx.logger.pino.info(`${this.did} processing collection ${collection} (${records.length} records).`)
+            const t1 = Date.now()
+            await getRecordProcessor(this.ctx, collection).processInBatches(records)
+            this.ctx.logger.pino.info(`${collection} done after ${Date.now() - t1} ms.`)
+        }
+        const t2 = Date.now()
+
+        this.ctx.logger.logTimes(`${this.did} process batch done`, [t1, t2])
+        return {}
+    }
+
+    async processPendingEvents() {
+        const ctx = this.ctx
+        const did = this.did
+        while(true){
+            const pending = await getPendingEvents(ctx, did)
+            if(pending.length == 0) break
+            this.ctx.logger.pino.info({did, total: pending.length}, `processing pending events`)
+            await processEventsBatch(ctx, pending)
+        }
+    }
+}
+
+const maxRepoMBs = process.env.MAX_REPO_MBS ?
+    Number(process.env.MAX_REPO_MBS) :
+    50
+
+
+export async function getUserRepo(ctx: AppContext, did: string, doc: string, collections: string[]): Promise<{repo?: UserRepo, error?: string}> {
     const url = doc + "/xrpc/com.atproto.sync.getRepo?did=" + did
-    console.log(`fetching ${did} repo from`, url)
+
+    ctx.logger.pino.info(`${did} fetch started from ${url}`)
     const res = await fetch(url)
-    console.log("got repo", did)
 
     const collectionsSet = new Set(collections)
 
     if (res.ok) {
-        const arrayBuffer = await res.arrayBuffer()
-        const mb = 1000000
-        if(arrayBuffer.byteLength > 50 * mb){
-            console.log(`${did} repo is too large: ${arrayBuffer.byteLength / mb}mbs.`)
-            return {error: "too large"}
+        const stream = res.body
+        if(!stream){
+            return { error: 'no body in response' }
         }
 
-        const ui8 = new Uint8Array(arrayBuffer)
-        const repo = []
-        for (const {collection, rkey, record, cid} of iterateAtpRepo(ui8)) {
-            const uri = "at://" + did + "/" + collection + "/" + rkey
-            if(collectionsSet.has(collection)){
-                repo.push({did, collection, rkey, record, cid: cid.$link, uri: uri})
+        const reader = stream.getReader()
+        let receivedBytes = 0;
+        const maxBytes = maxRepoMBs * 1024 * 1024; // convert MB -> bytes
+
+        const limitedStream = new ReadableStream({
+            async start(controller) {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    receivedBytes += value.byteLength;
+                    if (receivedBytes > maxBytes) {
+                        controller.error(
+                            new Error(`Repo exceeded maximum size of ${maxRepoMBs} MB`)
+                        );
+                        return;
+                    }
+
+                    controller.enqueue(value);
+                }
+                controller.close();
+            },
+        });
+
+        const repo: UserRepo = new Map()
+        try {
+            const repoReader = RepoReader.fromStream(limitedStream);
+
+            for await (const { collection, rkey, record, cid } of repoReader) {
+                const uri = getUri(did, collection, rkey);
+                if (collectionsSet.has(collection)) {
+                    const cur = repo.get(collection)
+                    const e = { ref: {uri, cid: cid.$link}, record }
+                    if(!cur) {
+                        repo.set(collection, [e])
+                    } else {
+                        cur.push(e)
+                    }
+                }
             }
+
+            ctx.logger.pino.info(`${did} finished fetching repo with size`, receivedBytes)
+
+            return { repo };
+        } catch {
+            ctx.logger.pino.error("Error reading repo (probably too large)");
+            return { error: "too large" }
         }
-        return {repo}
+    } else {
+        ctx.logger.pino.error(`${did} repo fetch error`)
+        return {error: "fetch error"}
     }
-    console.log(`fetch error for repo ${did}`)
-    return {error: "fetch error"}
 }
 
 
@@ -84,7 +369,7 @@ async function getPendingEvents(ctx: AppContext, did: string): Promise<Jetstream
         try {
             return JSON.parse(item) as JetstreamEvent
         } catch (err) {
-            ctx.logger?.warn({ err, item }, 'Failed to parse pending event')
+            ctx.logger.pino.warn({ err, item }, 'Failed to parse pending event')
             return null
         }
     }).filter((x): x is JetstreamEvent => x !== null)
@@ -113,42 +398,22 @@ async function isCAUser(ctx: AppContext, did: string) {
 
 
 export async function syncUser(ctx: AppContext, did: string, collections?: string[]) {
-    console.log(`Syncing user: ${did} ***************`)
-    const t1 = Date.now()
-    const inCA = await isCAUser(ctx, did)
-    console.log(`${did} inCA:`, inCA)
+    const sync = new RepoSync(ctx, did, collections)
+    await sync.run()
+}
 
-    const mirrorStatus = await ctx.redisCache.mirrorStatus.get(did, inCA)
-    if(mirrorStatus != "InProcess") {
-        console.log(`Mirror status of ${did} is not InProcess: ${mirrorStatus}. Not syncing.`)
-        return
+
+export async function syncUserJobHandler(ctx: AppContext, data: {
+    handleOrDid: string,
+    collectionsMustUpdate?: string[]
+}) {
+    const {handleOrDid, collectionsMustUpdate} = data
+    const did = await dbHandleToDid(ctx, handleOrDid)
+    if (did) {
+        await syncUser(ctx, did, collectionsMustUpdate)
+    } else {
+        ctx.logger.pino.warn({handleOrDid}, "user to sync not found in db")
     }
-
-    collections = collections ? collections.map(shortCollectionToCollection) : []
-
-    console.log("Collections to sync:", collections)
-
-    const doc = await getServiceEndpointForDid(did)
-    if (typeof doc != "string") {
-        await ctx.redisCache.mirrorStatus.set(did, "Failed", inCA)
-        return
-    }
-
-    await processRepo(ctx, doc, did, collections, inCA)
-
-    while(true){
-        const pending = await getPendingEvents(ctx, did)
-        console.log(`Processing ${pending.length} pending events from ${did}`)
-        if(pending.length == 0) break
-        for(let i = 0; i < pending.length; i++) {
-            const e = pending[i]
-            if(e.kind == "commit"){
-                await getProcessorForEvent(ctx, e).process()
-            }
-        }
-    }
-    await ctx.redisCache.mirrorStatus.set(did, "Sync", inCA)
-    console.log("Finished syncing user", did, "after", Date.now()-t1)
 }
 
 
@@ -167,126 +432,7 @@ export const allCollections = [
     "ar.com.cabildoabierto.profile"
 ]
 
-export type UserRepo = UserRepoElement[]
-
-export type UserRepoElement = {
-    did: string
-    uri: string
-    collection: string
-    rkey: string
-    record: any
-    cid: string
-}
-
-export async function processRepo(ctx: AppContext, doc: string, did: string, collections: string[] = [], inCA: boolean) {
-    const t1 = Date.now()
-    if(collections.length == 0) collections = allCollections
-
-    console.log(`Downloading repo ${did}...`)
-    let {repo, error} = await getUserRepo(did, doc, collections)
-
-    if (!repo) {
-        if(error && error == "too large"){
-            await ctx.redisCache.mirrorStatus.set(did, "Failed - Too Large", inCA)
-        } else {
-            await ctx.redisCache.mirrorStatus.set(did, "Failed", inCA)
-        }
-        return
-    }
-
-    const {reqUpdate, recordsReqUpdate, recordsNotPresent} = await checkUpdateRequired(
-        ctx,
-        repo,
-        did,
-        collections,
-    )
-    const t2 = Date.now()
-    console.log(`Requires update: ${reqUpdate}. Records to update: ${recordsReqUpdate ? recordsReqUpdate.size : 0}.`)
-
-    if (!reqUpdate) {
-        return
-    }
-
-    const repoReqUpdate = repo.filter(r => recordsReqUpdate.has(r.uri))
-
-    for (let i = 0; i < collections.length; i++) {
-        const collection = collections[i]
-        const records: UserRepoElement[] = repoReqUpdate.filter(r => r.collection == collection)
-
-        console.log(`*** Processing collection ${collection} (${records.length} records).`)
-        const t1 = Date.now()
-        await getRecordProcessor(ctx, collection)
-            .processInBatches(records.map(r => ({ref: {uri: r.uri, cid: r.cid}, record: r.record})))
-        console.log(`${collection} done after ${Date.now() - t1} ms.`)
-    }
-    const t3 = Date.now()
-
-    console.log(`Deleting ${recordsNotPresent.size} records not present in repo.`)
-
-    await batchDeleteRecords(ctx, Array.from(recordsNotPresent))
-    const t4 = Date.now()
-    logTimes(`process repo ${did}`, [t1, t2, t3, t4])
-}
-
-
-export async function checkUpdateRequired(ctx: AppContext, repo: UserRepo, did: string, collections: string[]) {
-    console.log("checking update required for collections", collections)
-
-    const dbRecords = (await ctx.db.record.findMany({
-        select: {
-            uri: true,
-            cid: true,
-        },
-        where: {
-            authorId: did,
-            collection: {
-                in: collections
-            },
-            record: {
-                not: null
-            }
-        }
-    }))
-
-    const filteredRepo = repo
-        .filter(r => collections.includes(getCollectionFromUri(r.uri)))
-
-    let reqUpdate = false
-
-    // Mapa de uris en cids en el repo
-    const repoCids: Map<string, string> = new Map(filteredRepo.map(r => [r.uri, r.cid]))
-
-    // Mapa de uris en cids en la DB
-    const dbCids: Map<string, string | null> = new Map(dbRecords.map(r => [r.uri, r.cid]))
-
-    const recordsReqUpdate = new Set<string>()
-
-    const recordsNotPresent = new Set<string>()
-
-    // Iteramos los records de la DB. Si alguno no está en el repo o está y su cid no coincide, require actualización
-    dbRecords.forEach(r => {
-        const inRepo = repoCids.has(r.uri)
-        if(!inRepo){
-            recordsNotPresent.add(r.uri)
-        }
-        if (!inRepo || repoCids.get(r.uri) != r.cid) {
-            reqUpdate = true
-            if (repoCids.get(r.uri) != r.cid) {
-                recordsReqUpdate.add(r.uri)
-            }
-        }
-    })
-
-    // Iteramos los records del repo. Si alguno no está en la db o está y su cid no coincide o tiene una colección que estamos actualizando, require actualización
-    filteredRepo.forEach((r, i) => {
-        if (!dbCids.has(r.uri) || dbCids.get(r.uri) != r.cid) {
-            reqUpdate = true
-            recordsReqUpdate.add(r.uri)
-        }
-    })
-
-    return {reqUpdate, recordsReqUpdate, recordsNotPresent}
-}
+export type UserRepo = Map<string, RefAndRecord[]>
 
 
 export const syncUserHandler: CAHandler<{
@@ -317,7 +463,7 @@ export const syncAllUsersHandler: CAHandler<{
 }, {}> = async (ctx, agent, {query}) => {
     const data = {collectionsMustUpdate: query.c ? (typeof query.c == "string" ? [query.c] : query.c) : []}
     await ctx.worker?.addJob("sync-all-users", data)
-    console.log("Added sync all users to queue with data", data)
+    ctx.logger.pino.info("Added sync all users to queue with data", data)
     return {data: {}}
 }
 
@@ -326,7 +472,7 @@ export async function updateRecordsCreatedAt(ctx: AppContext) {
     let offset = 0
     const bs = 10000
     while(true){
-        console.log("updating records created at batch", offset)
+        ctx.logger.pino.info("updating records created at batch", offset)
 
         const t1 = Date.now()
         const res = await ctx.kysely
@@ -354,7 +500,7 @@ export async function updateRecordsCreatedAt(ctx: AppContext) {
             }
         })
 
-        console.log(`got ${res.length} results and ${values.length} values to update`)
+        ctx.logger.pino.info(`got ${res.length} results and ${values.length} values to update`)
         if(values.length > 0){
             await ctx.kysely
                 .insertInto("Record")
@@ -370,7 +516,7 @@ export async function updateRecordsCreatedAt(ctx: AppContext) {
                 .execute()
         }
         const t3 = Date.now()
-        logTimes("batch done in", [t1, t2, t3])
+        ctx.logger.logTimes("batch done in", [t1, t2, t3])
 
         offset += bs
         if(res.length < bs) break

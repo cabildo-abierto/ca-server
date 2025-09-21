@@ -4,15 +4,16 @@ import {SessionAgent} from "#/utils/session-agent";
 import {getSkeletonFromTimeline} from "#/services/feed/inicio/following";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {getMainProfileFeedSkeletonCA} from "#/services/feed/profile/main";
+import {AppContext} from "#/setup";
 
 
-const getRepliesProfileFeedSkeletonBsky = async (agent: SessionAgent, data: Dataplane, did: string, cursor?: string): Promise<GetSkeletonOutput> => {
+const getRepliesProfileFeedSkeletonBsky = async (ctx: AppContext, agent: SessionAgent, data: Dataplane, did: string, cursor?: string): Promise<GetSkeletonOutput> => {
     const res = await agent.bsky.app.bsky.feed.getAuthorFeed({actor: did, filter: "posts_with_replies", cursor})
     const feed = res.data.feed
     data.storeFeedViewPosts(feed)
 
     return {
-        skeleton: getSkeletonFromTimeline(feed),
+        skeleton: getSkeletonFromTimeline(ctx, feed),
         cursor: res.data.cursor
     }
 }
@@ -23,7 +24,7 @@ export const getRepliesProfileFeedSkeleton = (did: string) : GetSkeletonProps =>
         if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
 
         let [bskySkeleton, CASkeleton] = await Promise.all([
-            getRepliesProfileFeedSkeletonBsky(agent, data, did, cursor),
+            getRepliesProfileFeedSkeletonBsky(ctx, agent, data, did, cursor),
             getMainProfileFeedSkeletonCA(ctx, did, cursor)
         ])
 

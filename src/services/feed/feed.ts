@@ -15,7 +15,6 @@ import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {articlesFeedPipeline} from "#/services/feed/inicio/articles";
 import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
-import {logTimes} from "#/utils/utils";
 
 
 export type FollowingFeedFilter = "Todos" | "Solo Cabildo Abierto"
@@ -51,7 +50,7 @@ export type FeedSortKey = ((a: FeedViewContent) => number[]) | null
 export type FeedPipelineProps = {
     getSkeleton: GetSkeletonProps
     sortKey?: FeedSortKey
-    filter?: (feed: FeedViewContent[]) => FeedViewContent[]
+    filter?: (ctx: AppContext, feed: FeedViewContent[]) => FeedViewContent[]
 }
 
 
@@ -79,7 +78,7 @@ export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAH
         const res = await pipeline.getSkeleton(ctx, agent, data, cursor)
 
         const t2 = Date.now()
-        logTimes("feed skeleton", [t1, t2])
+        ctx.logger.logTimes("feed skeleton", [t1, t2])
         newCursor = res.cursor
         skeleton = res.skeleton
     } catch (err) {
@@ -100,10 +99,10 @@ export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAH
     }
 
     if(pipeline.filter){
-        feed = pipeline.filter(feed)
+        feed = pipeline.filter(ctx, feed)
     }
     const t4 = Date.now()
 
-    logTimes("get feed", [t1, t2, t3, t4])
+    ctx.logger.logTimes("get feed", [t1, t2, t3, t4])
     return {data: {feed, cursor: newCursor}}
 }

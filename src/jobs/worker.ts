@@ -1,8 +1,8 @@
 import {updateCategoriesGraph} from "#/services/wiki/graph";
 import {Worker} from 'bullmq';
 import {AppContext} from "#/setup";
-import {syncAllUsers, syncUser, updateRecordsCreatedAt} from "#/services/sync/sync-user";
-import {dbHandleToDid, updateAuthorStatus} from "#/services/user/users";
+import {syncAllUsers, syncUserJobHandler, updateRecordsCreatedAt} from "#/services/sync/sync-user";
+import {updateAuthorStatus} from "#/services/user/users";
 import {
     cleanNotCAReferences,
     restartReferenceLastUpdate, updateContentsTopicMentions,
@@ -32,6 +32,7 @@ import {createPaymentPromises} from "#/services/monetization/promise-creation";
 import {updateFollowSuggestions} from "#/services/user/follow-suggestions";
 import {updateInteractionsScore} from "#/services/feed/feed-scores";
 import {updateAllTopicsCurrentVersions} from "#/services/wiki/current-version";
+import { Logger } from "#/utils/logger";
 
 const mins = 60 * 1000
 
@@ -48,30 +49,30 @@ export class CAWorker {
     ioredis: Redis
     queue: Queue
     jobs: CAJobDefinition<any>[] = []
+    logger: Logger
 
-    constructor(ioredis: Redis, worker: boolean) {
+    constructor(ioredis: Redis, worker: boolean, logger: Logger) {
+        this.logger = logger
         const env = process.env.NODE_ENV || "development"
         const queueName = `${env}-queue`
         const queuePrefix = undefined
         this.ioredis = ioredis
-        console.log(`Starting queue ${queueName} with prefix ${queuePrefix}`)
+        this.logger.pino.info({queueName, queuePrefix}, `starting queue`)
         this.queue = new Queue(queueName, {
             prefix: queuePrefix,
             connection: ioredis
         })
 
         if(worker){
-            console.log(`Starting worker on queue ${queueName} with prefix ${queuePrefix}`)
+            this.logger.pino.info({queueName, queuePrefix})
             this.worker = new Worker(queueName, async (job) => {
-                    console.log("got job!", job.name)
                     for (let i = 0; i < this.jobs.length; i++) {
                         if (job.name.startsWith(this.jobs[i].name)) {
-                            console.log(`Running job: ${job.name}.`)
                             await this.jobs[i].handler(job.data)
                             return
                         }
                     }
-                    console.log("No handler for job:", job.name)
+                    this.logger.pino.warn({name: job.name}, "no handler for job")
                 },
                 {
                     connection: ioredis,
@@ -79,16 +80,16 @@ export class CAWorker {
                 }
             )
             this.worker.on('failed', (job, err) => {
-                console.error(`Job ${job?.name} failed:`, err);
+                this.logger.pino.error({name: job?.name, error: err}, `job failed`);
             })
             this.worker.on('error', (err) => {
-                console.error('Worker error:', err);
+                this.logger.pino.error({error: err} ,'worker error');
             })
             this.worker.on('active', (job) => {
-                console.log(`Job ${job.name} started`);
+                this.logger.pino.info({name: job.name}, `job started`)
             })
             this.worker.on('completed', (job) => {
-                console.log(`Job ${job.name} completed`);
+                this.logger.pino.info({name: job.name}, `job completed`)
             })
         }
     }
@@ -99,18 +100,7 @@ export class CAWorker {
 
     async setup(ctx: AppContext) {
         this.registerJob( "update-categories-graph", () => updateCategoriesGraph(ctx))
-        this.registerJob( "sync-user", async (data: any) => {
-            const {handleOrDid, collectionsMustUpdate} = data as {
-                handleOrDid: string,
-                collectionsMustUpdate?: string[]
-            }
-            const did = await dbHandleToDid(ctx, handleOrDid)
-            if (did) {
-                await syncUser(ctx, did, collectionsMustUpdate)
-            } else {
-                console.log("User not found in DB: ", handleOrDid)
-            }
-        })
+        this.registerJob( "sync-user", async (data: any) => await syncUserJobHandler(ctx, data))
         this.registerJob("update-references", () => updateReferences(ctx))
         this.registerJob( "update-engagement-counts", () => updateEngagementCounts(ctx))
         this.registerJob( "delete-collection", async (data) => {
@@ -127,7 +117,7 @@ export class CAWorker {
         this.registerJob("create-notification", (data) => createNotificationJob(ctx, data))
         this.registerJob("batch-create-notifications", (data) => createNotificationsBatchJob(ctx, data))
         this.registerJob("batch-jobs", () => this.batchJobs())
-        this.registerJob("test-job", async () => {console.log("Test job run!")})
+        this.registerJob("test-job", async () => {this.logger.pino.info("test job run")})
         this.registerJob("restart-references-last-update", () => restartReferenceLastUpdate(ctx))
         this.registerJob("restart-interactions-last-update", () => restartLastContentInteractionsUpdate(ctx))
         this.registerJob("clean-not-ca-references", () => cleanNotCAReferences(ctx))
@@ -159,27 +149,26 @@ export class CAWorker {
         const waitingJobs = await this.queue.getJobs(['waiting'])
         const delayedJobs = await this.queue.getJobs(['delayed'])
 
-        console.log("Waiting jobs:", waitingJobs.length)
-        waitingJobs.forEach((job) => {
-            console.log(job.id, job.name)
-        })
-        console.log("Delayed jobs:", delayedJobs.length)
-        delayedJobs.forEach((job) => {
-            console.log(job.id, job.name)
-        })
+        this.logger.pino.info({
+            waitingJobsCount: waitingJobs.length,
+            delayedJobsCount: delayedJobs.length,
+            waitingJobs: waitingJobs.map(j => (j ? {id: j.id, name: j.name} : null)),
+            delayedJobs: delayedJobs.map(j => (j ? {id: j.id, name: j.name} : null)),
+        }, "current jobs")
 
         await this.queue.waitUntilReady()
     }
 
 
     async addJob(name: string, data: any, priority: number = 2) {
+        this.logger.pino.info({name}, "job added")
         await this.queue.add(name, data, {priority})
     }
 
     async removeAllRepeatingJobs() {
         const jobs = await this.queue.getJobSchedulers()
         for (const job of jobs) {
-            console.log(`Removing repeat job: ${job.name}`)
+            this.logger.pino.info({name: job.name}, "repeat job removed")
             if(job.key){
                 await this.queue.removeJobScheduler(job.key)
             }
@@ -201,24 +190,24 @@ export class CAWorker {
                 removeOnFail: true,
             }
         )
+        this.logger.pino.info({name}, "repeat job added")
     }
 
 
     async batchJobs() {
-        console.log("Batching jobs...")
         const t1 = Date.now()
 
         const allJobs = await this.queue.getJobs(['waiting', 'delayed', 'prioritized', 'waiting-children', 'wait', 'repeat']);
-        console.log(`Found jobs: ${allJobs.length}.`)
+        this.logger.pino.info({count: allJobs.length}, `batching jobs`)
         const batchSize = 500
 
         try {
             await this.batchContributionsJobs(allJobs, batchSize)
             await this.batchInteractionsScoreJobs(allJobs, batchSize)
 
-            console.log(`Done after ${Date.now()-t1}s`)
+            this.logger.logTimes("jobs batched", [t1, Date.now()])
         } catch (err) {
-            console.log("Error batching jobs:", err)
+            this.logger.pino.error(err, "error batching jobs")
         }
     }
 
@@ -231,24 +220,22 @@ export class CAWorker {
         const jobsRequireBatching = scoresJobs.filter(job => job.data.length < batchSize)
 
         if (jobsRequireBatching.length <= 1) {
-            console.log("update-interactions-score doesn't require batching")
             return
         }
 
-        console.log("Batching update-interactions-score...")
         const uris = jobsRequireBatching.flatMap(job => job.data as string[])
 
+        this.logger.pino.info({count: jobsRequireBatching.length, name: "update-interactions-score"}, `removing jobs`)
         await Promise.all(jobsRequireBatching.map(async job => {
             try {
                 await job.remove()
             } catch (err) {
-                console.log(`Error removing job ${job.name}:`, err)
+                this.logger.pino.error({name: job.name, error: err}, `error removing job`)
             }
         }))
 
         for (let i = 0; i < uris.length; i += batchSize) {
             const batchIds = uris.slice(i, i + batchSize)
-            console.log(`Adding update-interactions-score job with ${batchIds.length} uris.`)
             await this.addJob('update-interactions-score', {uris: batchIds})
         }
     }
@@ -263,25 +250,22 @@ export class CAWorker {
             .filter(job => job.data.length < batchSize)
 
         if (jobsRequireBatching.length <= 1) {
-            console.log("update-topic-contributions doesn't require batching")
             return
         }
 
-        console.log("Batching update-topic-contributions...")
         const topicIds = jobsRequireBatching.flatMap(job => job.data as string[])
 
-        console.log(`Removing ${jobsRequireBatching.length} jobs.`)
+        this.logger.pino.info({count: jobsRequireBatching.length, name: "update-topic-contributions"}, `removing jobs`)
         await Promise.all(jobsRequireBatching.map(async job => {
             try {
                 await job.remove()
             } catch (err) {
-                console.log(`Error removing job ${job.name}:`, err)
+                this.logger.pino.error({error: err, name: job.name}, "error removing job")
             }
         }));
 
         for (let i = 0; i < topicIds.length; i += batchSize) {
             const batchIds = topicIds.slice(i, i + batchSize)
-            console.log(`Adding update-topic-contributions job with ${batchIds.length} topics.`)
             await this.addJob('update-topic-contributions', {topicIds: batchIds})
         }
     }
@@ -289,7 +273,6 @@ export class CAWorker {
 
 
 export const startJob: CAHandler<any, {}> = async (ctx, app, data) => {
-    console.log("starting job with data", data)
     const {id} = data.params
 
     await ctx.worker?.addJob(id, data)

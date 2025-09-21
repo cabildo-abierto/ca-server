@@ -21,15 +21,15 @@ export const getRepoCounts: CAHandler<{params: {handleOrDid: string}}, UserRepoC
         return {error: "No se encontró el repositorio."}
     }
 
-    let {repo, error} = await getUserRepo(did, doc, allCollections)
+    let {repo, error} = await getUserRepo(ctx, did, doc, allCollections)
     if(!repo){
         return {error}
     }
 
     const counts = new Map<string, number>()
-    repo.forEach(r => {
-        counts.set(r.collection, (counts.get(r.collection) ?? 0) + 1)
-    })
+    for(const [c, r] of repo.entries()){
+        counts.set(c, r.length)
+    }
 
     return {
         data: {

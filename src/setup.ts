@@ -1,4 +1,3 @@
-import {pino} from 'pino'
 import type {OAuthClient} from '@atproto/oauth-client-node'
 import {createClient} from '#/auth/client'
 import {createBidirectionalResolver, createIdResolver, BidirectionalResolver} from '#/id-resolver'
@@ -13,11 +12,12 @@ import { DB } from '#/../prisma/generated/types'
 import { createClient as createSBClient, SupabaseClient } from '@supabase/supabase-js'
 import 'dotenv/config'
 import {RedisCache} from "#/services/redis/cache";
+import {Logger} from "#/utils/logger";
 
 
 export type AppContext = {
     db: PrismaClient
-    logger: pino.Logger
+    logger: Logger
     oauthClient: OAuthClient
     resolver: BidirectionalResolver
     xrpc: XrpcServer
@@ -33,9 +33,10 @@ export type AppContext = {
 export type Role = "worker" | "web" | "mirror"
 
 export const redisUrl = process.env.REDIS_URL as string
+const env = process.env.NODE_ENV ?? "development"
 
 export async function setupAppContext(roles: Role[]) {
-    const logger = pino({name: 'server start'})
+    const logger = new Logger([...roles, env].join(":"))
 
     const db = new PrismaClient()
 
@@ -63,9 +64,13 @@ export async function setupAppContext(roles: Role[]) {
     const resolver = createBidirectionalResolver(baseIdResolver, ioredis)
     const xrpc = createServer()
 
-    let worker: CAWorker = new CAWorker(ioredis, roles.includes("worker"))
+    let worker: CAWorker = new CAWorker(
+        ioredis,
+        roles.includes("worker"),
+        logger
+    )
 
-    const mirrorId = `mirror-${process.env.NODE_ENV ?? "development"}`
+    const mirrorId = `mirror-${env}`
     console.log("Mirror ID", mirrorId)
 
     const redisCache = new RedisCache(ioredis, mirrorId)

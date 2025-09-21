@@ -13,7 +13,6 @@ import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
 import {isTopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {FeedFormatOption} from "#/services/feed/inicio/discusion";
-import {logTimes} from "#/utils/utils";
 import {FollowingFeedSkeletonKey} from "#/services/redis/cache";
 
 export type RepostQueryResult = {
@@ -40,14 +39,14 @@ function skeletonFromArticleReposts(p: RepostQueryResult): SkeletonFeedPost | nu
 }
 
 
-function getRootUriFromPost(e: FeedViewPost | FeedViewContent): string | null {
+function getRootUriFromPost(ctx: AppContext, e: FeedViewPost | FeedViewContent): string | null {
     if (!e.reply) {
         if (isFeedViewPost(e)) {
             return e.post.uri
         } else if (isFeedViewContent(e) && isKnownContent(e.content)) {
             return e.content.uri
         } else {
-            console.warn("Warning: No se encontró el root del post", e)
+            ctx.logger.pino.warn("Warning: No se encontró el root del post", e)
             return null
         }
     } else if (e.reply.root && "uri" in e.reply.root) {
@@ -55,7 +54,7 @@ function getRootUriFromPost(e: FeedViewPost | FeedViewContent): string | null {
     } else if (e.reply.parent && "uri" in e.reply.parent) {
         return e.reply.parent.uri
     } else {
-        // console.log("Warning: No se encontró el root del post", e)
+        ctx.logger.pino.warn("No se encontró el root del post", e)
         return null
     }
 }
@@ -92,7 +91,7 @@ export const feedViewPostToSkeletonElement = (p: FeedViewPost): SkeletonFeedPost
 }
 
 
-export const getSkeletonFromTimeline = (timeline: FeedViewPost[], following?: string[]) => {
+export const getSkeletonFromTimeline = (ctx: AppContext, timeline: FeedViewPost[], following?: string[]) => {
     // Idea:
     // Me quedo con todos los posts cuyo root sea seguido por el agent
     // Si un root está más de una vez, me quedo solo con los que tengan respuestas únicamente del mismo autor,
@@ -100,7 +99,7 @@ export const getSkeletonFromTimeline = (timeline: FeedViewPost[], following?: st
 
     let filtered = following ? timeline.filter(t => {
         if (t.reason && isReasonRepost(t.reason)) return true
-        const rootUri = getRootUriFromPost(t)
+        const rootUri = getRootUriFromPost(ctx, t)
         if (!rootUri) {
             return false
         }
@@ -138,7 +137,7 @@ export async function getArticlesForFollowingFeed(ctx: AppContext, agent: Sessio
         .limit(25)
         .execute()
     const t2 = Date.now()
-    logTimes("get articles", [t1, t2])
+    ctx.logger.logTimes("get articles", [t1, t2])
     return res
 }
 
@@ -158,7 +157,7 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: 
         .orderBy("Record.created_at", "desc")
         .execute()
     const t2 = Date.now()
-    logTimes("get article reposts", [t1, t2])
+    ctx.logger.logTimes("get article reposts", [t1, t2])
 
     const qrs: RepostQueryResult[] = []
     res.forEach(r => {
@@ -192,7 +191,7 @@ async function retry<X, Y>(x: X, f: (params: X) => Promise<Y>, attempts: number,
 }
 
 
-export async function getBskyTimeline(agent: SessionAgent, limit: number, data: Dataplane, cursor?: string): Promise<{
+export async function getBskyTimeline(ctx: AppContext, agent: SessionAgent, limit: number, data: Dataplane, cursor?: string): Promise<{
     feed: $Typed<FeedViewPost>[],
     cursor: string | undefined
 }> {
@@ -201,7 +200,7 @@ export async function getBskyTimeline(agent: SessionAgent, limit: number, data: 
     const res = await retry({limit, cursor}, agent.bsky.getTimeline, 3)
     const t2 = Date.now()
 
-    logTimes("bsky timeline", [t1, t2])
+    ctx.logger.logTimes("bsky timeline", [t1, t2])
 
     const newCursor = res.data.cursor
     const feed = res.data.feed
@@ -242,7 +241,7 @@ async function getFollowingFeedSkeletonAllCASide(ctx: AppContext, agent: Session
 
     const t3 = Date.now()
 
-    logTimes("following ca side", [t1, t2, t3])
+    ctx.logger.logTimes("following ca side", [t1, t2, t3])
     return {
         articles,
         articleReposts,
@@ -254,7 +253,7 @@ async function getFollowingFeedSkeletonAllCASide(ctx: AppContext, agent: Session
 const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, cursor) => {
     if (!agent.hasSession()) return {skeleton: [], cursor: undefined}
 
-    const timelineQuery = getBskyTimeline(agent, 25, data, cursor)
+    const timelineQuery = getBskyTimeline(ctx, agent, 25, data, cursor)
 
     const cursorDate = cursor ? new Date(cursor) : new Date()
 
@@ -273,7 +272,7 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
         articleReposts = articleReposts.filter(a => a.createdAt && a.createdAt >= lastInTimelineDate && a.createdAt <= cursorDate)
     }
 
-    const timelineSkeleton = getSkeletonFromTimeline(timeline.feed, following)
+    const timelineSkeleton = getSkeletonFromTimeline(ctx, timeline.feed, following)
 
     const articleRepostsSkeleton = articleReposts.map(skeletonFromArticleReposts).filter(x => x != null)
 
@@ -285,7 +284,7 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
 
     const t3 = Date.now()
 
-    logTimes("following sk all", [t1, t2, t3])
+    ctx.logger.logTimes("following sk all", [t1, t2, t3])
 
     return {
         skeleton,
@@ -392,7 +391,7 @@ const followingFeedOnlyCASkeletonQuery: FollowingFeedSkeletonQuery<FollowingFeed
         .limit(limit)
         .execute()
     const t3 = Date.now()
-    logTimes("following feed only ca skeleton query", [t1, t2, t3])
+    ctx.logger.logTimes("following feed only ca skeleton query", [t1, t2, t3])
     return res.map(r => ({
         uri: r.uri,
         repostedRecordUri: r.repostedRecordUri ?? undefined,
@@ -576,7 +575,7 @@ const getFollowingFeedSkeletonOnlyCA: (format: FeedFormatOption) => GetSkeletonP
         followingFeedOnlyCABaseQueryArticles(ctx, agent, limit, cursor))
 
     const t2 = Date.now()
-    logTimes("posts for skeleton only ca", [t1, t2])
+    ctx.logger.logTimes("posts for skeleton only ca", [t1, t2])
 
     function queryToSkeletonElement(e: {
         uri: string,
@@ -618,7 +617,7 @@ export const getFollowingFeedSkeleton: (filter: FollowingFeedFilter, format: Fee
 }
 
 
-export function filterFeed(feed: FeedViewContent[], allowTopicVersions: boolean = false) {
+export function filterFeed(ctx: AppContext, feed: FeedViewContent[], allowTopicVersions: boolean = false) {
 
     feed = feed.filter(a => {
         if (!isCAPostView(a.content)) return true
@@ -637,7 +636,7 @@ export function filterFeed(feed: FeedViewContent[], allowTopicVersions: boolean 
     let roots = new Set<string>()
     const res: FeedViewContent[] = []
     feed.forEach(a => {
-        const rootUri = getRootUriFromPost(a)
+        const rootUri = getRootUriFromPost(ctx, a)
         if (rootUri && !roots.has(rootUri)) {
             res.push(a)
             roots.add(rootUri)

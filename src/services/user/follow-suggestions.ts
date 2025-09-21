@@ -5,7 +5,6 @@ import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {sql} from "kysely";
 import {AppContext} from "#/setup";
 import {v4 as uuidv4} from 'uuid'
-import {logTimes} from "#/utils/utils";
 import {getCAUsersDids} from "#/services/user/users";
 
 /*
@@ -155,7 +154,7 @@ export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: s
     const dataplane = new Dataplane(ctx, agent)
     await dataplane.fetchUsersHydrationData(dids)
     const t3 = Date.now()
-    logTimes("follow suggestions", [t1, t2, t3])
+    ctx.logger.logTimes("follow suggestions", [t1, t2, t3])
 
     const profiles = dids
         .map(d => hydrateProfileViewBasic(d, dataplane))
@@ -203,6 +202,6 @@ export async function updateFollowSuggestions(ctx: AppContext){
         const t2 = Date.now()
         await getRecommendationRankingForUser(ctx, did, true)
         const t3 = Date.now()
-        logTimes(`updated follow-suggestions ${i}`, [t1, t2, t3])
+        ctx.logger.logTimes(`updated follow-suggestions ${i}`, [t1, t2, t3])
     }
 }

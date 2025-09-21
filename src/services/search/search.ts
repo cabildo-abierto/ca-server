@@ -13,7 +13,6 @@ import {Agent} from "#/utils/session-agent";
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
 import {$Typed} from "@atproto/api";
 import {sql} from "kysely";
-import {logTimes} from "#/utils/utils";
 
 
 export async function searchUsersInCA(ctx: AppContext, query: string, dataplane: Dataplane): Promise<string[]> {
@@ -68,7 +67,7 @@ export const searchUsers: CAHandlerNoAuth<{
     await dataplane.fetchUsersHydrationData(userList)
     const t3 = Date.now()
 
-    logTimes(`search users ${query}`, [t1, t2, t3])
+    ctx.logger.logTimes(`search users ${query}`, [t1, t2, t3])
 
     const users = userList.map(did => hydrateProfileViewBasic(did, dataplane))
 

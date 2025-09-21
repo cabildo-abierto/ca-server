@@ -1,6 +1,5 @@
 import {AppContext} from "#/setup";
 import {getDidFromUri} from "#/utils/uri";
-import {logTimes} from "#/utils/utils";
 import {testUsers} from "#/services/admin/stats";
 import {
     createContentInteractions,
@@ -95,29 +94,27 @@ export async function updateTopicPopularities(ctx: AppContext, topicIds: string[
 
 
 export async function updateTopicPopularityScores(ctx: AppContext) {
-    console.log("Updating references")
+    const t1 = Date.now()
     await updateReferences(ctx)
 
-    console.log("creating interactions")
     const since = await ctx.redisCache.lastTopicInteractionsUpdate.get()
     const topicIds = await getEditedTopics(ctx, since)
-
-    console.log(`found ${topicIds} edited topics`)
-
-    const t1 = Date.now()
-    await updateContentInteractionsForTopics(ctx, topicIds)
     const t2 = Date.now()
 
-    await createContentInteractions(ctx)
+    await updateContentInteractionsForTopics(ctx, topicIds)
+    const t3 = Date.now()
 
-    console.log("updating topic popularities", topicIds)
+    await createContentInteractions(ctx)
+    const t4 = Date.now()
 
     const allTopicIds = await ctx.kysely
         .selectFrom("Topic")
         .select("id")
         .execute()
-    await updateTopicPopularities(ctx, allTopicIds.map(t => t.id))
-    const t3 = Date.now()
+    const t5 = Date.now()
 
-    logTimes("update topic popularities", [t1, t2, t3])
+    await updateTopicPopularities(ctx, allTopicIds.map(t => t.id))
+    const t6 = Date.now()
+
+    ctx.logger.logTimes("update topic popularities", [t1, t2, t3, t4, t5, t6])
 }

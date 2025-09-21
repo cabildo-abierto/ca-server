@@ -7,14 +7,14 @@ import {concat} from "#/utils/arrays";
 import {SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
 
 
-const getMainProfileFeedSkeletonBsky = async (agent: Agent, data: Dataplane, did: string, cursor?: string): Promise<GetSkeletonOutput> => {
+const getMainProfileFeedSkeletonBsky = async (ctx: AppContext, agent: Agent, data: Dataplane, did: string, cursor?: string): Promise<GetSkeletonOutput> => {
     if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
     const res = await agent.bsky.app.bsky.feed.getAuthorFeed({actor: did, filter: "posts_and_author_threads", cursor})
     const feed = res.data.feed
     data.storeFeedViewPosts(feed)
 
     return {
-        skeleton: getSkeletonFromTimeline(feed),
+        skeleton: getSkeletonFromTimeline(ctx, feed),
         cursor: res.data.cursor
     }
 }
@@ -43,7 +43,7 @@ export const getMainProfileFeedSkeleton = (did: string) : GetSkeletonProps => {
     return async (ctx, agent, data, cursor) => {
 
         let [bskySkeleton, CASkeleton] = await Promise.all([
-            getMainProfileFeedSkeletonBsky(agent, data, did, cursor),
+            getMainProfileFeedSkeletonBsky(ctx, agent, data, did, cursor),
             getMainProfileFeedSkeletonCA(ctx, did, cursor)
         ])
 

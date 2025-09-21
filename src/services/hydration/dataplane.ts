@@ -21,7 +21,7 @@ import {
 } from "#/utils/uri";
 import {$Typed} from "@atproto/api";
 import {TopicQueryResultBasic} from "#/services/wiki/topics";
-import {logTimes, reactionsQuery, recordQuery} from "#/utils/utils";
+import {reactionsQuery, recordQuery} from "#/utils/utils";
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {
     FeedViewPost,
@@ -218,7 +218,7 @@ export class Dataplane {
             this.fetchFilteredTopics(filters)
         ])
         const t3 = Date.now()
-        logTimes("fetch ca contents and blobs", [t1, t2, t3])
+        this.ctx.logger.logTimes("fetch ca contents and blobs", [t1, t2, t3])
     }
 
     async fetchCAContents(uris: string[]) {
@@ -375,7 +375,7 @@ export class Dataplane {
             this.fetchUsersHydrationData(dids)
         ])
         const t2 = Date.now()
-        logTimes("fetch posts and article views", [t1, t2])
+        this.ctx.logger.logTimes("fetch posts and article views", [t1, t2])
     }
 
     async fetchTopicsBasicByUris(uris: string[]) {
@@ -454,7 +454,7 @@ export class Dataplane {
         ]))[1]
         const t2 = Date.now()
 
-        logTimes("expanding uris with replies and reposts", [t1, t2])
+        this.ctx.logger.logTimes("expanding uris with replies and reposts", [t1, t2])
 
         const bskyPosts = uris.map(u => this.bskyPosts?.get(u)).filter(x => x != null)
 
@@ -492,7 +492,7 @@ export class Dataplane {
             .where("Post.uri", "in", uris)
             .execute()
         const t2 = Date.now()
-        logTimes("root creation dates", [t1, t2])
+        this.ctx.logger.logTimes("root creation dates", [t1, t2])
 
         rootCreationDates.forEach(r => {
             this.rootCreationDates.set(r.uri, r.created_at)
@@ -521,7 +521,7 @@ export class Dataplane {
                 }
             })
             const t2 = Date.now()
-            logTimes("fetch reposts", [t1, t2])
+            this.ctx.logger.logTimes("fetch reposts", [t1, t2])
             reposts.forEach(r => {
                 if(r.reaction?.subjectId){
                     this.reposts.set(r.reaction.subjectId, r)
@@ -600,7 +600,7 @@ export class Dataplane {
                 postViews.push(...res.data.posts)
             }
             const t2 = Date.now()
-            logTimes("fetch bsky posts", [t1, t2])
+            this.ctx.logger.logTimes("fetch bsky posts", [t1, t2])
         } catch (err) {
             console.log("Error fetching posts", err)
             console.log("uris", uris)
@@ -657,7 +657,7 @@ export class Dataplane {
             }
         })
         const t2 = Date.now()
-        logTimes("fetch engagement", [t1, t2])
+        this.ctx.logger.logTimes("fetch engagement", [t1, t2])
 
         reactions.forEach(l => {
             if (l.subjectId) {
@@ -867,7 +867,7 @@ export class Dataplane {
         )
 
         const t2 = Date.now()
-        logTimes(`fetch users data from ca (N = ${dids.length})`, [t1, t2])
+        this.ctx.logger.logTimes(`fetch users data from ca (N = ${dids.length})`, [t1, t2])
     }
 
     async fetchUsersHydrationDataFromBsky(dids: string[]) {
@@ -891,7 +891,7 @@ export class Dataplane {
             new Map(profiles.map(v => [v.did, {$type: "app.bsky.actor.defs#profileViewDetailed", ...v}]))
         )
         const t2 = Date.now()
-        logTimes(`fetch users data from bsky (N = ${dids.length})`, [t1, t2])
+        this.ctx.logger.logTimes(`fetch users data from bsky (N = ${dids.length})`, [t1, t2])
     }
 
     async fetchUsersHydrationData(dids: string[]) {

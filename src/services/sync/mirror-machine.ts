@@ -5,8 +5,7 @@ import {isCAProfile, isFollow} from "#/utils/uri";
 import {addPendingEvent, getCAUsersAndFollows} from "#/services/sync/sync-user";
 import {CommitEvent, JetstreamEvent} from "#/lib/types";
 import * as Follow from "#/lex-api/types/app/bsky/graph/follow"
-import {logTimes} from "#/utils/utils";
-import {getProcessorForEvent} from "#/services/sync/event-processing/event-processor";
+import {processEventsBatch} from "#/services/sync/event-processing/event-processor";
 import {LRUCache} from 'lru-cache'
 
 function formatEventsPerSecond(events: number, elapsed: number) {
@@ -30,19 +29,22 @@ export class MirrorMachine {
     }
 
     async setup() {
-        console.log("Setting up mirror...")
+        this.ctx.logger.pino.info("setting up mirror")
         await this.fetchUsers()
-        console.log("CA users:", this.caUsers.size)
-        console.log("Extended users:", this.extendedUsers.size)
-
         await this.ctx.redisCache.mirrorStatus.clear()
-        console.log("Mirror ready.")
+
+        this.ctx.logger.pino.info({
+            ca: this.caUsers.size,
+            extended: this.extendedUsers.size
+        }, "mirrored users size")
     }
 
     async fetchUsers(){
         const dids = await getCAUsersDids(this.ctx)
-        const extendedUsers: string[] = []
-        //const extendedUsers = (await getCAUsersAndFollows(this.ctx)).map(x => x.did)
+        let extendedUsers: string[] = []
+        if(process.env.MIRROR_EXTENDED_USERS == "true"){
+            extendedUsers = (await getCAUsersAndFollows(this.ctx)).map(x => x.did)
+        }
         this.caUsers = new Set(dids)
         this.extendedUsers = new Set(extendedUsers.filter(x => !this.caUsers.has(x)))
         this.tooLargeUsers = new Set()
@@ -51,9 +53,10 @@ export class MirrorMachine {
     logEventsPerSecond(){
         const elapsed = Date.now() - this.lastLog.getTime()
         if(elapsed > 20*1000){
-            console.log("Events per second: ",
-                formatEventsPerSecond(this.eventCounter, elapsed),
-                formatEventsPerSecond(this.relevantEventCounter, elapsed))
+            this.ctx.logger.pino.info({
+                all: formatEventsPerSecond(this.eventCounter, elapsed),
+                relevant: formatEventsPerSecond(this.relevantEventCounter, elapsed)
+            }, "events per second")
             this.eventCounter = 0
             this.relevantEventCounter = 0
             this.lastLog = new Date()
@@ -65,16 +68,16 @@ export class MirrorMachine {
         const ws = new WebSocket(url)
 
         ws.on('open', () => {
-            console.log('Connected to the WebSocket server');
+            this.ctx.logger.pino.info({domain}, `connected to ws`);
         })
 
         ws.on('error', (error: Error) => {
-            console.error('WebSocket error:', error)
+            this.ctx.logger.pino.error({error, domain}, 'ws error')
             ws.close()
         })
 
         ws.on('close', () => {
-            console.log('WebSocket connection closed. Retrying in 5s...')
+            this.ctx.logger.pino.warn({domain}, 'ws closed, retrying')
             setTimeout(() => this.connectToJetstream(domain), 5000)
         })
 
@@ -103,7 +106,7 @@ export class MirrorMachine {
         if(isCAProfile(c.commit.collection) && c.commit.rkey == "self"){
             this.caUsers.add(e.did)
             this.extendedUsers.add(e.did)
-            console.log("Added user", e.did)
+            this.ctx.logger.pino.info({did: e.did}, "user added to ca")
         }
 
         const inCA = this.caUsers.has(c.did)
@@ -112,7 +115,7 @@ export class MirrorMachine {
 
         if((!inCA && !inExtended) || inTooLarge){
             if(inTooLarge){
-                console.log(c.did, "is too large")
+                this.ctx.logger.pino.info({did: c.did, reason: "repo too large"}, "event ignored")
             }
             return
         }
@@ -128,7 +131,7 @@ export class MirrorMachine {
                 const record: Follow.Record = c.commit.record
                 if(c.commit.operation == "create"){
                     this.extendedUsers.add(record.subject)
-                    console.log("Added extended user", record.subject)
+                    this.ctx.logger.pino.info({did: record.subject} , "added extended user to mirror")
                 }
             }
         } else if(inExtended && isFollow(c.commit.collection)){
@@ -148,15 +151,15 @@ export class MirrorMachine {
     async processEvent(ctx: AppContext, e: JetstreamEvent, inCA: boolean) {
         this.relevantEventCounter++
         const mirrorStatus = await ctx.redisCache.mirrorStatus.get(e.did, inCA)
-        console.log("event!", e.did, mirrorStatus)
+        ctx.logger.pino.info({did: e.did, mirrorStatus}, `sync event`)
 
         if(mirrorStatus == "Sync"){
             if(e.kind == "commit"){
                 const t1 = Date.now()
-                await getProcessorForEvent(ctx, e).process()
+                await processEventsBatch(ctx, [e])
                 const t2 = Date.now()
                 const c = (e as CommitEvent)
-                logTimes(`process commit ${c.commit.operation} event: ${c.commit.uri}`, [t1, t2])
+                ctx.logger.logTimes(`process commit ${c.commit.operation} event: ${c.commit.uri}`, [t1, t2])
             }
 
         } else if(mirrorStatus == "Dirty"){
@@ -178,7 +181,6 @@ export class MirrorMachine {
             }
         } else if(mirrorStatus == "Failed - Too Large"){
             this.tooLargeUsers.add(e.did)
-            console.log(`${e.did} tiene un repositorio demasiado pesado.`)
         }
     }
 }

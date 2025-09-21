@@ -1,6 +1,5 @@
 import {AppContext} from "#/setup";
 import {sql} from "kysely";
-import {logTimes} from "#/utils/utils";
 
 
 export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) {
@@ -15,7 +14,7 @@ export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) 
         if(uris != null){
             batchUris = uris.slice(offset, offset+batchSize)
         }
-        console.log("getting interactions scores for batch", offset, batchSize, "with total", uris?.length)
+        ctx.logger.pino.info(`getting interactions scores for batch ${offset}, ${batchSize} with total ${uris?.length}`)
 
         const scores = await ctx.kysely
             .selectFrom("Content")
@@ -115,7 +114,7 @@ export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) 
 
         const t2 = Date.now()
 
-        console.log(`inserting ${scores.length} scores`)
+        ctx.logger.pino.info(`inserting ${scores.length} scores`)
 
         if(scores.length > 0){
             await ctx.kysely
@@ -135,7 +134,7 @@ export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) 
         }
 
         const t3 = Date.now()
-        logTimes(`update interaction scores for batch ${offset} with size ${scores.length} (total=${uris?.length})`, [t1, t2, t3])
+        ctx.logger.pino.info(`update interaction scores for batch ${offset} with size ${scores.length} (total=${uris?.length})`, [t1, t2, t3])
         offset += batchSize
         if(scores.length < batchSize) break
     }

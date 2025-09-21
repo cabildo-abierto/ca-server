@@ -3,7 +3,7 @@ import {getCollectionFromUri, getDidFromUri, getRkeyFromUri} from "#/utils/uri";
 
 
 export async function updateEngagementCounts(ctx: AppContext) {
-    console.log("Updating engagement counts...")
+    ctx.logger.pino.info("updating engagement counts")
     const t1 = Date.now()
 
     await ctx.kysely.transaction().execute(async (trx) => {
@@ -43,10 +43,10 @@ export async function updateEngagementCounts(ctx: AppContext) {
             collection: getCollectionFromUri(uri)
         }))
 
-        const batchSize = 1000
+        const batchSize = 5000
         for(let i = 0; i < records.length; i += batchSize){
             const batch = records.slice(i, i + batchSize)
-            console.log(`Updating batch starting at ${i} of ${records.length} records.`)
+            console.log(`update engagement counts batch ${i}`)
             await trx
                 .insertInto("Record")
                 .values(batch)

@@ -56,9 +56,7 @@ export async function deleteCollection(ctx: AppContext, collection: string){
             collection: collection
         }
     })).map((r) => (r.uri))
-    console.log(`Found ${uris.length} records. Deleting all...`)
     await getDeleteProcessor(ctx, collection).process(uris)
-    console.log("Done.")
 }
 
 
@@ -69,12 +67,7 @@ export async function deleteRecords({ctx, agent, uris, atproto}: { ctx: AppConte
         }
     }
 
-    try {
-        await batchDeleteRecords(ctx, uris)
-    } catch (err) {
-        console.error(err)
-        return {error: "Error al borrar los registros."}
-    }
+    await batchDeleteRecords(ctx, uris)
 
     return {}
 }

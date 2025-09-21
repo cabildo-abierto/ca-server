@@ -1,103 +1,100 @@
 import {getCategoriesWithCounts} from "./topics";
 import {AppContext} from "#/setup";
 import {TopicsGraph} from "#/lib/types";
-import {logTimes} from "#/utils/utils";
 import {CAHandlerNoAuth} from "#/utils/handler";
-import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {getTopicCategories} from "#/services/wiki/utils";
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
+import {unique} from "#/utils/arrays";
 
 
 export const updateCategoriesGraph = async (ctx: AppContext) => {
-    // TO DO: Actualizar también las categorías o usar el json
-    console.log("Getting topics.")
+    ctx.logger.pino.info("updating categories graph")
 
-    let topics = await ctx.db.topic.findMany({
-        select: {
-            id: true,
-            currentVersion: {
-                select: {
-                    props: true,
-                    categories: true
-                }
-            },
-            categories: {
-                select: {
-                    categoryId: true
-                }
-            },
-            referencedBy: {
-                select: {
-                    referencingContent: {
-                        select: {
-                            topicVersion: {
-                                select: {
-                                    topicId: true
-                                }
-                            }
-                        }
+    const t1 = Date.now()
+    let references: {referencedTopicId: string, referencingTopicId: string}[]
+    try {
+        references = await ctx.kysely
+            .selectFrom("Reference")
+            .innerJoin("TopicVersion", "TopicVersion.uri", "Reference.referencingContentId")
+            .innerJoin("Topic as ReferencingTopic", "ReferencingTopic.currentVersionId", "TopicVersion.uri")
+            .innerJoin("Topic as ReferencedTopic", "ReferencedTopic.id", "Reference.referencedTopicId")
+            .select([
+                "ReferencedTopic.id as referencedTopicId",
+                "ReferencingTopic.id as referencingTopicId",
+            ])
+            .execute()
+    } catch (err) {
+        ctx.logger.pino.error({error: err}, "error getting references")
+        return
+    }
+    const t2 = Date.now()
+
+    let categories: {topicId: string, categoryId: string}[] = []
+    try {
+        categories = await ctx.kysely
+            .selectFrom("TopicToCategory")
+            .select(["topicId", "categoryId"])
+            .execute()
+    } catch (err) {
+        ctx.logger.pino.error({error: err}, "error getting categories")
+        return
+    }
+    const t3 = Date.now()
+
+    let values: {idCategoryA: string, idCategoryB: string}[] = []
+    try {
+        const topicToCategoriesMap = new Map<string, string[]>()
+        const categoriesMap = new Map<string, number>()
+
+        for (const {topicId, categoryId} of categories) {
+            const cur = topicToCategoriesMap.get(topicId)
+            if(cur == undefined){
+                topicToCategoriesMap.set(topicId, [categoryId])
+            } else {
+                cur.push(categoryId)
+            }
+            categoriesMap.set(categoryId, (categoriesMap.get(categoryId) ?? 0)+1)
+        }
+
+        for (const r of references) {
+            const xId = r.referencingTopicId
+            const catsX = topicToCategoriesMap.get(xId)
+            const yId = r.referencedTopicId
+            const catsY = topicToCategoriesMap.get(yId)
+            if (!catsY || !catsX) continue
+
+            catsX.forEach((catX) => {
+                catsY.forEach((catY) => {
+                    if (catX != catY) {
+                        values.push({idCategoryA: catX, idCategoryB: catY})
                     }
-                }
-            }
-        }
-    })
-
-    const topicToCategoriesMap = new Map<string, string[]>()
-
-    const categories = new Map<string, number>()
-    for (let i = 0; i < topics.length; i++) {
-        const t = topics[i]
-        const cats = getTopicCategories(
-            t.currentVersion?.props as unknown as TopicProp[] | undefined,
-            t.categories.map(c => c.categoryId),
-            t.currentVersion?.categories ?? undefined
-        )
-        topicToCategoriesMap.set(t.id, cats)
-        cats.forEach((c) => {
-            const y = categories.get(c)
-            if (!y) categories.set(c, 1)
-            else categories.set(c, y + 1)
-        })
-    }
-
-    const edges: { x: string, y: string }[] = []
-    for (let i = 0; i < topics.length; i++) {
-        const yId = topics[i].id
-        const catsY = topicToCategoriesMap.get(yId)
-        if (!catsY) continue
-
-        for (let j = 0; j < topics[i].referencedBy.length; j++) {
-            if (topics[i].referencedBy[j].referencingContent.topicVersion) {
-                const v = topics[i].referencedBy[j].referencingContent.topicVersion
-                if (!v) continue
-                const xId = v.topicId
-                const catsX = topicToCategoriesMap.get(xId)
-                if (!catsX) continue
-
-                catsX.forEach((catX) => {
-                    catsY.forEach((catY) => {
-                        if (catX != catY && !edges.some(({x, y}) => (x == catX && y == catY))) {
-                            edges.push({x: catX, y: catY})
-                        }
-                    })
                 })
-            }
+            })
         }
+
+        values = unique(values, v => `${v.idCategoryA}:${v.idCategoryB}`)
+    } catch (err) {
+        ctx.logger.pino.error({error: err}, "error computing edges")
+        return
+    }
+    const t4 = Date.now()
+
+    try {
+        await ctx.kysely.transaction().execute(async (trx) => {
+            await trx
+                .deleteFrom("CategoryLink")
+                .execute()
+
+            await trx.insertInto("CategoryLink")
+                .values(values)
+                .onConflict(oc => oc.columns(["idCategoryA", "idCategoryB"]).doNothing())
+                .execute()
+        })
+    } catch (err) {
+        ctx.logger.pino.error({error: err}, "error applying update")
     }
 
-    console.log("Applying changes.")
-    await ctx.db.$transaction([
-        ctx.db.categoryLink.deleteMany(),
-        ctx.db.categoryLink.createMany({
-            data: edges.map(e => ({
-                idCategoryA: e.x,
-                idCategoryB: e.y
-            }))
-        })
-    ])
-
-    console.log("Done.")
-    // revalidateTag("categoriesgraph")
+    const t5 = Date.now()
+    ctx.logger.logTimes("update categories graph", [t1, t2, t3, t4, t5])
 }
 
 export const getCategoriesGraph: CAHandlerNoAuth<{}, TopicsGraph> = async (ctx, agent, {}) => {
@@ -161,7 +158,7 @@ export const getCategoryGraph: CAHandlerNoAuth<{ query: { c: string[] | string }
             .execute()
     ])
 
-    logTimes(`get cateogory graph ${categories}`, [t1, Date.now()])
+    ctx.logger.logTimes(`get cateogory graph ${categories}`, [t1, Date.now()])
 
     return {
         data: {

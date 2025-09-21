@@ -20,7 +20,6 @@ import {ArticleEmbed, ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {isMain as isImagesEmbed, View as ImagesEmbedView} from "#/lex-api/types/app/bsky/embed/images"
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read"
-import {logTimes} from "#/utils/utils";
 import { JsonValue } from "@prisma/client/runtime/library";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 import {cleanText} from "#/utils/strings";
@@ -152,7 +151,7 @@ export async function getTopics(
     const t1 = Date.now()
     const topics = await (limit ? baseQuery.limit(limit) : baseQuery).execute()
     const t2 = Date.now()
-    logTimes("get trending topics", [t1, t2])
+    ctx.logger.logTimes("get trending topics", [t1, t2])
     return {
         data: topics.map(t => topicQueryResultToTopicViewBasic({
             id: t.id,
@@ -525,7 +524,7 @@ export const getTopicsMentioned: CAHandlerNoAuth<{title: string, text: string}, 
         .map(r => ({id: r.topicId, count: r.count, title: gett(titles, r.topicId)}))
         .sort((a, b) => (b.count - a.count))
     const t5 = Date.now()
-    logTimes("topics mentioned", [t1, t2, t3, t4, t5])
+    ctx.logger.logTimes("topics mentioned", [t1, t2, t3, t4, t5])
     return {
         data
     }
@@ -589,8 +588,6 @@ export const getTopicsInCategoryForBatchEditing: CAHandlerNoAuth<{params: {cat: 
             })
         }
     })
-
-    console.log("returning", Array.from(m.values()))
 
     return {data: Array.from(m.values())}
 }

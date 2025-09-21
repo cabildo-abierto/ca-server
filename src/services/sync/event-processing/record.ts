@@ -30,7 +30,7 @@ export async function processRecordsBatch(trx: Transaction<DB>, records: { ref: 
             cid: ref.cid,
             rkey,
             collection,
-            created_at: new Date(record.createdAt),
+            created_at: record.createdAt ? new Date(record.createdAt) : undefined,
             authorId: did,
             record: JSON.stringify(record),
             CAIndexedAt: new Date(),

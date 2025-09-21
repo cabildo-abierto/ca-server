@@ -1,4 +1,18 @@
 import {run} from "#/index-worker";
+import cluster from "cluster";
+import os from "os";
 
+const maxCpus = process.env.MAX_WORKER_CPUS ? Number(process.env.MAX_WORKER_CPUS) : 1000
 
-run(["worker"])
+if (cluster.isPrimary) {
+    const numCPUs = Math.min(os.cpus().length, maxCpus)
+    console.log(`Master ${process.pid} running WORKER with ${numCPUs} workers`)
+    for (let i = 0; i < numCPUs; i++) cluster.fork()
+
+    cluster.on('exit', (worker) => {
+        console.log(`WORKER Worker ${worker.process.pid} died`)
+        cluster.fork()
+    })
+} else {
+    run(["worker"])
+}

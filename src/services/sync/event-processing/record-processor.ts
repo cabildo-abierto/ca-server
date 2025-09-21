@@ -40,14 +40,11 @@ export class RecordProcessor<T> {
 
         const batchSize = 1000
         for (let i = 0; i < records.length; i+=batchSize) {
-            if(i > 0){
-                console.log(`${collection}: processing batch ${i + 1} of ${records.length} (bs = ${batchSize})`)
-            }
             const t1 = Date.now()
             const batchRecords = records.slice(i, i+batchSize)
             await this.process(batchRecords)
             const t2 = Date.now()
-            console.log(`processed batch in ${t2-t1}ms`)
+            this.ctx.logger.pino.info(`${collection}: processed batch ${i+1} of ${records.length} in ${t2-t1}ms`)
         }
     }
 
@@ -67,7 +64,6 @@ export class RecordProcessor<T> {
             } else {
                 console.log("Invalid record:", ref.uri)
                 console.log("Reason:", res.error.message)
-                console.log("Record was", record)
             }
         }
         return parsedRecords

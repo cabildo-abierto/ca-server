@@ -24,12 +24,11 @@ export class DeleteProcessor {
     async processInBatches(uris: string[]) {
         if(uris.length == 0) return
         const c = getCollectionFromUri(uris[0])
-        const batchSize = 500
+        const batchSize = 5000
         for (let j = 0; j < uris.length; j += batchSize) {
-            console.log(`deleting batch ${j} of ${uris.length} entries of type ${c}`)
             const batchUris = uris.slice(j, j + batchSize)
             await this.process(batchUris)
-            console.log("batch of deletes finished")
+            this.ctx.logger.pino.info({collection: c, index: j, total: uris.length}, `delete batch done`)
         }
     }
 }
