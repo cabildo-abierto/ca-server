@@ -16,7 +16,7 @@ import {
     ThreadSkeleton
 } from "#/services/hydration/hydrate";
 import {isThreadViewPost} from "#/lex-server/types/app/bsky/feed/defs";
-import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
+import {CAHandlerNoAuth} from "#/utils/handler";
 import {handleToDid} from "#/services/user/users";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {ThreadViewPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
@@ -170,7 +170,7 @@ export const getThread: CAHandlerNoAuth<{params: {handleOrDid: string, collectio
 
     await data.fetchThreadHydrationData(skeleton)
 
-    let thread = hydrateThreadViewContent(skeleton, data, true, true)
+    let thread = hydrateThreadViewContent(ctx, skeleton, data, true, true)
 
     return thread ? {data: thread} : {error: "Ocurrió un error al obtener el contenido."}
 }

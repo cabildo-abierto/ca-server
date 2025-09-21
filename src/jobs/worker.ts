@@ -137,14 +137,18 @@ export class CAWorker {
         this.registerJob("update-records-created-at", () => updateRecordsCreatedAt(ctx))
         this.registerJob("update-interactions-score", (data) => updateInteractionsScore(ctx, data.uris))
         this.registerJob("update-all-interactions-score", () => updateInteractionsScore(ctx))
+        this.logger.pino.info("worker jobs registered")
 
         await this.removeAllRepeatingJobs()
+        this.logger.pino.info("repeating jobs cleared")
+
         await this.addRepeatingJob("update-topics-popularity", 30 * mins, 60 * mins)
         await this.addRepeatingJob("update-topics-categories", 30 * mins, 60 * mins + 5)
         await this.addRepeatingJob("update-categories-graph", 30 * mins, 60 * mins + 7)
         await this.addRepeatingJob("create-user-months", 30 * mins, 60 * mins + 15)
         await this.addRepeatingJob("batch-jobs", mins / 2, 0)
         await this.addRepeatingJob("update-follow-suggestions", 30 * mins, 30 * mins + 18)
+        this.logger.pino.info("worker repeating jobs added")
 
         const waitingJobs = await this.queue.getJobs(['waiting'])
         const delayedJobs = await this.queue.getJobs(['delayed'])
@@ -167,9 +171,10 @@ export class CAWorker {
 
     async removeAllRepeatingJobs() {
         const jobs = await this.queue.getJobSchedulers()
+        this.logger.pino.info("gott job schedulers")
         for (const job of jobs) {
-            this.logger.pino.info({name: job.name}, "repeat job removed")
             if(job.key){
+                this.logger.pino.info({name: job.name}, "repeat job removed")
                 await this.queue.removeJobScheduler(job.key)
             }
         }

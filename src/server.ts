@@ -21,6 +21,7 @@ export class Server {
         const {NODE_ENV, HOST, PORT} = env
 
         const {ctx} = await setupAppContext(roles)
+        ctx.logger.pino.info("app context created")
 
         if(roles.includes("mirror")){
             const ingester = new MirrorMachine(ctx)
@@ -74,10 +75,10 @@ export class Server {
         app.use(router)
         app.use(express.static('public'))
         app.use((_req, res) => res.sendStatus(404))
-
+        ctx.logger.pino.info(`running listen on ${HOST}:${PORT}`)
         const server = app.listen(env.PORT, HOST)
         await events.once(server, 'listening')
-        console.log(`Server (${NODE_ENV}) running on port http://${HOST}:${PORT}`)
+        ctx.logger.pino.info(`Server (${NODE_ENV}) running on port http://${HOST}:${PORT}`)
 
         return new Server(app, server, ctx)
     }

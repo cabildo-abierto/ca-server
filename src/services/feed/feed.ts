@@ -91,7 +91,7 @@ export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAH
     }
     const t2 = Date.now()
 
-    let feed: FeedViewContent[] = await hydrateFeed(skeleton, data)
+    let feed: FeedViewContent[] = await hydrateFeed(ctx, skeleton, data)
     const t3 = Date.now()
 
     if(pipeline.sortKey){

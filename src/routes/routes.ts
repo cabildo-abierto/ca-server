@@ -89,7 +89,7 @@ export const createRouter = (ctx: AppContext) => {
             clientSession.did = session.did
             await clientSession.save()
         } catch (err) {
-            ctx.logger.error({ err }, 'oauth callback failed')
+            ctx.logger.pino.error({ error: err }, 'oauth callback failed')
             return res.redirect('/?error')
         }
         return res.redirect(env.FRONTEND_URL+'/login/ok')

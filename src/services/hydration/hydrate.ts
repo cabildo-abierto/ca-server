@@ -53,6 +53,7 @@ import {
     isColumnFilter,
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+import {AppContext} from "#/setup";
 
 
 export function hydrateViewer(uri: string, data: Dataplane): { repost?: string, like?: string } {
@@ -273,7 +274,7 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
 }
 
 
-function hydrateVisualizationEmbedView(embed: VisualizationEmbed, data: Dataplane): $Typed<VisualizationEmbedView> | null {
+function hydrateVisualizationEmbedView(ctx: AppContext, embed: VisualizationEmbed, data: Dataplane): $Typed<VisualizationEmbedView> | null {
     if(isDatasetDataSource(embed.dataSource)){
         const datasetUri = embed.dataSource.dataset
         const dataset = hydrateDatasetView(datasetUri, data)
@@ -286,7 +287,7 @@ function hydrateVisualizationEmbedView(embed: VisualizationEmbed, data: Dataplan
         }
     } else if(isTopicsDataSource(embed.dataSource)){
         const filters = embed.filters?.filter(isColumnFilter) ?? []
-        const dataset = hydrateTopicsDatasetView(filters, data)
+        const dataset = hydrateTopicsDatasetView(ctx, filters, data)
         if(dataset){
             return {
                 visualization: embed,
@@ -299,7 +300,7 @@ function hydrateVisualizationEmbedView(embed: VisualizationEmbed, data: Dataplan
 }
 
 
-function hydrateRecordEmbedView(embed: CARecordEmbed | RecordEmbed, data: Dataplane): $Typed<CARecordEmbedView> | null {
+function hydrateRecordEmbedView(ctx: AppContext, embed: CARecordEmbed | RecordEmbed, data: Dataplane): $Typed<CARecordEmbedView> | null {
     const uri = embed.record.uri
     const collection = getCollectionFromUri(uri)
 
@@ -312,7 +313,7 @@ function hydrateRecordEmbedView(embed: CARecordEmbed | RecordEmbed, data: Datapl
             }
         }
     } else if(isPost(collection)) {
-        const post = hydratePostView(uri, data)
+        const post = hydratePostView(ctx, uri, data)
         if(post.data){
             return {
                 $type: "ar.cabildoabierto.embed.record#view",
@@ -327,7 +328,7 @@ function hydrateRecordEmbedView(embed: CARecordEmbed | RecordEmbed, data: Datapl
 }
 
 
-function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView>, error?: string } {
+function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): { data?: $Typed<PostView>, error?: string } {
     const post = data.bskyPosts?.get(uri)
     const caData = data.caContents?.get(uri)
 
@@ -348,14 +349,14 @@ function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView
             console.log("Warning: No se encontraron los datos para el selection quote en el post: ", uri)
         }
     } else if(isVisualizationEmbed(embed)) {
-        const view = hydrateVisualizationEmbedView(embed, data)
+        const view = hydrateVisualizationEmbedView(ctx, embed, data)
         if (view) {
             embedView = view;
         } else {
             console.log("Warning: No se encontraron los datos para la visualización: ", uri)
         }
     } else if(isRecordEmbed(embed) || isCARecordEmbed(embed)){
-        const view = hydrateRecordEmbedView(embed, data)
+        const view = hydrateRecordEmbedView(ctx, embed, data)
         if (view) {
             embedView = view;
         } else {
@@ -396,13 +397,13 @@ function hydratePostView(uri: string, data: Dataplane): { data?: $Typed<PostView
 }
 
 
-export function hydrateContent(uri: string, data: Dataplane, full: boolean = false): {
+export function hydrateContent(ctx: AppContext, uri: string, data: Dataplane, full: boolean = false): {
     data?: $Typed<PostView> | $Typed<ArticleView> | $Typed<FullArticleView> | $Typed<TopicViewBasic> | $Typed<DatasetView>,
     error?: string
 } {
     const collection = getCollectionFromUri(uri)
     if (isPost(collection)) {
-        return hydratePostView(uri, data)
+        return hydratePostView(ctx, uri, data)
     } else if (isArticle(collection)) {
         return full ? hydrateFullArticleView(uri, data) : hydrateArticleView(uri, data)
     } else if (isTopicVersion(collection)) {
@@ -455,7 +456,7 @@ function hydrateFeedViewContentReason(subjectUri: string, reason: SkeletonFeedPo
 }
 
 
-export function hydrateFeedViewContent(e: SkeletonFeedPost, data: Dataplane): $Typed<FeedViewContent> | $Typed<NotFoundPost> {
+export function hydrateFeedViewContent(ctx: AppContext, e: SkeletonFeedPost, data: Dataplane): $Typed<FeedViewContent> | $Typed<NotFoundPost> {
     const reason = hydrateFeedViewContentReason(e.post, e.reason, data) ?? undefined
 
     const childBsky = data.bskyPosts?.get(e.post)
@@ -465,9 +466,9 @@ export function hydrateFeedViewContent(e: SkeletonFeedPost, data: Dataplane): $T
         console.log("Warning: No se encontró el post en Bluesky. Uri: ", e.post)
     }
 
-    const leaf = hydrateContent(e.post, data)
-    const parent = reply && !isReasonRepost(reason) ? hydrateContent(reply.parent.uri, data) : null
-    const root = reply && !isReasonRepost(reason) ? hydrateContent(reply.root.uri, data) : null
+    const leaf = hydrateContent(ctx, e.post, data)
+    const parent = reply && !isReasonRepost(reason) ? hydrateContent(ctx, reply.parent.uri, data) : null
+    const root = reply && !isReasonRepost(reason) ? hydrateContent(ctx, reply.root.uri, data) : null
 
     if (!leaf.data || leaf.error) {
         console.log("Warning: No se encontró el contenido. Uri: ", e.post)
@@ -495,11 +496,11 @@ export function hydrateFeedViewContent(e: SkeletonFeedPost, data: Dataplane): $T
 export type BlobRef = { cid: string, authorId: string }
 
 
-export async function hydrateFeed(skeleton: FeedSkeleton, data: Dataplane): Promise<$Typed<FeedViewContent>[]> {
+export async function hydrateFeed(ctx: AppContext, skeleton: FeedSkeleton, data: Dataplane): Promise<$Typed<FeedViewContent>[]> {
     await data.fetchFeedHydrationData(skeleton)
 
     const feed = skeleton
-        .map((e) => (hydrateFeedViewContent(e, data)))
+        .map((e) => (hydrateFeedViewContent(ctx, e, data)))
 
     feed.filter(isNotFoundPost).forEach(x => {
         console.log("Content not found:", x.uri)
@@ -532,8 +533,8 @@ export const threadPostRepliesSortKey = (authorId: string) => (r: ThreadViewPost
         [1, -new Date(r.post.indexedAt).getTime()] : [0, 0]
 }
 
-export function hydrateThreadViewContent(skeleton: ThreadSkeleton, data: Dataplane, includeReplies: boolean = false, isMain: boolean = false): $Typed<ThreadViewContent> | null {
-    const content = hydrateContent(skeleton.post, data, isMain).data
+export function hydrateThreadViewContent(ctx: AppContext, skeleton: ThreadSkeleton, data: Dataplane, includeReplies: boolean = false, isMain: boolean = false): $Typed<ThreadViewContent> | null {
+    const content = hydrateContent(ctx, skeleton.post, data, isMain).data
     if (!content) return null
 
     const authorDid = getDidFromUri(skeleton.post)
@@ -541,7 +542,7 @@ export function hydrateThreadViewContent(skeleton: ThreadSkeleton, data: Datapla
     let replies: $Typed<ThreadViewContent>[] | undefined
     if (includeReplies && skeleton.replies) {
         replies = skeleton.replies
-            .map((r) => (hydrateThreadViewContent(r, data, true)))
+            .map((r) => (hydrateThreadViewContent(ctx, r, data, true)))
             .filter(x => x != null)
 
         replies = sortByKey(replies, threadRepliesSortKey(authorDid), listOrderDesc)
@@ -549,7 +550,7 @@ export function hydrateThreadViewContent(skeleton: ThreadSkeleton, data: Datapla
 
     let parent: $Typed<ThreadViewContent> | undefined
     if(skeleton.parent){
-        const hydratedParent = hydrateThreadViewContent(skeleton.parent, data, false)
+        const hydratedParent = hydrateThreadViewContent(ctx, skeleton.parent, data, false)
         if(hydratedParent) {
             parent = {
                 ...hydratedParent,

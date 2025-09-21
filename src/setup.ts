@@ -39,8 +39,7 @@ export async function setupAppContext(roles: Role[]) {
     const logger = new Logger([...roles, env].join(":"))
 
     const db = new PrismaClient()
-
-    const ioredis = new Redis(redisUrl, {maxRetriesPerRequest: null, family: 6})
+    logger.pino.info("prisma client created")
 
     const kysely = new Kysely<DB>({
         dialect: new PostgresDialect({
@@ -49,6 +48,7 @@ export async function setupAppContext(roles: Role[]) {
             }),
         }),
     })
+    logger.pino.info("kysely client created")
 
     const sb = createSBClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
         global: {
@@ -57,12 +57,13 @@ export async function setupAppContext(roles: Role[]) {
             }
         }
     })
+    logger.pino.info("sb client created")
+
+    const ioredis = new Redis(redisUrl, {maxRetriesPerRequest: null, family: 6})
+    logger.pino.info("redis client created")
 
     const oauthClient = await createClient(ioredis)
-
-    const baseIdResolver = createIdResolver()
-    const resolver = createBidirectionalResolver(baseIdResolver, ioredis)
-    const xrpc = createServer()
+    logger.pino.info("oauth client created")
 
     let worker: CAWorker = new CAWorker(
         ioredis,
@@ -70,10 +71,16 @@ export async function setupAppContext(roles: Role[]) {
         logger
     )
 
+    const baseIdResolver = createIdResolver()
+    const resolver = createBidirectionalResolver(baseIdResolver, ioredis)
+    const xrpc = createServer()
+    logger.pino.info("xrpc server created")
+
     const mirrorId = `mirror-${env}`
-    console.log("Mirror ID", mirrorId)
+    logger.pino.info("Mirror ID", mirrorId)
 
     const redisCache = new RedisCache(ioredis, mirrorId)
+    logger.pino.info("redis cache created")
 
     const ctx: AppContext = {
         db,
@@ -91,6 +98,7 @@ export async function setupAppContext(roles: Role[]) {
 
     if(worker){
         await worker.setup(ctx)
+        logger.pino.info("worker steup")
     }
 
     return {ctx, logger}

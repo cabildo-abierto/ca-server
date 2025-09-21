@@ -1,5 +1,5 @@
 import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
+import {CAHandlerNoAuth} from "#/utils/handler";
 import {FeedSkeleton, getFeed, GetSkeletonProps} from "#/services/feed/feed";
 import {AppContext} from "#/setup";
 import {Agent} from "#/utils/session-agent";
@@ -267,10 +267,10 @@ async function hydrateRepliesSkeleton(ctx: AppContext, agent: Agent, skeleton: F
     await data.fetchFeedHydrationData(skeleton)
 
     let feed = skeleton
-        .map((e) => (hydrateFeedViewContent(e, data)))
+        .map((e) => (hydrateFeedViewContent(ctx, e, data)))
 
     feed.filter(isNotFoundPost).forEach(x => {
-        console.log("Content not found:", x.uri)
+        ctx.logger.pino.warn({uri: x.uri}, "content not found during hydration")
     })
 
     let res = feed
