@@ -7,31 +7,20 @@ import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-pr
 import {batchDeleteRecords} from "#/services/sync/event-processing/get-record-processor";
 
 
-export async function deleteRecordsForAuthor({ctx, agent, author, collections, atproto}: {ctx: AppContext, agent?: SessionAgent, author: string, collections?: string[], atproto: boolean}){
-    const uris = (await ctx.db.record.findMany({
-        select: {
-            uri: true
-        },
-        where: {
-            OR: [
-                {
-                    author: {
-                        did: author
-                    }
-                },
-                {
-                    author: {
-                        handle: author
-                    }
-                }
-            ],
-            collection: collections ? {
-                in: collections
-            } : undefined
-        }
-    })).map((r) => (r.uri))
+export async function deleteRecordsForAuthor({ctx, agent, did, collections, atproto}: {ctx: AppContext, agent?: SessionAgent, did: string, collections?: string[], atproto: boolean}){
+    const uris = await ctx.kysely
+        .selectFrom("Record")
+        .select("uri")
+        .where("authorId", "=", did)
+        .$if(collections != null && collections.length > 0, qb => qb.where("collection", "in", collections!))
+        .execute()
 
-    return await deleteRecords({ctx, agent, uris, atproto})
+    return await deleteRecords({
+        ctx,
+        agent,
+        uris: uris.map((r) => (r.uri)),
+        atproto
+    })
 }
 
 
@@ -48,15 +37,12 @@ export const deleteCollectionHandler: CAHandler<{params: {collection: string}}, 
 
 
 export async function deleteCollection(ctx: AppContext, collection: string){
-    const uris = (await ctx.db.record.findMany({
-        select: {
-            uri: true
-        },
-        where: {
-            collection: collection
-        }
-    })).map((r) => (r.uri))
-    await getDeleteProcessor(ctx, collection).process(uris)
+    const uris = await ctx.kysely.selectFrom("Record")
+        .select(["uri"])
+        .where("collection", "=", collection)
+        .execute()
+
+    await getDeleteProcessor(ctx, collection).process(uris.map(u => u.uri))
 }
 
 
@@ -83,20 +69,12 @@ export const deleteUserHandler: CAHandler<{params: {handleOrDid: string}}> = asy
 
 
 export async function deleteUser(ctx: AppContext, did: string) {
-    await deleteRecordsForAuthor({ctx, author: did, atproto: false})
+    await deleteRecordsForAuthor({ctx, did: did, atproto: false})
 
-    await ctx.db.$transaction([
-        ctx.db.blob.deleteMany({
-            where: {
-                authorId: did
-            }
-        }),
-        ctx.db.user.deleteMany({
-            where: {
-                did: did
-            }
-        })
-    ])
+    await ctx.kysely.transaction().execute(async trx => {
+        await trx.deleteFrom("Blob").where("authorId", "=", did).execute()
+        await trx.deleteFrom("User").where("did", "=", did).execute()
+    })
     // TO DO: Revisar que cache hace falta actualizar
 }
 

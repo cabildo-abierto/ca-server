@@ -31,32 +31,17 @@ import {
 
 
 const getTopicRepliesSkeleton = async (ctx: AppContext, id: string) => {
-    const replies = await ctx.db.record.findMany({
-        select: {uri: true},
-        where: {
-            OR: [
-                {
-                    content: {
-                        post: {
-                            replyTo: {
-                                collection: {
-                                    in: ["ar.com.cabildoabierto.topic", "ar.cabildoabierto.wiki.topicVersion"]
-                                },
-                                content: {
-                                    topicVersion: {
-                                        topicId: id
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-            ]
-        },
-        orderBy: {
-            createdAt: "desc"
-        }
-    })
+    const replies = await ctx.kysely
+        .selectFrom("Post")
+        .innerJoin("Record", "Record.uri", "Post.uri")
+        .innerJoin("Record as Parent", "Parent.uri", "Post.replyToId")
+        .innerJoin("TopicVersion", "TopicVersion.uri", "Parent.uri")
+        .select([
+            "Post.uri",
+        ])
+        .where("TopicVersion.topicId", "=", id)
+        .orderBy("Record.created_at desc")
+        .execute()
     return replies.map(r => ({post: r.uri}))
 }
 

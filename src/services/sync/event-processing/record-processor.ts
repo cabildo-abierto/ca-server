@@ -26,11 +26,16 @@ export class RecordProcessor<T> {
     }
 
     validateRecord(record: any): ValidationResult<T> {
-        throw Error("Sin implementar!")
+        this.ctx.logger.pino.info("Warning: Validación sin implementar para este tipo de record.")
+        return {
+            success: false,
+            error: Error("Sin implementar")
+        }
     }
 
     async addRecordsToDB(records: RefAndRecord<T>[]) {
-        throw Error("Sin implementar!")
+        if(records.length == 0) return
+        this.ctx.logger.pino.info({uri: records[0].ref.uri}, "Warning: Validación sin implementar para este tipo de record.")
     }
 
     async processInBatches(records: RefAndRecord[]){

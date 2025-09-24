@@ -2,8 +2,9 @@ import {AppContext} from "#/setup";
 import {getMonthlyValue} from "#/services/monetization/donations";
 import {getDidFromUri} from "#/utils/uri";
 import {sum} from "#/utils/arrays";
-import {JsonValue} from "@prisma/client/runtime/library";
 import {ReadChunks, ReadChunksAttr} from "#/services/monetization/read-tracking";
+import {jsonArrayFrom} from "kysely/helpers/postgres";
+import {v4 as uuidv4} from "uuid";
 
 function joinReadChunks(a: ReadChunks, b: ReadChunks): ReadChunks {
     const m = new Map<number, number>()
@@ -54,7 +55,7 @@ function isActive(readSessions: { readContentId: string | null, readChunks: Read
 }
 
 
-type UserWithReadSessions = {
+export type UserWithReadSessions = {
     did: string
     handle: string
     months: {
@@ -63,8 +64,8 @@ type UserWithReadSessions = {
     }[]
     readSessions: {
         readContentId: string | null,
-        readChunks: JsonValue
-        createdAt: Date
+        readChunks: unknown
+        created_at: Date
     }[]
 }
 
@@ -74,130 +75,140 @@ export async function getUsersWithReadSessions(
     after: Date = new Date(Date.now() - 60 * 24 * 3600 * 1000),
     verified: boolean = true
 ): Promise<UserWithReadSessions[]> {
-    const users = await ctx.db.user.findMany({
-        select: {
-            did: true,
-            handle: true,
-            userValidationHash: true,
-            months: {
-                select: {
-                    monthStart: true,
-                    monthEnd: true
-                },
-                orderBy: {
-                    monthStart: "desc"
-                },
-                take: 1
-            },
-            readSessions: {
-                select: {
-                    readContentId: true,
-                    readChunks: true,
-                    createdAt: true
-                },
-                orderBy: {
-                    createdAt: "asc"
-                },
-                where: {
-                    createdAt: {
-                        gt: after
-                    }
-                }
-            }
-        },
-        where: {
-            inCA: true,
-            hasAccess: true,
-            userValidationHash: verified ? {
-                not: null
-            } : undefined
-        }
-    })
+    try {
+        const users = await ctx.kysely
+            .selectFrom("User")
+            .select([
+                "did",
+                "handle",
+                "userValidationHash",
+                eb => jsonArrayFrom(eb
+                    .selectFrom("UserMonth")
+                    .whereRef("UserMonth.userId", "=", "User.did")
+                    .select([
+                        "monthStart",
+                        "monthEnd"
+                    ])
+                    .orderBy("monthStart desc")
+                    .limit(1)
+                ).as("months"),
+                eb => jsonArrayFrom(eb
+                    .selectFrom("ReadSession")
+                    .whereRef("ReadSession.userId", "=", "User.did")
+                    .select([
+                        "readContentId",
+                        "created_at",
+                        "readChunks"
+                    ])
+                    .where("created_at", ">", after)
+                    .orderBy("created_at asc")
+                    .limit(1)
+                ).as("readSessions")
+            ])
+            .where("User.inCA", "=", true)
+            .where("User.hasAccess", "=", true)
+            .$if(verified, qb => qb.where("User.userValidationHash", "is not", null))
+            .execute()
 
-    const valid: UserWithReadSessions[] = []
-    users.forEach(u => {
-        if (u.handle != null) {
-            valid.push({
-                ...u,
-                handle: u.handle
-            })
-        }
-    })
-    return valid
+        const valid: UserWithReadSessions[] = []
+        users.forEach(u => {
+            if (u.handle != null) {
+                valid.push({
+                    ...u,
+                    handle: u.handle
+                })
+            }
+        })
+        return valid
+    } catch (err) {
+        ctx.logger.pino.error({error: err}, "error getting users with read sessions")
+        throw err
+    }
 }
 
 
 // el siguiente mes empieza en el momento en el que terminó el último
-export function getNextMonthStart(user: {
-    months: { monthStart: Date, monthEnd: Date }[],
-    readSessions: { createdAt: Date }[]
-}) {
+export function getNextMonthStart(user: UserWithReadSessions) {
     if (user.months.length == 0) {
         if (user.readSessions.length > 0) {
-            return user.readSessions[0].createdAt
+            return new Date(user.readSessions[0].created_at)
         } else {
             return null
         }
     } else {
-        return user.months[0].monthEnd
+        return new Date(user.months[0].monthEnd)
     }
+}
+
+
+async function createMonthForUser(ctx: AppContext, user: UserWithReadSessions, value: number) {
+    const monthStart = getNextMonthStart(user)
+    if (!monthStart) {
+        ctx.logger.pino.info({handle: user.handle}, `todavía no empezó el primer mes.`)
+        return
+    }
+
+    if (monthStart > new Date()) {
+        ctx.logger.pino.info({handle: user.handle}, `tiene un mes asignado que no terminó. Revisar, no debería pasar.`)
+        return
+    }
+
+    const monthEnd = new Date(monthStart.getTime() + 30 * 24 * 3600 * 1000)
+
+    if (monthEnd > new Date()) {
+        ctx.logger.pino.info({handle: user.handle}, `skipeado, todavía no terminó el nuevo mes`)
+        return
+    }
+
+    const readSessions = user.readSessions.filter(s => monthStart <= s.created_at && monthEnd >= s.created_at)
+
+    const validatedReadSessions = readSessions.map(r => ({
+        ...r,
+        readChunks: r.readChunks as ReadChunksAttr
+    }))
+    const active = isActive(validatedReadSessions)
+
+    ctx.logger.pino.info({monthStart, monthEnd, handle: user.handle}, `creating user month`)
+    await ctx.kysely
+        .insertInto("UserMonth")
+        .values([{
+            id: uuidv4(),
+            userId: user.did,
+            monthStart,
+            monthEnd,
+            wasActive: active,
+            value: active ? value : 0,
+        }])
+        .execute()
 }
 
 
 export async function createUserMonths(ctx: AppContext) {
     // Se crean UserMonths para todos los usuarios cuyo último user month haya terminado o que tengan readSesions pero no user months
-    console.log("Creating user months...")
+    ctx.logger.pino.info("creating user months")
 
     let users = await getUsersWithReadSessions(ctx)
-    console.log(`Got ${users.length} users.`)
+    ctx.logger.pino.info(`got ${users.length} users with read sessions`)
 
     const value = getMonthlyValue()
+    ctx.logger.pino.info({monthlyValue: value})
 
     for (let user of users) {
-        console.log(`Evaluating user ${user.handle}`)
-        const monthStart = getNextMonthStart(user)
-
-        if (!monthStart) {
-            console.log(`${user.handle} todavía no empezó el primer mes.`)
-            continue
-        }
-
-        if (monthStart > new Date()) {
-            console.log(`${user.handle} tiene un mes asignado que no terminó. Revisar, no debería pasar.`)
-            continue
-        }
-
-        const monthEnd = new Date(monthStart.getTime() + 30 * 24 * 3600 * 1000)
-
-        if (monthEnd > new Date()) {
-            console.log(`Skipeando a ${user.handle}, todavía no terminó el nuevo mes.`, {monthStart, monthEnd})
-            continue
-        }
-
-        const readSessions = user.readSessions.filter(s => monthStart <= s.createdAt && monthEnd >= s.createdAt)
-
-        const validatedReadSessions = readSessions.map(r => ({
-            ...r,
-            readChunks: r.readChunks as ReadChunksAttr
-        }))
-        const active = isActive(validatedReadSessions)
-
-        console.log(`Creating user month (${monthStart}, ${monthEnd}) for ${user.handle}`)
-        await ctx.db.userMonth.create({
-            data: {
-                userId: user.did,
-                monthStart,
-                monthEnd,
-                wasActive: active,
-                value: active ? value : 0,
+        try {
+            await createMonthForUser(ctx, user, value)
+        } catch (err) {
+            if(err instanceof Error) {
+                ctx.logger.pino.error(
+                    {error: err.toString(), handle: user.handle},
+                    "error creating month for user"
+                )
             }
-        })
+        }
     }
-    console.log("Finished creating user months.")
 }
 
 
-async function recomputeMonthsIsActive(ctx: AppContext) {
+/*async function recomputeMonthsIsActive(ctx: AppContext) {
     const months = await ctx.kysely
         .selectFrom("UserMonth")
         .select([
@@ -234,4 +245,4 @@ async function recomputeMonthsIsActive(ctx: AppContext) {
             })))
             .execute()
     }
-}
+}*/

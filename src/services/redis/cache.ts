@@ -4,6 +4,7 @@ import {unique} from "#/utils/arrays";
 import {formatIsoDate} from "#/utils/dates";
 import {FollowingFeedSkeletonElement} from "#/services/feed/inicio/following";
 import {Profile} from "#/lib/types";
+import {CAHandler} from "#/utils/handler";
 
 
 class CacheKey {
@@ -350,4 +351,10 @@ export class RedisCache {
     async getKeysByPrefix(prefix: string) {
         return this.redis.keys(`${prefix}*`)
     }
+}
+
+export const clearRedisHandler: CAHandler<{ params: { prefix: string } }, {}> = async (ctx, agent, {params}) => {
+    console.log("Clearing redis prefix", params.prefix)
+    await ctx.redisCache.deleteByPrefix(params.prefix)
+    return {data: {}}
 }

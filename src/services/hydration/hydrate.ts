@@ -82,15 +82,15 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
 
     let text: string | null = null
     let format: string | null = null
-    if(e.content?.text != null){
-        text = e.content.text
-        format = e.content.dbFormat ?? null
-    } else if (e.content?.textBlobId) {
-        text = data.getFetchedBlob({cid: e.content?.textBlobId, authorId})
-        format = e.content?.format ?? null
+    if(e?.text != null){
+        text = e.text
+        format = e.dbFormat ?? null
+    } else if (e?.textBlobId) {
+        text = data.getFetchedBlob({cid: e?.textBlobId, authorId})
+        format = e?.format ?? null
     }
 
-    if (text == null || !e.content || !e.content.article || !e.content.article.title) return {error: "Ocurrió un error al cargar el contenido."}
+    if (text == null || !e || !e.title) return {error: "Ocurrió un error al cargar el contenido."}
 
     const embeds = hydrateEmbedViews(author.did, record?.embeds ?? [])
     const {summary, summaryFormat} = getArticleSummary(text, format ?? undefined)
@@ -100,23 +100,23 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
             $type: "ar.cabildoabierto.feed.defs#fullArticleView",
             uri: e.uri,
             cid: e.cid,
-            title: e.content.article.title,
+            title: e.title,
             text,
             format: format ?? undefined,
             summary,
             summaryFormat,
             author,
-            labels: dbLabelsToLabelsView(e.content?.selfLabels ?? [], uri),
+            labels: dbLabelsToLabelsView(e.selfLabels ?? [], uri),
             record: e.record ? JSON.parse(e.record) : {},
-            indexedAt: new Date(e.createdAt).toISOString(),
+            indexedAt: new Date(e.created_at).toISOString(),
             likeCount: e.uniqueLikesCount,
             repostCount: e.uniqueRepostsCount,
-            replyCount: e._count.replies,
+            replyCount: e.repliesCount,
             viewer,
             topicsMentioned: topicsMentioned.map(m => ({
                 count: m.count,
-                title: getTopicTitle({id: m.referencedTopic.id, props: m.referencedTopic?.currentVersion?.props as TopicProp[] | undefined}),
-                id: m.referencedTopic.id
+                title: getTopicTitle({id: m.id, props: m.props as TopicProp[] | undefined}),
+                id: m.id
             })),
             embeds
         }
@@ -162,7 +162,7 @@ export function getArticleSummary(text: string | null, format?: string) {
 }
 
 
-export function hydrateArticleView(uri: string, data: Dataplane): {
+export function hydrateArticleView(ctx: AppContext, uri: string, data: Dataplane): {
     data?: $Typed<ArticleView>
     error?: string
 } {
@@ -182,16 +182,19 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
 
     let text: string | null = null
     let format: string | null = null
-    if(e.content?.text != null){
-        text = e.content.text
-        format = e.content.dbFormat ?? null
-    } else if (e.content?.textBlobId) {
-        text = data.getFetchedBlob({cid: e.content?.textBlobId, authorId})
-        format = e.content?.format ?? null
+    if(e.text != null){
+        text = e.text
+        format = e.dbFormat ?? null
+    } else if (e.textBlobId) {
+        text = data.getFetchedBlob({cid: e?.textBlobId, authorId})
+        format = e.format ?? null
     }
 
-    if (!e.content?.article?.title) {
-        console.log(`No se encontraron los datos para hidratar el artículo (título): ${uri}`, !text || !e.content || !e.content.article || !e.content.article.title)
+    if (!e.title) {
+        ctx.logger.pino.warn({
+            uri,
+            title: e.title
+        }, "content not found")
         return {error: "Ocurrió un error al cargar el artículo."}
     }
 
@@ -202,16 +205,17 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
             $type: "ar.cabildoabierto.feed.defs#articleView",
             uri: e.uri,
             cid: e.cid,
-            title: e.content.article.title,
+            title: e.title,
             summary,
             summaryFormat,
-            labels: dbLabelsToLabelsView(e.content?.selfLabels ?? [], uri),
+            labels: dbLabelsToLabelsView(e.selfLabels ?? [], uri),
             author,
             record: e.record ? JSON.parse(e.record) : {},
-            indexedAt: new Date(e.createdAt).toISOString(),
+            indexedAt: e.created_at.toISOString(),
             likeCount: e.uniqueLikesCount,
             repostCount: e.uniqueRepostsCount,
-            replyCount: e._count.replies,
+            replyCount: e.repliesCount,
+            quoteCount: e.quotesCount,
             viewer
         }
     }
@@ -221,7 +225,7 @@ export function hydrateArticleView(uri: string, data: Dataplane): {
 function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedContent: string, data: Dataplane): $Typed<SelectionQuoteEmbedView> | null {
     const caData = data.caContents?.get(quotedContent)
 
-    if (caData && caData.content && caData.content) {
+    if (caData) {
         const authorId = getDidFromUri(caData.uri)
         const author = hydrateProfileViewBasic(authorId, data)
         if (!author) {
@@ -233,11 +237,11 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
 
         let text: string | null = null
         let format: string | null = null
-        if(caData.content?.text != null){
-            text = caData.content.text
-            format = caData.content.dbFormat ?? null
-        } else if (caData.content?.textBlobId) {
-            text = data.getFetchedBlob({cid: caData.content?.textBlobId, authorId})
+        if(caData.text != null){
+            text = caData.text
+            format = caData.dbFormat ?? null
+        } else if (caData.textBlobId) {
+            text = data.getFetchedBlob({cid: caData.textBlobId, authorId})
             format = record?.format ?? null
         }
         if (!text) return null
@@ -245,16 +249,16 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
         const collection = getCollectionFromUri(quotedContent)
         let title: string | undefined
         if (isArticle(collection)) {
-            title = caData.content.article?.title
-        } else if (isTopicVersion(collection) && caData.content.topicVersion?.topicId) {
+            title = caData.title ?? undefined
+        } else if (isTopicVersion(collection) && caData.topicId) {
             title = getTopicTitle({
-                id: caData.content.topicVersion.topicId,
-                props: caData.content.topicVersion.props as unknown as TopicProp[]
+                id: caData.topicId,
+                props: caData.props as TopicProp[]
             })
         }
         if (!title) return null
 
-        const embedsData = caData.content.embeds ?? []
+        const embedsData = caData.embeds ?? []
         const embeds = hydrateEmbedViews(author.did, embedsData as unknown as ArticleEmbed[])
 
         return {
@@ -277,7 +281,7 @@ function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedConten
 function hydrateVisualizationEmbedView(ctx: AppContext, embed: VisualizationEmbed, data: Dataplane): $Typed<VisualizationEmbedView> | null {
     if(isDatasetDataSource(embed.dataSource)){
         const datasetUri = embed.dataSource.dataset
-        const dataset = hydrateDatasetView(datasetUri, data)
+        const dataset = hydrateDatasetView(ctx, datasetUri, data)
         if(dataset){
             return {
                 visualization: embed,
@@ -305,7 +309,7 @@ function hydrateRecordEmbedView(ctx: AppContext, embed: CARecordEmbed | RecordEm
     const collection = getCollectionFromUri(uri)
 
     if(isArticle(collection)) {
-        const artView = hydrateArticleView(uri, data)
+        const artView = hydrateArticleView(ctx, uri, data)
         if(artView.data) {
             return {
                 $type: "ar.cabildoabierto.embed.record#view",
@@ -328,7 +332,7 @@ function hydrateRecordEmbedView(ctx: AppContext, embed: CARecordEmbed | RecordEm
 }
 
 
-function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): { data?: $Typed<PostView>, error?: string } {
+export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): { data?: $Typed<PostView>, error?: string } {
     const post = data.bskyPosts?.get(uri)
     const caData = data.caContents?.get(uri)
 
@@ -377,7 +381,7 @@ function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): { data?
         data: {
             ...post,
             author,
-            labels: dbLabelsToLabelsView(caData?.content?.selfLabels ?? [], uri),
+            labels: dbLabelsToLabelsView(caData?.selfLabels ?? [], uri),
             $type: "ar.cabildoabierto.feed.defs#postView",
             embed: embedView,
             ...(caData ? {
@@ -405,11 +409,11 @@ export function hydrateContent(ctx: AppContext, uri: string, data: Dataplane, fu
     if (isPost(collection)) {
         return hydratePostView(ctx, uri, data)
     } else if (isArticle(collection)) {
-        return full ? hydrateFullArticleView(uri, data) : hydrateArticleView(uri, data)
+        return full ? hydrateFullArticleView(uri, data) : hydrateArticleView(ctx, uri, data)
     } else if (isTopicVersion(collection)) {
         return hydrateTopicViewBasicFromUri(uri, data)
     } else if(isDataset(collection)) {
-        const res = hydrateDatasetView(uri, data)
+        const res = hydrateDatasetView(ctx, uri, data)
         if(res) return {data: res}; else return {error: "No se pudo hidratar el dataset."}
     } else {
         console.log("Warning: Hidratación no implementada para: ", collection)
@@ -436,11 +440,11 @@ function hydrateFeedViewContentReason(subjectUri: string, reason: SkeletonFeedPo
             return null
         }
         const repostData = data.reposts.get(subjectUri)
-        if(!repostData || !repostData.createdAt) {
+        if(!repostData || !repostData.created_at) {
             console.log("Warning: no se encontró el repost", reason.repost)
             return null
         }
-        const indexedAt = repostData.createdAt.toISOString()
+        const indexedAt = repostData.created_at.toISOString()
         return {
             $type: "app.bsky.feed.defs#reasonRepost",
             by: {
@@ -463,7 +467,7 @@ export function hydrateFeedViewContent(ctx: AppContext, e: SkeletonFeedPost, dat
     const reply = childBsky ? (childBsky.record as PostRecord).reply : null
 
     if (isPost(getCollectionFromUri(e.post)) && !childBsky) {
-        console.log("Warning: No se encontró el post en Bluesky. Uri: ", e.post)
+        ctx.logger.pino.warn({uri: e.post, reason: "not in bsky posts"}, "content not found")
     }
 
     const leaf = hydrateContent(ctx, e.post, data)

@@ -1,5 +1,5 @@
 import {AppContext} from "#/setup";
-import {NoSessionAgent, SessionAgent} from "#/utils/session-agent";
+import {bskyPublicAPI, NoSessionAgent, SessionAgent} from "#/utils/session-agent";
 import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs";
 import {ProfileViewBasic, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
@@ -7,10 +7,9 @@ import {
     BlobRef, ThreadSkeleton
 } from "#/services/hydration/hydrate";
 import {FeedSkeleton} from "#/services/feed/feed";
-import {getObjectKey, gett, removeNullValues, unique} from "#/utils/arrays";
+import {getObjectKey, removeNullValues, unique} from "#/utils/arrays";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
 import {
-    articleUris,
     getCollectionFromUri,
     getDidFromUri,
     isArticle,
@@ -20,8 +19,7 @@ import {
     topicVersionUris
 } from "#/utils/uri";
 import {$Typed} from "@atproto/api";
-import {TopicQueryResultBasic} from "#/services/wiki/topics";
-import {reactionsQuery, recordQuery} from "#/utils/utils";
+import {TopicVersionQueryResultBasic} from "#/services/wiki/topics";
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {
     FeedViewPost,
@@ -30,7 +28,6 @@ import {
     PostView, ThreadViewPost
 } from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {fetchTextBlobs} from "#/services/blob";
-import {Prisma} from "@prisma/client";
 import {env} from "#/lib/env";
 import {AtpBaseClient} from "#/lex-api";
 import {RepostQueryResult} from "#/services/feed/inicio/following";
@@ -41,80 +38,56 @@ import {NotificationQueryResult, NotificationsSkeleton} from "#/services/notific
 import {equalFilterCond, inFilterCond, stringListIncludes} from "#/services/dataset/read";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-
+import { jsonArrayFrom } from 'kysely/helpers/postgres'
 import {
     ColumnFilter,
     isColumnFilter
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {getUrisFromThreadSkeleton} from "#/services/thread/thread";
 import {prettyPrintJSON} from "#/utils/strings";
+import {ProfileView} from "#/lex-api/types/app/bsky/actor/defs";
 
 
 export type FeedElementQueryResult = {
     uri: string
     cid: string
-    createdAt: Date | string,
+    created_at: Date,
     record: string | null
-    _count: {
-        replies: number
-    }
+    repliesCount: number
+    quotesCount: number
     uniqueLikesCount: number
     uniqueRepostsCount: number
-    content: {
-        text: string | null
-        textBlobId?: string | null
-        format?: string | null
-        dbFormat?: string | null
-        selfLabels: string[]
-        article?: {
-            title: string
-        } | null
-        topicVersion?: {
-            props: Prisma.JsonValue | null
-            topicId: string
-        } | null
-        datasetsUsed: { uri: string }[]
-        embeds: Prisma.JsonValue | null
-    } | null
+    text: string | null
+    textBlobId: string | null
+    format: string | null
+    dbFormat: string | null
+    selfLabels: string[]
+    title: string | null
+    props: unknown
+    topicId: string | null
+    embeds: unknown
+    datasetsUsed: { uri: string }[]
 }
 
 
 export type DatasetQueryResult = {
     uri: string
-    cid: string | null
-    createdAt: Date | string,
-    record: string | null
-    author: {
-        did: string
-        handle: string | null
-        displayName: string | null
-        avatar: string | null
-        CAProfileUri: string | null
-        userValidationHash: string | null
-        orgValidation: string | null
-    }
-    dataset: {
-        title: string
-        description: string | null
-        columns: string[]
-        dataBlocks: {
-            blob: {
-                cid: string
-            } | null
-            format: string | null
-        }[]
-    } | null
+    cid: string
+    created_at: Date
+    title: string
+    description: string | null
+    columns: string[]
+    dataBlocks: {
+        cid: string
+        format: string | null
+    }[]
 }
 
 
 export type TopicMentionedProps = {
-    referencedTopic: {
-        id: string
-        currentVersion: {
-            props: Prisma.JsonValue
-        } | null
-    }
     count: number
+    id: string
+    props: unknown
 }
 
 
@@ -147,9 +120,9 @@ export class Dataplane {
     bskyPosts: Map<string, BskyPostView> = new Map()
     likes: Map<string, string | null> = new Map()
     reposts: Map<string, RepostQueryResult | null> = new Map() // mapea uri del post a información del repost asociado
-    bskyUsers: Map<string, $Typed<ProfileViewBasic> | $Typed<ProfileViewDetailed>> = new Map()
+    bskyUsers: Map<string, $Typed<ProfileViewBasic> | $Typed<ProfileViewDetailed> | $Typed<ProfileView>> = new Map()
     caUsers: Map<string, CAProfileViewBasic> = new Map()
-    topicsByUri: Map<string, TopicQueryResultBasic> = new Map()
+    topicsByUri: Map<string, TopicVersionQueryResultBasic> = new Map()
     textBlobs: Map<string, string> = new Map()
     datasets: Map<string, DatasetQueryResult> = new Map()
     datasetContents: Map<string, string[]> = new Map()
@@ -164,7 +137,7 @@ export class Dataplane {
         this.ctx = ctx
         this.agent = agent ?? new NoSessionAgent(
             new AtpBaseClient(`${env.HOST}:${env.PORT}`),
-            new AtpBaseClient("https://bsky.social")
+            new AtpBaseClient(bskyPublicAPI)
         )
     }
 
@@ -175,11 +148,11 @@ export class Dataplane {
 
         const contents = Array.from(this.caContents?.values() ?? [])
         const blobRefs = blobRefsFromContents(contents
-            .filter(c => c.content && c.content.text == null)
+            .filter(c => c.text == null)
         )
 
         const datasets = contents.reduce((acc, cur) => {
-            return [...acc, ...cur.content?.datasetsUsed.map(d => d.uri) ?? []]
+            return [...acc, ...(cur.datasetsUsed.map(d => d.uri) ?? [])]
         }, [] as string[])
 
         const filters = contents.reduce((acc, cur) => {
@@ -225,126 +198,56 @@ export class Dataplane {
         uris = uris.filter(u => !this.caContents?.has(u))
         if (uris.length == 0) return
 
-        const posts = postUris(uris)
-        const articles = articleUris(uris)
-        const topicVersions = topicVersionUris(uris)
+        const contents = await this.ctx.kysely
+            .selectFrom("Record")
+            .where("Record.uri", "in", uris)
+            .where("Record.cid", "is not", null)
+            .where("Record.record", "is not", null)
+            .innerJoin("Content", "Content.uri", "Record.uri")
+            .leftJoin("Article", "Article.uri", "Record.uri")
+            .leftJoin("TopicVersion", "TopicVersion.uri", "Record.uri")
+            .select([
+                "Record.uri",
+                "Record.cid",
+                "Record.created_at",
+                "Record.uniqueLikesCount",
+                "Record.uniqueRepostsCount",
+                eb => eb
+                    .selectFrom("Post as Reply")
+                    .select(eb => eb.fn.count<number>("Reply.uri").as("count"))
+                    .whereRef("Reply.replyToId", "=", "Record.uri").as("repliesCount"),
+                eb => eb
+                    .selectFrom("Post as Quote")
+                    .select(eb => eb.fn.count<number>("Quote.uri").as("count"))
+                    .whereRef("Quote.quoteToId", "=", "Record.uri").as("quotesCount"),
+                "Record.record",
+                "Content.text",
+                "Content.selfLabels",
+                "Content.embeds",
+                "Content.dbFormat",
+                "Content.format",
+                "Content.textBlobId",
+                "Article.title",
+                "TopicVersion.topicId",
+                "TopicVersion.props",
+                eb => jsonArrayFrom(eb
+                    .selectFrom("_ContentToDataset")
+                    .select("_ContentToDataset.B as uri")
+                    .whereRef("_ContentToDataset.A", "=", "Content.uri")
+                ).as("datasetsUsed")
+            ])
+            .execute()
 
-        const [postContents, articleContents, topicVersionContents] = await Promise.all([
-            posts.length > 0 ? this.ctx.db.record.findMany({
-                select: {
-                    uri: true,
-                    cid: true,
-                    createdAt: true,
-                    ...reactionsQuery,
-                    record: true,
-                    content: {
-                        select: {
-                            text: true,
-                            selfLabels: true,
-                            embeds: true,
-                            datasetsUsed: {
-                                select: {uri: true}
-                            }
-                        }
-                    }
-                },
-                where: {
-                    uri: {
-                        in: posts
-                    }
-                }
-            }) : [],
-            articles.length > 0 ? this.ctx.db.record.findMany({
-                select: {
-                    uri: true,
-                    cid: true,
-                    createdAt: true,
-                    ...reactionsQuery,
-                    record: true,
-                    content: {
-                        select: {
-                            text: true,
-                            format: true,
-                            dbFormat: true,
-                            textBlobId: true,
-                            selfLabels: true,
-                            embeds: true,
-                            article: {
-                                select: {
-                                    title: true
-                                }
-                            },
-                            datasetsUsed: {
-                                select: {uri: true}
-                            }
-                        }
-                    }
-                },
-                where: {
-                    uri: {
-                        in: articles
-                    }
-                }
-            }) : [],
-            topicVersions.length > 0 ? this.ctx.db.record.findMany({
-                select: {
-                    uri: true,
-                    cid: true,
-                    createdAt: true,
-                    ...reactionsQuery,
-                    record: true,
-                    content: {
-                        select: {
-                            text: true,
-                            format: true,
-                            dbFormat: true,
-                            selfLabels: true,
-                            textBlobId: true,
-                            embeds: true,
-                            topicVersion: {
-                                select: {
-                                    props: true,
-                                    topicId: true
-                                }
-                            },
-                            datasetsUsed: {
-                                select: {uri: true}
-                            }
-                        }
-                    }
-                },
-                where: {
-                    uri: {
-                        in: topicVersions
-                    }
-                }
-            }) : []
-        ])
-
-        let contents: FeedElementQueryResult[] = []
-
-        const res = [...postContents, ...articleContents, ...topicVersionContents]
-
-        res.forEach(r => {
-            if (r.cid) {
-                contents.push({
-                    ...r,
-                    cid: r.cid,
-                    content: {
-                        ...r.content,
-                        text: r.content?.text != null ? r.content?.text : null,
-                        selfLabels: r.content?.selfLabels ?? [],
-                        datasetsUsed: r.content?.datasetsUsed ?? [],
-                        embeds: r.content?.embeds ?? null
-                    }
+        contents.forEach(c => {
+            if(c.cid){
+                this.caContents.set(c.uri, {
+                    ...c,
+                    repliesCount: c.repliesCount ?? 0,
+                    quotesCount: c.quotesCount ?? 0,
+                    cid: c.cid
                 })
             }
         })
-
-        const m = new Map<string, FeedElementQueryResult>(
-            contents.map(c => [c.uri, c])
-        )
-        this.caContents = joinMaps(this.caContents, m)
     }
 
     async fetchTextBlobs(blobs: BlobRef[]) {
@@ -380,52 +283,27 @@ export class Dataplane {
 
     async fetchTopicsBasicByUris(uris: string[]) {
         uris = uris.filter(u => !this.topicsByUri?.has(u))
+        if(uris.length == 0) return
 
-        const data = await this.ctx.db.topicVersion.findMany({
-            select: {
-                uri: true,
-                topic: {
-                    select: {
-                        id: true,
-                        popularityScoreLastDay: true,
-                        popularityScoreLastWeek: true,
-                        popularityScoreLastMonth: true,
-                        lastEdit: true,
-                        currentVersion: {
-                            select: {
-                                props: true,
-                                synonyms: true,
-                                categories: true
-                            }
-                        }
-                    }
-                },
-                content: {
-                    select: {
-                        numWords: true
-                    }
-                }
-            },
-            where: {
-                uri: {
-                    in: uris
-                }
-            }
-        })
+        const data: TopicVersionQueryResultBasic[] = await this.ctx.kysely
+            .selectFrom("TopicVersion")
+            .innerJoin("Topic", "Topic.id", "TopicVersion.topicId")
+            .innerJoin("TopicVersion as CurrentVersion", "CurrentVersion.uri", "Topic.currentVersionId")
+            .innerJoin("Content", "TopicVersion.uri", "Content.uri")
+            .select([
+                "TopicVersion.uri",
+                "Topic.id",
+                "Topic.popularityScoreLastDay",
+                "Topic.popularityScoreLastWeek",
+                "Topic.popularityScoreLastMonth",
+                "Topic.lastEdit",
+                "CurrentVersion.props",
+                "Content.numWords"
+            ])
+            .where("TopicVersion.uri", "in", uris)
+            .execute()
 
-        const queryResults: { uri: string, topic: TopicQueryResultBasic }[] = []
-
-        data.forEach(item => {
-            queryResults.push({
-                uri: item.uri,
-                topic: {
-                    ...item.topic,
-                    numWords: item.content.numWords
-                }
-            })
-        })
-
-        const mapByUri = new Map(queryResults.map(item => [item.uri, item.topic]))
+        const mapByUri = new Map(data.map(item => [item.uri, item]))
 
         this.topicsByUri = joinMaps(this.topicsByUri, mapByUri)
     }
@@ -437,26 +315,23 @@ export class Dataplane {
             .filter(x => x != null)
 
         const t1 = Date.now()
+        const pUris = postUris(uris)
+
         const caPosts = (await Promise.all([
-            this.fetchBskyPosts(postUris(uris)),
-            this.ctx.db.post.findMany({
-                select: {
-                    uri: true,
-                    replyToId: true,
-                    rootId: true
-                },
-                where: {
-                    uri: {
-                        in: postUris(uris)
-                    }
-                }
-            })
+            this.fetchBskyPosts(pUris),
+            pUris.length > 0 ? this.ctx.kysely
+                .selectFrom("Post")
+                .select(["uri", "replyToId", "rootId"])
+                .where("uri", "in", pUris)
+                .execute() : []
         ]))[1]
         const t2 = Date.now()
 
         this.ctx.logger.logTimes("expanding uris with replies and reposts", [t1, t2])
 
-        const bskyPosts = uris.map(u => this.bskyPosts?.get(u)).filter(x => x != null)
+        const bskyPosts = uris
+            .map(u => this.bskyPosts?.get(u))
+            .filter(x => x != null)
 
         return unique([
             ...uris,
@@ -504,27 +379,23 @@ export class Dataplane {
         uris = uris.filter(u => getCollectionFromUri(u) == "app.bsky.feed.repost")
         if(uris.length > 0){
             const t1 = Date.now()
-            const reposts: RepostQueryResult[] = await this.ctx.db.record.findMany({
-                select: {
-                    uri: true,
-                    createdAt: true,
-                    reaction: {
-                        select: {
-                            subjectId: true
-                        }
-                    }
-                },
-                where: {
-                    uri: {
-                        in: uris
-                    }
-                }
-            })
+
+            const reposts: RepostQueryResult[] = await this.ctx.kysely
+                .selectFrom("Reaction")
+                .innerJoin("Record", "Reaction.uri", "Record.uri")
+                .select([
+                    "Record.uri",
+                    "Record.created_at",
+                    "Reaction.subjectId"
+                ])
+                .where("Reaction.uri", "in", uris)
+                .execute()
+
             const t2 = Date.now()
             this.ctx.logger.logTimes("fetch reposts", [t1, t2])
             reposts.forEach(r => {
-                if(r.reaction?.subjectId){
-                    this.reposts.set(r.reaction.subjectId, r)
+                if(r.subjectId){
+                    this.reposts.set(r.subjectId, r)
                 }
             })
         }
@@ -636,26 +507,21 @@ export class Dataplane {
     async fetchEngagement(uris: string[]) {
         const agent = this.agent
         if (!agent.hasSession()) return
+        if(uris.length == 0) return
 
         const did = agent.did
         const t1 = Date.now()
-        const reactions = await this.ctx.db.reaction.findMany({
-            select: {
-                subjectId: true,
-                uri: true
-            },
-            where: {
-                record: {
-                    authorId: did,
-                    collection: {
-                        in: ["app.bsky.feed.like", "app.bsky.feed.repost"]
-                    }
-                },
-                subjectId: {
-                    in: uris
-                }
-            }
-        })
+        const reactions = await this.ctx.kysely
+            .selectFrom("Reaction")
+            .innerJoin("Record", "Record.uri", "Reaction.uri")
+            .select([
+                "Reaction.uri",
+                "Reaction.subjectId"
+            ])
+            .where("Record.authorId", "=", did)
+            .where("Record.collection", "in", ["app.bsky.feed.like", "app.bsky.feed.repost"])
+            .where("Reaction.subjectId", "in", uris)
+            .execute()
         const t2 = Date.now()
         this.ctx.logger.logTimes("fetch engagement", [t1, t2])
 
@@ -667,8 +533,8 @@ export class Dataplane {
                 if (getCollectionFromUri(l.uri) == "app.bsky.feed.repost") {
                     if (!this.reposts.has(l.subjectId)) this.reposts.set(l.subjectId, {
                         uri: l.uri,
-                        createdAt: null,
-                        reaction: null
+                        created_at: null,
+                        subjectId: l.subjectId
                     })
                 }
             }
@@ -718,10 +584,8 @@ export class Dataplane {
             if (f.reason) {
                 if (isReasonRepost(f.reason) && f.post.uri) {
                     this.reposts.set(f.post.uri, {
-                        createdAt: new Date(f.reason.indexedAt),
-                        reaction: {
-                            subjectId: f.post.uri
-                        }
+                        created_at: new Date(f.reason.indexedAt),
+                        subjectId: f.post.uri
                     })
                 }
             }
@@ -734,41 +598,54 @@ export class Dataplane {
     async fetchDatasetsHydrationData(uris: string[]) {
         uris = uris.filter(u => !this.datasets?.has(u))
         if (uris.length == 0) return
-        let datasets: DatasetQueryResult[] = await this.ctx.db.record.findMany({
-            select: {
-                ...recordQuery,
-                dataset: {
-                    select: {
-                        title: true,
-                        columns: true,
-                        description: true,
-                        dataBlocks: {
-                            select: {
-                                blob: {
-                                    select: {
-                                        cid: true,
-                                        authorId: true
-                                    }
-                                },
-                                format: true
-                            }
-                        }
-                    }
-                }
-            },
-            where: {
-                uri: {
-                    in: uris
-                }
+
+        const datasetsQuery = this.ctx.kysely
+            .selectFrom("Dataset")
+            .innerJoin("Record", "Record.uri", "Dataset.uri")
+            .where("Record.cid", "is not", null)
+            .where("Record.record", "is not", null)
+            .select([
+                "Dataset.uri",
+                "Record.cid",
+                "Record.created_at",
+                "Dataset.title",
+                "Dataset.columns",
+                "Dataset.description",
+                eb => jsonArrayFrom(eb
+                    .selectFrom("DataBlock")
+                    .innerJoin("Blob", "DataBlock.cid", "Blob.cid")
+                    .whereRef("DataBlock.datasetId", "=", "Dataset.uri")
+                    .select([
+                        "Blob.cid",
+                        "DataBlock.format"
+                    ])
+                ).as("dataBlocks")
+            ])
+            .where("Dataset.uri", "in", uris)
+            .execute()
+
+        const dids = unique(uris.map(getDidFromUri))
+
+        const [datasets] = await Promise.all([
+            datasetsQuery,
+            this.fetchUsersHydrationData(dids)
+        ])
+
+        for(const d of datasets) {
+            if(d.cid) {
+                this.datasets.set(d.uri, {
+                    ...d,
+                    cid: d.cid
+                })
             }
-        })
-        this.datasets = joinMaps(this.datasets,
-            new Map(datasets.map(d => [d.uri, d]))
-        )
+        }
     }
 
     async fetchDatasetContents(uris: string[]) {
+        uris = uris.filter(u => isDataset(getCollectionFromUri(u)))
         uris = uris.filter(u => !this.datasetContents?.has(u))
+
+        if(uris.length == 0) return
 
         await this.fetchDatasetsHydrationData(uris)
 
@@ -777,26 +654,35 @@ export class Dataplane {
         for (let i = 0; i < uris.length; i++) {
             const uri = uris[i]
             const d = this.datasets?.get(uri)
-            if (!d || !d.dataset) return
+            if (!d) return
 
             const authorId = getDidFromUri(uri)
-            const blocks = d.dataset.dataBlocks
-            blobs.push(...blocks
-                .map(b => b.blob)
-                .filter(b => b != null)
-                .filter(b => b.cid != null)
-                .map(b => ({...b, authorId}))
-                .map(b => ({blobRef: b, datasetUri: uri})))
+            const blocks = d.dataBlocks
+
+            blobs.push(...blocks.map(b => {
+                return {
+                    blobRef: {
+                        cid: b.cid,
+                        authorId
+                    },
+                    datasetUri: uri
+                }
+            }))
         }
 
-        const contents = (await fetchTextBlobs(this.ctx, blobs.map(b => b.blobRef))).filter(c => c != null)
+        const contents = (await fetchTextBlobs(this.ctx, blobs.map(b => b.blobRef)))
+            .filter(c => c != null)
 
         const datasetContents = new Map<string, string[]>()
         for (let i = 0; i < blobs.length; i++) {
             const uri = blobs[i].datasetUri
             const content = contents[i]
-            if (!datasetContents.has(uri)) datasetContents.set(uri, [content])
-            else datasetContents.set(uri, [...gett(datasetContents, uri), content])
+            const cur = datasetContents.get(uri)
+            if(!cur){
+                datasetContents.set(uri, [content])
+            } else {
+                cur.push(content)
+            }
         }
 
         this.datasetContents = joinMaps(this.datasetContents, datasetContents)
@@ -804,24 +690,19 @@ export class Dataplane {
 
 
     async fetchTopicsMentioned(uri: string) {
-        const topics: TopicMentionedProps[] = await this.ctx.db.reference.findMany({
-            select: {
-                referencedTopic: {
-                    select: {
-                        id: true,
-                        currentVersion: {
-                            select: {
-                                props: true
-                            }
-                        }
-                    }
-                },
-                count: true
-            },
-            where: {
-                referencingContentId: uri
-            }
-        })
+
+        const topics: TopicMentionedProps[] = await this.ctx.kysely
+            .selectFrom("Reference")
+            .innerJoin("Topic", "Reference.referencedTopicId", "Topic.id")
+            .innerJoin("TopicVersion", "Topic.currentVersionId", "TopicVersion.uri")
+            .select([
+                "count",
+                "Topic.id",
+                "TopicVersion.props"
+            ])
+            .where("Reference.referencingContentId", "=", uri)
+            .execute()
+
         if (!this.topicsMentioned) this.topicsMentioned = new Map()
         this.topicsMentioned.set(uri, topics)
     }
@@ -831,22 +712,20 @@ export class Dataplane {
         if (dids.length == 0) return
 
         const t1 = Date.now()
-        const data = await this.ctx.db.user.findMany({
-            select: {
-                did: true,
-                CAProfileUri: true,
-                displayName: true,
-                handle: true,
-                avatar: true,
-                userValidationHash: true,
-                orgValidation: true
-            },
-            where: {
-                did: {
-                    in: dids
-                }
-            }
-        })
+
+        const data = await this.ctx.kysely
+            .selectFrom("User")
+            .select([
+                "did",
+                "CAProfileUri",
+                "displayName",
+                "handle",
+                "avatar",
+                "userValidationHash",
+                "orgValidation"
+            ])
+            .where("did", "in", dids)
+            .execute()
 
         const res: CAProfileViewBasic[] = []
 

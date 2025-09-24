@@ -84,28 +84,25 @@ async function createPaymentPromisesForTopicVersions(ctx: AppContext, value: num
 
 export async function createPaymentPromises(ctx: AppContext) {
 
-    let months = (await ctx.db.userMonth.findMany({
-        select: {
-            id: true,
-            user: {
-                select: {
-                    did: true,
-                    handle: true
-                }
-            },
-            monthStart: true,
-            monthEnd: true,
-            _count: {
-                select: {
-                    paymentPromises: true
-                }
-            }
-        },
-        where: {
-            wasActive: true,
-            promisesCreated: false
-        }
-    })).filter(m => m._count.paymentPromises == 0)
+    let months = await ctx.kysely
+        .selectFrom("UserMonth")
+        .innerJoin("User", "User.did", "UserMonth.userId")
+        .select([
+            "id",
+            "User.did",
+            "User.handle",
+            "monthStart",
+            "monthEnd",
+            eb => eb.fn.count<number>(eb => eb
+                .selectFrom("PaymentPromise")
+                .whereRef("PaymentPromise.userMonthId", "=", "UserMonth.id")
+            ).as("paymentPromises")
+        ])
+        .where("wasActive", "=", true)
+        .where("promisesCreated", "=", false)
+        .execute()
+
+    months = months.filter(m => m.paymentPromises == 0)
 
     const value = getMonthlyValue()
 
@@ -115,16 +112,16 @@ export async function createPaymentPromises(ctx: AppContext) {
         if (m.monthEnd > new Date()) {
             continue
         }
-        console.log("Creating payment promises for month", months[i].monthStart, "of user", m.user.handle)
+        ctx.logger.pino.info({month: months[i].monthStart, handle: m.handle}, "creating payment promises for month")
 
         const readSessions = await ctx.kysely
             .selectFrom("ReadSession")
             .select(["readContentId", "readChunks"])
             .leftJoin("Record", "Record.uri", "readContentId")
-            .where("userId", "=", m.user.did)
+            .where("userId", "=", m.did)
             .where("ReadSession.created_at", ">", m.monthStart)
             .where("ReadSession.created_at", "<", m.monthEnd)
-            .where("Record.authorId", "!=", m.user.did)
+            .where("Record.authorId", "!=", m.did)
             .execute()
 
         console.log(`Found ${readSessions.length} read sessions`)
@@ -151,13 +148,12 @@ export async function createPaymentPromises(ctx: AppContext) {
         promises.push(...topicVersionPromises)
     }
 
-    console.log(`Inserting ${promises.length} new promises.`)
+    ctx.logger.pino.info(`Inserting ${promises.length} new payment promises.`)
 
     promises.forEach((p, index) => {
         if (promises.slice(0, index).some(p2 => p2.contentId == p.contentId && p2.userMonthId == p.userMonthId)) {
             console.log("Repeated promises!")
-            console.log("p1", p)
-            console.log("p2", p)
+            ctx.logger.pino.warn(p, `repeated promises`)
         }
     })
 

@@ -4,22 +4,24 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   : ColumnType<T, T | undefined, T>;
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export const EditorStatus = {
+    Beginner: "Beginner",
+    Editor: "Editor",
+    Administrator: "Administrator"
+} as const;
+export type EditorStatus = (typeof EditorStatus)[keyof typeof EditorStatus];
 export const ModerationState = {
     Ok: "Ok",
     ShadowBan: "ShadowBan"
 } as const;
 export type ModerationState = (typeof ModerationState)[keyof typeof ModerationState];
-export const ValidationType = {
-    Persona: "Persona",
-    Organizacion: "Organizacion"
+export const NotificationType = {
+    Reply: "Reply",
+    Mention: "Mention",
+    TopicEdit: "TopicEdit",
+    TopicVersionVote: "TopicVersionVote"
 } as const;
-export type ValidationType = (typeof ValidationType)[keyof typeof ValidationType];
-export const ValidationRequestResult = {
-    Aceptada: "Aceptada",
-    Rechazada: "Rechazada",
-    Pendiente: "Pendiente"
-} as const;
-export type ValidationRequestResult = (typeof ValidationRequestResult)[keyof typeof ValidationRequestResult];
+export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 export const PromiseStatus = {
     Pending: "Pending",
     Confirmed: "Confirmed",
@@ -31,19 +33,17 @@ export const ReferenceType = {
     Weak: "Weak"
 } as const;
 export type ReferenceType = (typeof ReferenceType)[keyof typeof ReferenceType];
-export const EditorStatus = {
-    Beginner: "Beginner",
-    Editor: "Editor",
-    Administrator: "Administrator"
+export const ValidationRequestResult = {
+    Aceptada: "Aceptada",
+    Rechazada: "Rechazada",
+    Pendiente: "Pendiente"
 } as const;
-export type EditorStatus = (typeof EditorStatus)[keyof typeof EditorStatus];
-export const NotificationType = {
-    Reply: "Reply",
-    Mention: "Mention",
-    TopicEdit: "TopicEdit",
-    TopicVersionVote: "TopicVersionVote"
+export type ValidationRequestResult = (typeof ValidationRequestResult)[keyof typeof ValidationRequestResult];
+export const ValidationType = {
+    Persona: "Persona",
+    Organizacion: "Organizacion"
 } as const;
-export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
+export type ValidationType = (typeof ValidationType)[keyof typeof ValidationType];
 export type AccessRequest = {
     id: string;
     created_at: Generated<Timestamp>;
@@ -53,8 +53,8 @@ export type AccessRequest = {
     inviteCodeId: string | null;
 };
 export type Article = {
-    uri: string;
     title: string;
+    uri: string;
 };
 export type AuthSession = {
     key: string;
@@ -73,18 +73,18 @@ export type CategoryLink = {
     idCategoryB: string;
 };
 export type Content = {
-    uri: string;
     text: string | null;
-    textBlobId: string | null;
-    format: string | null;
-    dbFormat: string | null;
     numWords: number | null;
+    uri: string;
+    format: string | null;
+    textBlobId: string | null;
     lastReferencesUpdate: Timestamp | null;
     selfLabels: string[];
     embeds: unknown[];
+    dbFormat: string | null;
     created_at: Generated<Timestamp>;
-    likesScore: number | null;
     interactionsScore: number | null;
+    likesScore: number | null;
     relativePopularityScore: number | null;
 };
 export type ContentToDataset = {
@@ -97,15 +97,15 @@ export type DataBlock = {
     format: string | null;
 };
 export type Dataset = {
-    uri: string;
     columns: string[];
     title: string;
+    uri: string;
     description: string | null;
 };
 export type Donation = {
     id: string;
-    created_at: Generated<Timestamp>;
     userById: string | null;
+    created_at: Generated<Timestamp>;
     transactionId: string | null;
     amount: number;
     mpPreferenceId: string | null;
@@ -114,21 +114,21 @@ export type Draft = {
     id: string;
     created_at: Generated<Timestamp>;
     lastUpdate: Generated<Timestamp>;
+    authorId: string;
     collection: string;
+    embeds: unknown | null;
     text: string;
     title: string | null;
-    embeds: unknown | null;
-    authorId: string;
 };
 export type Follow = {
-    uri: string;
     userFollowedId: string | null;
+    uri: string;
 };
 export type HasReacted = {
-    id: string;
     userId: string;
     recordId: string;
     reactionType: string;
+    id: string;
 };
 export type InviteCode = {
     code: string;
@@ -147,12 +147,12 @@ export type Meeting = {
 };
 export type Notification = {
     id: string;
-    created_at: Generated<Timestamp>;
     type: NotificationType;
     userNotifiedId: string;
     causedByRecordId: string;
     message: string | null;
     moreContext: string | null;
+    created_at: Generated<Timestamp>;
     reasonSubject: string | null;
 };
 export type NotInterested = {
@@ -163,19 +163,19 @@ export type NotInterested = {
 export type PaymentPromise = {
     id: string;
     created_at: Generated<Timestamp>;
-    userMonthId: string;
     amount: number;
     status: Generated<PromiseStatus>;
     contentId: string;
+    userMonthId: string;
 };
 export type Post = {
-    uri: string;
     facets: string | null;
     embed: string | null;
     replyToId: string | null;
-    quote: string | null;
     rootId: string | null;
+    uri: string;
     langs: string[];
+    quoteToId: string | null;
 };
 export type Reaction = {
     uri: string;
@@ -185,42 +185,43 @@ export type ReadSession = {
     id: string;
     userId: string;
     created_at: Generated<Timestamp>;
-    readChunks: unknown;
     readContentId: string | null;
+    readChunks: unknown;
     contentAuthorId: string;
     topicId: string | null;
 };
 export type Record = {
     uri: string;
-    cid: string | null;
     collection: string;
     rkey: string;
     authorId: string;
     created_at: Generated<Timestamp>;
     record: string | null;
+    cid: string | null;
     uniqueLikesCount: Generated<number>;
     uniqueRepostsCount: Generated<number>;
     uniqueAcceptsCount: Generated<number>;
     uniqueRejectsCount: Generated<number>;
     CAIndexedAt: Generated<Timestamp>;
     lastUpdatedAt: Generated<Timestamp>;
+    quotesCount: Generated<number>;
 };
 export type Reference = {
     id: string;
     type: ReferenceType;
-    count: Generated<number>;
     referencedTopicId: string;
     referencingContentId: string;
+    count: Generated<number>;
 };
 export type Topic = {
     id: string;
     protection: Generated<EditorStatus>;
     currentVersionId: string | null;
     popularityScore: Generated<number | null>;
-    popularityScoreLastDay: Generated<number>;
-    popularityScoreLastWeek: Generated<number>;
-    popularityScoreLastMonth: Generated<number>;
     lastEdit: Timestamp | null;
+    popularityScoreLastDay: Generated<number>;
+    popularityScoreLastMonth: Generated<number>;
+    popularityScoreLastWeek: Generated<number>;
     lastContentChange: Timestamp | null;
 };
 export type TopicCategory = {
@@ -236,45 +237,45 @@ export type TopicToCategory = {
     categoryId: string;
 };
 export type TopicVersion = {
-    uri: string;
-    title: string | null;
     topicId: string;
-    message: Generated<string>;
-    synonyms: string | null;
-    categories: string | null;
+    accCharsAdded: number | null;
     authorship: Generated<boolean>;
+    categories: string | null;
     charsAdded: number | null;
     charsDeleted: number | null;
-    accCharsAdded: number | null;
     contribution: string | null;
     diff: string | null;
+    message: Generated<string>;
+    title: string | null;
+    synonyms: string | null;
+    uri: string;
     props: unknown | null;
     prevAcceptedUri: string | null;
 };
 export type User = {
     did: string;
     handle: string | null;
-    displayName: string | null;
-    avatar: string | null;
-    banner: string | null;
     email: string | null;
-    description: string | null;
-    hasAccess: Generated<boolean>;
-    inCA: Generated<boolean>;
-    CAProfileUri: string | null;
     created_at: Generated<Timestamp>;
     editorStatus: Generated<EditorStatus>;
+    hasAccess: Generated<boolean>;
+    avatar: string | null;
+    banner: string | null;
+    description: string | null;
+    displayName: string | null;
+    inCA: Generated<boolean>;
     platformAdmin: Generated<boolean>;
+    CAProfileUri: string | null;
     seenTutorial: Generated<boolean>;
-    seenTopicsTutorial: Generated<boolean>;
-    seenTopicMinimizedTutorial: Generated<boolean>;
-    seenTopicMaximizedTutorial: Generated<boolean>;
-    authorStatus: unknown | null;
-    userValidationHash: string | null;
     orgValidation: string | null;
+    userValidationHash: string | null;
     lastSeenNotifications: Generated<Timestamp>;
     moderationState: Generated<ModerationState>;
+    seenTopicMaximizedTutorial: Generated<boolean>;
+    seenTopicMinimizedTutorial: Generated<boolean>;
+    seenTopicsTutorial: Generated<boolean>;
     algorithmConfig: unknown | null;
+    authorStatus: unknown | null;
     articleLastMonth: Generated<boolean>;
     postLastTwoWeeks: Generated<boolean>;
 };
@@ -293,19 +294,19 @@ export type ValidationRequest = {
     userId: string;
     dniFrente: string | null;
     dniDorso: string | null;
-    tipoOrg: string | null;
-    sitioWeb: string | null;
     comentarios: string | null;
-    email: string | null;
     documentacion: string[];
+    email: string | null;
+    sitioWeb: string | null;
+    tipoOrg: string | null;
     created_at: Generated<Timestamp>;
-    result: Generated<ValidationRequestResult>;
     rejectReason: string | null;
+    result: Generated<ValidationRequestResult>;
 };
 export type VoteReject = {
     uri: string;
-    message: string | null;
     labels: string[];
+    message: string | null;
 };
 export type DB = {
     _ContentToDataset: ContentToDataset;

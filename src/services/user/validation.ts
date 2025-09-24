@@ -6,6 +6,7 @@ import {Dataplane} from "#/services/hydration/dataplane";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {ProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 import {createHash} from "crypto";
+import {v4 as uuidv4} from "uuid";
 
 export type FilePayload = { base64: string, fileName: string }
 
@@ -87,12 +88,16 @@ export const createValidationRequest: CAHandler<ValidationRequestProps, {}> = as
             type: ValidationType.Persona,
             dniFrente: dniFrente?.path,
             dniDorso: dniDorso?.path,
-            userId: agent.did
+            userId: agent.did,
+            documentacion: []
         }
 
-        await ctx.db.validationRequest.create({
-            data
-        })
+        await ctx.kysely.insertInto("ValidationRequest")
+            .values([{
+                ...data,
+                id: uuidv4()
+            }])
+            .execute()
     } catch (error) {
         console.log("error creating validation request", error)
         return {error: "Ocurrió un error al crear la solicitud. Volvé a intentar."}
@@ -103,15 +108,11 @@ export const createValidationRequest: CAHandler<ValidationRequestProps, {}> = as
 
 
 export const getValidationRequest: CAHandler<{}, { type: "org" | "persona" | null, result?: ValidationRequestResult }> = async (ctx, agent, {}) => {
-    const res = await ctx.db.validationRequest.findFirst({
-        select: {
-            type: true,
-            result: true
-        },
-        where: {
-            userId: agent.did
-        }
-    })
+    const res = await ctx.kysely
+        .selectFrom("ValidationRequest")
+        .select(["type", "result"])
+        .where("userId", "=", agent.did)
+        .executeTakeFirst()
 
     if(!res) return {data: {type: null}}
 
@@ -125,17 +126,19 @@ export const getValidationRequest: CAHandler<{}, { type: "org" | "persona" | nul
 
 
 export const cancelValidationRequest: CAHandler<{}, {}> = async (ctx, agent, {}) => {
-    await ctx.db.validationRequest.deleteMany({
-        where: {
-            userId: agent.did
-        }
-    })
+    await ctx.kysely.deleteFrom("ValidationRequest")
+        .where("userId", "=", agent.did)
+        .execute()
 
     return {data: {}}
 }
 
 
-export type ValidationRequestView = { id: string, user: ProfileViewBasic, createdAt: Date } & ({
+export type ValidationRequestView = {
+    id: string
+    user: ProfileViewBasic
+    createdAt: Date
+} & ({
     tipo: "persona"
     dniFrente: FilePayload
     dniDorso: FilePayload
@@ -160,17 +163,29 @@ export const getPendingValidationRequests: CAHandler<{}, {
     count: number
 }> = async (ctx, agent, {}) => {
     const [requests, count] = await Promise.all([
-        ctx.db.validationRequest.findMany({
-            take: 10,
-            where: {
-                result: ValidationRequestResult.Pendiente
-            }
-        }),
-        ctx.db.validationRequest.count({
-            where: {
-                result: ValidationRequestResult.Pendiente
-            }
-        })
+        ctx.kysely
+            .selectFrom("ValidationRequest")
+            .select([
+                "id",
+                "dniFrente",
+                "dniDorso",
+                "created_at as createdAt",
+                "documentacion",
+                "userId",
+                "type",
+                "tipoOrg",
+                "sitioWeb",
+                "comentarios",
+                "sitioWeb",
+                "email"
+            ])
+            .where("result", "=", ValidationRequestResult.Pendiente)
+            .limit(10)
+            .execute(),
+        ctx.kysely.selectFrom("ValidationRequest")
+            .select(eb => eb.fn.count<number>("id").as("count"))
+            .where("result", "=", ValidationRequestResult.Pendiente)
+            .executeTakeFirst()
     ])
 
     const dataplane = new Dataplane(ctx, agent)
@@ -226,7 +241,7 @@ export const getPendingValidationRequests: CAHandler<{}, {
         }
     }).filter(x => x != null)
 
-    return {data: {requests: res, count}}
+    return {data: {requests: res, count: count?.count ?? 0}}
 }
 
 
@@ -246,53 +261,45 @@ async function getHashFromDNI(dni: number) {
 
 
 export const setValidationRequestResult: CAHandler<ValidationRequestResultProps, {}> = async (ctx, agent, result) => {
-    return ctx.db.$transaction(async () => {
-        const req = (await ctx.db.validationRequest.findUnique({
-            select: {
-                user: {
-                    select: {
-                        did: true,
-                        handle: true,
-                        displayName: true,
-                        avatar: true,
-                        banner: true
-                    }
-                },
-                type: true
-            },
-            where: {
-                id: result.id,
-            }
-        }))
+    return ctx.kysely.transaction().execute(async trx => {
+        const req = await trx
+            .selectFrom("ValidationRequest")
+            .innerJoin("User", "User.did", "ValidationRequest.userId")
+            .select([
+                "type",
+                "did",
+                "handle",
+                "displayName",
+                "avatar",
+                "banner"
+            ])
+            .where("id", "=", result.id)
+            .executeTakeFirst()
 
         if (!req) return {error: "No se encontró la solicitud."}
 
-        const {user, type} = req
+        const {type, ...user} = req
 
-        await ctx.db.validationRequest.update({
-            data: {
-                result: result.result == "accept" ? "Aceptada" : "Rechazada",
-            },
-            where: {
-                id: result.id
-            }
-        })
+        await trx.updateTable("ValidationRequest")
+            .set("result", result.result == "accept" ? "Aceptada" : "Rechazada")
+            .where("id", "=", result.id)
+            .execute()
 
         if (type == "Persona") {
             if (!result.dni) {
                 return {error: "Falta el número de DNI."}
             }
             const userValidationHash = await getHashFromDNI(result.dni)
-            await ctx.db.user.update({
-                data: { userValidationHash },
-                where: { did: user.did }
-            })
+            await trx.updateTable("User")
+                .set("userValidationHash", userValidationHash)
+                .where("did", "=", user.did)
+                .execute()
             await ctx.redisCache.onEvent("verification-update", [user.did])
         } else {
-            await ctx.db.user.update({
-                data: { orgValidation: JSON.stringify(user) },
-                where: { did: user.did }
-            })
+            await trx.updateTable("User")
+                .set("orgValidation", JSON.stringify(user))
+                .where("did", "=", user.did)
+                .execute()
             await ctx.redisCache.onEvent("verification-update", [user.did])
         }
         return {data: {}}

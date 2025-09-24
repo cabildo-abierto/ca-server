@@ -6,7 +6,6 @@ import {unique} from "#/utils/arrays";
 import {cleanText} from "#/utils/strings";
 import {TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {AppContext} from "#/setup";
-import {JsonValue} from "@prisma/client/runtime/library";
 import {topicQueryResultToTopicViewBasic} from "#/services/wiki/topics";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {Agent} from "#/utils/session-agent";
@@ -145,9 +144,7 @@ export const searchTopics: CAHandlerNoAuth<{params: {q: string}, query: {c: stri
             popularityScoreLastWeek: t.popularityScoreLastWeek,
             popularityScoreLastMonth: t.popularityScoreLastMonth,
             lastEdit: t.lastEdit,
-            currentVersion: {
-                props: t.props as JsonValue
-            },
+            props: t.props,
             numWords: t.numWords,
             lastRead: t.lastRead
         }))

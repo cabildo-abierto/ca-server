@@ -10,16 +10,14 @@ import {sql, Transaction} from "kysely";
 
 
 export async function getTopicIdFromTopicVersionUri(ctx: AppContext, did: string, rkey: string) {
-    const res = await ctx.db.topicVersion.findMany({
-        select: {
-            topicId: true
-        },
-        where: {
-            uri: {
-                in: [getUri(did, "ar.com.cabildoabierto.topic", rkey), getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey)]
-            }
-        }
-    })
+    const uris = [getUri(did, "ar.com.cabildoabierto.topic", rkey), getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey)]
+
+    const res = await ctx.kysely
+        .selectFrom("TopicVersion")
+        .select("topicId")
+        .where("uri", "in", uris)
+        .execute()
+
     return res && res.length > 0 ? res[0].topicId : null
 }
 
@@ -81,25 +79,22 @@ export function getTopicCurrentVersion(protection: string = "Beginner", versions
 export const getTopicTitleHandler: CAHandlerNoAuth<{ params: { id: string } }, {
     title: string
 }> = async (ctx, agent, {params}) => {
-    const topic = await ctx.db.topic.findUnique({
-        select: {
-            id: true,
-            currentVersion: {
-                select: {
-                    props: true
-                }
-            }
-        },
-        where: {
-            id: params.id,
-        }
-    })
+    const topic = await ctx.kysely
+        .selectFrom("Topic")
+        .innerJoin("TopicVersion", "TopicVersion.uri", "Topic.currentVersionId")
+        .select([
+            "id",
+            "props"
+        ])
+        .where("id", "=", params.id)
+        .executeTakeFirst()
+
     if (!topic) {
         return {error: "No se encontró el tema"}
     }
     return {
         data: {
-            title: getTopicTitle({id: topic.id, props: topic.currentVersion?.props as TopicProp[] | undefined})
+            title: getTopicTitle({id: topic.id, props: topic.props as TopicProp[] | undefined})
         }
     }
 }

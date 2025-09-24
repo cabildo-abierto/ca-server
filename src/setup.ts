@@ -1,7 +1,6 @@
 import type {OAuthClient} from '@atproto/oauth-client-node'
 import {createClient} from '#/auth/client'
 import {createBidirectionalResolver, createIdResolver, BidirectionalResolver} from '#/id-resolver'
-import {PrismaClient} from '@prisma/client'
 import {createServer} from "src/lex-server";
 import {Server as XrpcServer} from "src/lex-server"
 import Redis from "ioredis"
@@ -16,7 +15,7 @@ import {Logger} from "#/utils/logger";
 
 
 export type AppContext = {
-    db: PrismaClient
+    // db: PrismaClient
     logger: Logger
     oauthClient: OAuthClient
     resolver: BidirectionalResolver
@@ -38,15 +37,15 @@ const env = process.env.NODE_ENV ?? "development"
 export async function setupAppContext(roles: Role[]) {
     const logger = new Logger([...roles, env].join(":"))
 
-    const db = new PrismaClient()
-    logger.pino.info("prisma client created")
-
     const kysely = new Kysely<DB>({
         dialect: new PostgresDialect({
             pool: new Pool({
                 connectionString: process.env.DATABASE_URL,
-            }),
-        }),
+                max: process.env.MAX_CONNECTIONS ? Number(process.env.MAX_CONNECTIONS) : 9,
+                idleTimeoutMillis: 30000,
+                keepAlive: true,
+            })
+        })
     })
     logger.pino.info("kysely client created")
 
@@ -83,7 +82,7 @@ export async function setupAppContext(roles: Role[]) {
     logger.pino.info("redis cache created")
 
     const ctx: AppContext = {
-        db,
+        // db,
         logger,
         oauthClient,
         resolver,

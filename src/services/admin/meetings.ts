@@ -1,4 +1,4 @@
-import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
+import {CAHandlerNoAuth} from "#/utils/handler";
 
 
 export type NextMeeting = {show: false} | {

@@ -21,21 +21,16 @@ const getMainProfileFeedSkeletonBsky = async (ctx: AppContext, agent: Agent, dat
 
 
 export const getMainProfileFeedSkeletonCA = async (ctx: AppContext, did: string, cursor?: string): Promise<(SkeletonFeedPost & {createdAt: Date})[]> => {
-    return (await ctx.db.record.findMany({
-        select: {
-            uri: true,
-            createdAt: true
-        },
-        where: {
-            authorId: did,
-            collection: {
-                in: ["ar.cabildoabierto.feed.article", "ar.com.cabildoabierto.article"]
-            },
-            createdAt: cursor ? {
-                lte: new Date(cursor)
-            } : undefined
-        }
-    })).map(({uri, createdAt}) => ({post: uri, createdAt}))
+    const sk = await ctx.kysely
+        .selectFrom("Record")
+        .select(["uri", "created_at"])
+        .where("authorId", "=", did)
+        .where("collection", "in", ["ar.cabildoabierto.feed.article", "ar.com.cabildoabierto.article"])
+        .$if(cursor != null, qb => qb.where("created_at", ">", new Date(cursor!)))
+        .execute()
+
+    return sk
+        .map(({uri, created_at}) => ({post: uri, createdAt: created_at}))
 }
 
 

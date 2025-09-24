@@ -5,9 +5,10 @@ import {CategoryVotes, TopicHistory, TopicVersionStatus, VersionInHistory} from 
 import {getCollectionFromUri} from "#/utils/uri"
 import {dbUserToProfileViewBasic} from "#/services/wiki/topics"
 import {AppContext} from "#/setup";
+import {jsonArrayFrom} from "kysely/helpers/postgres";
 
 
-function getViewerForTopicVersionInHistory(reactions: {uri: string, subjectId: string | null}[]): VersionInHistory["viewer"] {
+function getViewerForTopicVersionInHistory(reactions: {uri: string}[]): VersionInHistory["viewer"] {
     let accept: string | undefined
     let reject: string | undefined
 
@@ -29,82 +30,58 @@ function getViewerForTopicVersionInHistory(reactions: {uri: string, subjectId: s
 
 export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent) {
     const did = agent?.hasSession() ? agent.did : null
-    const versions = await ctx.db.record.findMany({
-        select: {
-            uri: true,
-            cid: true,
-            createdAt: true,
-            author: {
-                select: {
-                    did: true,
-                    handle: true,
-                    displayName: true,
-                    avatar: true,
-                    CAProfileUri: true,
-                    userValidationHash: true,
-                    orgValidation: true
-                }
-            },
-            content: {
-                select: {
-                    textBlob: true,
-                    text: true,
-                    topicVersion: {
-                        select: {
-                            charsAdded: true,
-                            charsDeleted: true,
-                            accCharsAdded: true,
-                            contribution: true,
-                            diff: true,
-                            message: true,
-                            props: true,
-                            title: true,
-                            prevAcceptedUri: true,
-                            authorship: true
-                        }
-                    }
-                }
-            },
-            uniqueAcceptsCount: true,
-            uniqueRejectsCount: true,
-            reactions: did ? {
-                select: {
-                    uri: true
-                },
-                where: {
-                    record: {
-                        collection: {
-                            in: [
-                                "ar.cabildoabierto.wiki.voteAccept",
-                                "ar.cabildoabierto.wiki.voteReject"
-                            ]
-                        },
-                        authorId: did
-                    }
-                }
-            } : undefined
-        },
-        where: {
-            content: {
-                topicVersion: {
-                    topicId: id
-                }
-            },
-            cid: {
-                not: null
-            }
-        },
-        orderBy: {
-            createdAt: "asc"
-        }
-    })
+
+    const versions = await ctx.kysely
+        .selectFrom("TopicVersion")
+        .innerJoin("Record", "Record.uri", "TopicVersion.uri")
+        .innerJoin("Content", "Content.uri", "TopicVersion.uri")
+        .innerJoin("User", "User.did", "Record.authorId")
+        .select([
+            "Record.uri",
+            "Record.cid",
+            "Record.created_at",
+            "uniqueAcceptsCount",
+            "uniqueRejectsCount",
+            "diff",
+            "charsAdded",
+            "charsDeleted",
+            "contribution",
+            "message",
+            "accCharsAdded",
+            "props",
+            "prevAcceptedUri",
+            "authorship",
+            eb => jsonArrayFrom(eb
+                .selectFrom("Reaction")
+                .innerJoin("Record as ReactionRecord", "Record.uri", "Reaction.uri")
+                .select([
+                    "Reaction.uri"
+                ])
+                .whereRef("Reaction.subjectId", "=", "TopicVersion.uri")
+                .where("ReactionRecord.authorId", "=", did ?? "no did")
+            ).as("reactions"),
+            "did",
+            "handle",
+            "displayName",
+            "avatar",
+            "CAProfileUri",
+            "userValidationHash",
+            "orgValidation"
+        ])
+        .where("Record.cid", "is not", null)
+        .where("Record.record", "is not", null)
+        .where("TopicVersion.topicId", "=", id)
+        .orderBy("created_at asc")
+        .execute()
 
     const topicHistory: TopicHistory = {
         id,
         versions: versions.map(v => {
-            if (!v.content || !v.content.topicVersion || !v.cid) return null
+            if (!v.cid) return null
 
-            const viewer = getViewerForTopicVersionInHistory(v.reactions)
+            const viewer = getViewerForTopicVersionInHistory(
+                v.reactions
+            )
 
             const voteCounts: CategoryVotes[] = [
                 {
@@ -114,17 +91,17 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
                 }
             ]
 
-            const author = dbUserToProfileViewBasic(v.author)
+            const author = dbUserToProfileViewBasic(v)
             if (!author) return null
 
             const status: TopicVersionStatus = {
                 voteCounts
             }
 
-            const contributionStr = v.content.topicVersion.contribution
+            const contributionStr = v.contribution
             const contribution = contributionStr ? JSON.parse(contributionStr) : undefined
 
-            const props = Array.isArray(v.content.topicVersion.props) ? v.content.topicVersion.props as unknown as TopicProp[] : []
+            const props = Array.isArray(v.props) ? v.props as unknown as TopicProp[] : []
 
             const view: VersionInHistory = {
                 $type: "ar.cabildoabierto.wiki.topicVersion#versionInHistory",
@@ -134,16 +111,16 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
                     ...author,
                     $type: "ar.cabildoabierto.actor.defs#profileViewBasic"
                 },
-                message: v.content.topicVersion.message,
+                message: v.message,
                 viewer,
                 status: status,
-                addedChars: v.content.topicVersion.charsAdded ?? undefined,
-                removedChars: v.content.topicVersion.charsDeleted ?? undefined,
+                addedChars: v.charsAdded ?? undefined,
+                removedChars: v.charsDeleted ?? undefined,
                 props,
-                createdAt: v.createdAt.toISOString(),
+                createdAt: v.created_at.toISOString(),
                 contribution,
-                prevAccepted: v.content.topicVersion.prevAcceptedUri ?? undefined,
-                claimsAuthorship: v.content.topicVersion.authorship ?? false
+                prevAccepted: v.prevAcceptedUri ?? undefined,
+                claimsAuthorship: v.authorship ?? false
             }
             return view
         }).filter(v => v != null)

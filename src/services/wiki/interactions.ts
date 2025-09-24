@@ -215,45 +215,25 @@ export async function updateContentInteractionsForTopics(ctx: AppContext, topicI
 
 
 export async function getEditedTopics(ctx: AppContext, since: Date) {
-    return (await ctx.db.topic.findMany({
-        select: {
-            id: true
-        },
-        where: {
-            OR: [
-                {
-                    versions: {
-                        some: {
-                            content: {
-                                record: {
-                                    createdAt: {
-                                        gt: since
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                {
-                    versions: {
-                        some: {
-                            content: {
-                                record: {
-                                    reactions: {
-                                        some: {
-                                            record: {
-                                                createdAt: {
-                                                    gt: since
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            ]
-        }
-    })).map(t => t.id)
+    const topics = await ctx.kysely
+        .selectFrom("Topic")
+        .select("id")
+        .where(eb => eb.or([
+            eb.exists(eb
+                .selectFrom("TopicVersion")
+                .whereRef("TopicVersion.topicId", "=", "Topic.id")
+                .innerJoin("Record", "Record.uri", "TopicVersion.uri")
+                .where("Record.created_at", ">", since)
+            ),
+            eb.exists(eb
+                .selectFrom("Reaction")
+                .innerJoin("Record", "Reaction.subjectId", "Record.uri")
+                .where("Record.created_at", ">", since)
+                .innerJoin("TopicVersion", "TopicVersion.uri", "Record.uri")
+                .whereRef("TopicVersion.topicId", "=", "Topic.id")
+            )
+        ]))
+        .execute()
+
+    return topics.map(t => t.id)
 }

@@ -5,7 +5,7 @@ import {RepoReader} from "@atcute/car/v4"
 import {getServiceEndpointForDid} from "#/services/blob";
 import {getUri, shortCollectionToCollection} from "#/utils/uri";
 import {CAHandler} from "#/utils/handler";
-import {getProcessorForEvent, processEventsBatch} from "#/services/sync/event-processing/event-processor";
+import {processEventsBatch} from "#/services/sync/event-processing/event-processor";
 import {batchDeleteRecords, getRecordProcessor} from "#/services/sync/event-processing/get-record-processor";
 import {RefAndRecord} from "#/services/sync/types";
 

@@ -54,6 +54,9 @@ export class SessionAgent extends BaseAgent {
 }
 
 
+export const bskyPublicAPI = "https://public.api.bsky.app"
+
+
 export async function sessionAgent(
     req: IncomingMessage,
     res: ServerResponse<IncomingMessage>,
@@ -74,7 +77,7 @@ export async function sessionAgent(
             await session.destroy()
         }
     }
-    return new NoSessionAgent(CAAgent, new AtpBaseClient("https://public.api.bsky.app"))
+    return new NoSessionAgent(CAAgent, new AtpBaseClient(bskyPublicAPI))
 }
 
 

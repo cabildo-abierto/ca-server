@@ -67,14 +67,10 @@ function buildParentFromAncestorsList(uri: string, ancestors: {uri: string, repl
 export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, uri: string): Promise<ThreadSkeleton> {
     // necesario solo porque getPostThread de Bsky no funciona con posts que tienen selection quote
 
-    const replies = (await ctx.db.post.findMany({
-        select: {
-            uri: true
-        },
-        where: {
-            replyToId: uri
-        }
-    }))
+    const replies = await ctx.kysely.selectFrom("Post")
+        .select("uri")
+        .where("replyToId", "=", uri)
+        .execute()
 
     const collection = getCollectionFromUri(uri)
 
@@ -121,22 +117,15 @@ async function getThreadSkeletonForPost(ctx: AppContext, agent: Agent, uri: stri
 
 
 export async function getThreadSkeletonForArticle(ctx: AppContext, uri: string): Promise<ThreadSkeleton> {
-    const replies = (await ctx.db.record.findMany({
-        select: {
-            uri: true
-        },
-        where: {
-            content: {
-                post: {
-                    replyToId: uri
-                }
-            }
-        }
-    })).map(x => ({post: x.uri}))
+    const replies = await ctx.kysely
+        .selectFrom("Post")
+        .where("Post.replyToId", "=", uri)
+        .select("uri")
+        .execute()
 
     return {
         post: uri,
-        replies
+        replies: replies.map(r => ({post: r.uri}))
     }
 }
 

@@ -56,15 +56,11 @@ export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (c
 
 
 export async function checkValidCode(ctx: AppContext, code: string, did: string){
-    const res = await ctx.db.inviteCode.findUnique({
-        select: {
-            code: true,
-            usedByDid: true
-        },
-        where: {
-            code
-        }
-    })
+    const res = await ctx.kysely
+        .selectFrom("InviteCode")
+        .select(["code", "usedByDid"])
+        .where("code", "=", code)
+        .executeTakeFirst()
     if(!res) return {error: "El código de invitación es inválido."}
     if(res.usedByDid && res.usedByDid != did) return {error: "El código de invitación ya fue usado."}
     return {}
@@ -74,17 +70,11 @@ export async function checkValidCode(ctx: AppContext, code: string, did: string)
 export async function createCAUser(ctx: AppContext, agent: SessionAgent, code?: string) {
     const did = agent.did
 
-    await ctx.db.user.upsert({
-        create: {
-            did
-        },
-        update: {
-            did
-        },
-        where: {
-            did
-        }
-    })
+    await ctx.kysely
+        .insertInto("User")
+        .values([{did}])
+        .onConflict(oc => oc.doNothing())
+        .execute()
 
     if(code){
         const {error} = await assignInviteCode(ctx, agent, code)
@@ -146,30 +136,26 @@ export const createInviteCodes: CAHandler<{query: {c: number}}, { inviteCodes: s
 export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inviteCode: string) {
     const did = agent.did
     const [code, user] = await Promise.all([
-        ctx.db.inviteCode.findUnique({
-            where: {
-                code: inviteCode
-            }
-        }),
-        ctx.db.user.findUnique({
-            select: {
-                usedInviteCode: {
-                    select: {
-                        code: true
-                    }
-                },
-                inCA: true,
-                hasAccess: true
-            },
-            where: {
-                did
-            }
-        })
+        ctx.kysely
+            .selectFrom("InviteCode")
+            .select(["usedByDid"])
+            .where("code", "=", inviteCode)
+            .executeTakeFirst(),
+        ctx.kysely
+            .selectFrom("User")
+            .innerJoin("InviteCode", "InviteCode.usedByDid", "User.did")
+            .select([
+                "inCA",
+                "hasAccess",
+                "code"
+            ])
+            .where("User.did", "=", did)
+            .executeTakeFirst(),
     ])
     if(!code) return {error: "No se encontró el código"}
     if(!user) return {error: "No se encontró el usuario"}
 
-    if(user.usedInviteCode != null && user.inCA && user.hasAccess){
+    if(user.code != null && user.inCA && user.hasAccess){
         return {}
     }
 
@@ -177,28 +163,24 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
         return {error: "El código ya fue usado."}
     }
 
-    const updates = [
-        ...(!user.usedInviteCode ? [ctx.db.inviteCode.update({
-            data: {
-                usedAt: new Date(),
-                usedByDid: did
-            },
-            where: {
-                code: inviteCode
-            }
-        })] : []),
-        ctx.db.user.update({
-            data: {
-                hasAccess: true,
-                inCA: true
-            },
-            where: {
-                did
-            }
-        })
-    ]
+    await ctx.kysely.transaction().execute(async trx => {
+        if(!user.code) {
+            await trx
+                .updateTable("InviteCode")
+                .set("usedAt", new Date())
+                .set("usedByDid", did)
+                .where("code", "=", inviteCode)
+                .execute()
 
-    await ctx.db.$transaction(updates)
+            await trx
+                .updateTable("User")
+                .set("hasAccess", true)
+                .set("inCA", true)
+                .where("did", "=", did)
+                .execute()
+        }
+    })
+
 
     return {}
 }
@@ -228,29 +210,27 @@ type AccessRequest = {
 }
 
 export const getAccessRequests: CAHandler<{}, AccessRequest[]> = async (ctx, agent, {}) => {
-    const requests = await ctx.db.accessRequest.findMany({
-        select: {
-            email: true,
-            comment: true,
-            createdAt: true,
-            sentInviteAt: true,
-            id: true
-        }
-    })
+    const requests: AccessRequest[] = await ctx.kysely
+        .selectFrom("AccessRequest")
+        .select([
+            "email",
+            "comment",
+            "created_at as createdAt",
+            "sentInviteAt",
+            "id"
+        ])
+        .execute()
 
     return {data: requests}
 }
 
 
 export const markAccessRequestSent: CAHandler<{params: {id: string}}, {}> = async (ctx, agent, {params} ) => {
-    await ctx.db.accessRequest.update({
-        data: {
-            sentInviteAt: new Date()
-        },
-        where: {
-            id: params.id
-        }
-    })
+    await ctx.kysely
+        .updateTable("AccessRequest")
+        .set("sentInviteAt", new Date())
+        .where("id", "=", params.id)
+        .execute()
 
     return {data: {}}
 }

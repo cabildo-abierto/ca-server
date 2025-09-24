@@ -7,7 +7,6 @@ import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVer
 import {getTopicCurrentVersion, getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
 import {Agent} from "#/utils/session-agent";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
-import {Prisma} from "@prisma/client";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
 import {getTopicSynonyms, getTopicTitle} from "#/services/wiki/utils";
@@ -20,9 +19,9 @@ import {ArticleEmbed, ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {isMain as isImagesEmbed, View as ImagesEmbedView} from "#/lex-api/types/app/bsky/embed/images"
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read"
-import { JsonValue } from "@prisma/client/runtime/library";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 import {cleanText} from "#/utils/strings";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 
 export type TimePeriod = "day" | "week" | "month" | "all"
 
@@ -37,13 +36,14 @@ export type TopicQueryResultBasic = {
     popularityScoreLastDay: number
     popularityScoreLastWeek: number
     popularityScoreLastMonth: number
-    currentVersion: {
-        props: Prisma.JsonValue
-    } | null
+    props: unknown
     numWords: number | null
     lastRead?: Date | null
     created_at?: Date
 }
+
+
+export type TopicVersionQueryResultBasic = TopicQueryResultBasic & {uri: string}
 
 
 export function hydrateTopicViewBasicFromUri(uri: string, data: Dataplane): {data?: $Typed<TopicViewBasic>, error?: string} {
@@ -57,8 +57,8 @@ export function hydrateTopicViewBasicFromUri(uri: string, data: Dataplane): {dat
 export function topicQueryResultToTopicViewBasic(t: TopicQueryResultBasic): $Typed<TopicViewBasic> {
     let props: TopicProp[] = []
 
-    if(t.currentVersion && t.currentVersion.props){
-        props = t.currentVersion.props as unknown as TopicProp[]
+    if(t.props){
+        props = t.props as TopicProp[]
     } else {
         props.push({
             name: "Título",
@@ -160,9 +160,7 @@ export async function getTopics(
             popularityScoreLastDay: t.popularityScoreLastDay,
             lastEdit: t.lastContentChange,
             created_at: t.created_at,
-            currentVersion: {
-                props: t.props as JsonValue
-            },
+            props: t.props,
             numWords: t.numWords,
             lastRead: getDidFromUri(t.uri) == did ? t.lastEdit : t.lastRead
         }))
@@ -196,11 +194,10 @@ export const getTopicsHandler: CAHandlerNoAuth<{
 
 
 export const getCategories: CAHandlerNoAuth<{}, string[]> = async (ctx, _, {}) => {
-    const categories = await ctx.db.topicCategory.findMany({
-        select: {
-            id: true
-        }
-    })
+    const categories = await ctx.kysely
+        .selectFrom("TopicCategory")
+        .select("id")
+        .execute()
     categories.push({id: "Sin categoría"})
     return {data: categories.map(c => c.id)}
 }
@@ -277,14 +274,12 @@ export const getTopicCurrentVersionFromDB = async (ctx: AppContext, id: string):
     data?: string | null,
     error?: string
 }> => {
-    const res = await ctx.db.topic.findUnique({
-        select: {
-            currentVersionId: true
-        },
-        where: {
-            id
-        }
-    })
+    const res = await ctx.kysely
+        .selectFrom("Topic")
+        .select("currentVersionId")
+        .where("id", "=", id)
+        .executeTakeFirst()
+
     if (res) {
         return {data: res.currentVersionId}
     } else {
@@ -380,89 +375,72 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
     data?: TopicView,
     error?: string
 }> => {
-    const topic = await ctx.db.record.findFirst({
-        select: {
-            uri: true,
-            cid: true,
-            author: {
-                select: {
-                    did: true,
-                    handle: true,
-                    displayName: true,
-                    avatar: true,
-                    CAProfileUri: true,
-                    userValidationHash: true,
-                    orgValidation: true
-                }
-            },
-            record: true,
-            createdAt: true,
-            content: {
-                select: {
-                    text: true,
-                    format: true,
-                    dbFormat: true,
-                    textBlob: {
-                        select: {
-                            cid: true,
-                            authorId: true
-                        }
-                    },
-                    topicVersion: {
-                        select: {
-                            topic: {
-                                select: {
-                                    id: true,
-                                    protection: true,
-                                    popularityScore: true,
-                                    lastEdit: true,
-                                    currentVersionId: true
-                                }
-                            },
-                            props: true
-                        }
-                    }
-                }
-            }
-        },
-        where: {
-            uri
-        }
-    })
+    const authorId = getDidFromUri(uri)
+    const dataplane = new Dataplane(ctx)
 
-    if (!topic || !topic.content || !topic.content.topicVersion) {
+    const [topic] = await Promise.all([
+        ctx.kysely
+            .selectFrom("TopicVersion")
+            .innerJoin("Record", "TopicVersion.uri", "Record.uri")
+            .innerJoin("Content", "TopicVersion.uri", "Content.uri")
+            .innerJoin("Topic", "Topic.id", "TopicVersion.topicId")
+            .select([
+                "Record.uri",
+                "Record.cid",
+                "Record.created_at",
+                "Record.record",
+                "TopicVersion.props",
+                "Content.text",
+                "Content.format",
+                "Content.dbFormat",
+                "Content.textBlobId",
+                "Topic.id",
+                "Topic.protection",
+                "Topic.popularityScore",
+                "Topic.lastEdit",
+                "Topic.currentVersionId"
+            ])
+            .where("TopicVersion.uri", "=", uri)
+            .where("Record.record", "is not", null)
+            .where("Record.cid", "is not", null)
+            .executeTakeFirst(),
+        dataplane.fetchUsersHydrationData([authorId])
+    ])
+
+    if (!topic || !topic.cid) {
         return {error: "No se encontró la versión."}
+    }
+
+    const author = hydrateProfileViewBasic(authorId, dataplane)
+
+    if(!author) {
+        ctx.logger.pino.warn({did: authorId}, "user not found")
+        return {error: "No se encontró el autor"}
     }
 
     let text: string | null = null
     let format: string | null = null
-    if (topic.content.text == null) {
-        if (topic.content.textBlob) {
+    if (topic.text == null) {
+        if (topic.textBlobId) {
             [text] = await fetchTextBlobs(
                 ctx,
-                [topic.content.textBlob]
+                [{cid: topic.textBlobId, authorId: authorId}]
             )
-            format = topic.content.format
+            format = topic.format
         }
     } else {
-        text = topic.content.text
-        format = topic.content.dbFormat
+        text = topic.text
+        format = topic.dbFormat
     }
 
-    const author = dbUserToProfileViewBasic(topic.author)
-
-    const id = topic.content.topicVersion.topic.id
-
-    if (!author || !topic.cid) {
-        return {error: "No se encontró el tema " + id + "."}
-    }
+    const id = topic.id
 
     const {text: transformedText, format: transformedFormat} = anyEditorStateToMarkdownOrLexical(text, format)
 
-    const props = Array.isArray(topic.content.topicVersion.props) ? topic.content.topicVersion.props as unknown as TopicProp[] : []
+    const props = Array.isArray(topic.props) ? topic.props as TopicProp[] : []
 
     const record = topic.record ? JSON.parse(topic.record) as TopicVersionRecord : undefined
-    const embeds = record ? hydrateEmbedViews(author.did, record.embeds ?? []) : []
+    const embeds = record ? hydrateEmbedViews(authorId, record.embeds ?? []) : []
 
     const view: TopicView = {
         $type: "ar.cabildoabierto.wiki.topicVersion#topicView",
@@ -473,9 +451,9 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
         text: transformedText,
         format: transformedFormat,
         props,
-        createdAt: topic.createdAt.toISOString(),
-        lastEdit: topic.content.topicVersion.topic.lastEdit?.toISOString() ?? topic.createdAt.toISOString(),
-        currentVersion: topic.content.topicVersion.topic.currentVersionId ?? undefined,
+        createdAt: topic.created_at.toISOString(),
+        lastEdit: topic.lastEdit?.toISOString() ?? topic.created_at.toISOString(),
+        currentVersion: topic.currentVersionId ?? undefined,
         record: topic.record ? JSON.parse(topic.record) : undefined,
         embeds
     }
@@ -493,22 +471,22 @@ export const getTopicVersionHandler: CAHandlerNoAuth<{
 
 
 export async function getTopicsTitles(ctx: AppContext, ids: string[]) {
-    const res = await ctx.db.topic.findMany({
-        select: {
-            id: true,
-            currentVersion: {
-                select: {
-                    props: true
-                }
-            }
-        },
-        where: {
-            id: {
-                in: ids
-            }
-        }
-    })
-    return new Map<string, string>(res.map(r => [r.id, getTopicTitle(r)]))
+    if(ids.length == 0) return new Map<string, string>()
+
+    const res = await ctx.kysely
+        .selectFrom("Topic")
+        .innerJoin("TopicVersion", "TopicVersion.uri", "Topic.currentVersionId")
+        .select([
+            "id",
+            "TopicVersion.props"
+        ])
+        .where("Topic.id", "in", ids)
+        .execute()
+
+    return new Map<string, string>(res.map(r => [r.id, getTopicTitle({
+        id: r.id,
+        props: r.props as TopicProp[]
+    })]))
 }
 
 
@@ -532,14 +510,7 @@ export const getTopicsMentioned: CAHandlerNoAuth<{title: string, text: string}, 
 
 
 export const getAllTopics: CAHandlerNoAuth<{}, {topicId: string, uri: string}[]> = async (ctx, _, {}) => {
-    const topicVersions = await ctx.db.topicVersion.findMany({
-        select: {
-            topicId: true,
-            uri: true,
-            categories: true
-        }
-    })
-    return {data: topicVersions}
+    return {error: "sin implementar"}
 }
 
 
@@ -605,7 +576,6 @@ export const getTopicsWhereTitleIsNotSetAsSynonym: CAHandlerNoAuth<{}, string[]>
             id: t.id,
             props: t.props as TopicProp[]
         })
-        console.log("topic", t.id, "synonyms", synonyms)
         return !synonyms.some(s => {
             return cleanText(t.id).includes(cleanText(s))
         })

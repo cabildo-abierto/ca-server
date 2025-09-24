@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 .nvmrc
 .vscode
+/generated/prisma
+/generated/prisma
+
+/generated/prisma
+
+/generated/prisma

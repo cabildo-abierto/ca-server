@@ -9,7 +9,6 @@ import {unique} from "#/utils/arrays";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {getIronSession} from "iron-session";
 import {createCAUser} from "#/services/user/access";
-import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
 import {Record as FollowRecord} from "#/lex-api/types/app/bsky/graph/follow"
 import {
     Record as BskyProfileRecord,
@@ -23,38 +22,19 @@ import {BskyProfileRecordProcessor} from "#/services/sync/event-processing/profi
 import {FollowRecordProcessor} from "#/services/sync/event-processing/follow";
 import {ViewerState} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {getDidFromUri} from "#/utils/uri";
+import {getCAFollowersDids, getCAFollowsDids} from "#/services/feed/inicio/following";
 
-
-export async function getFollowing(ctx: AppContext, did: string): Promise<string[]> {
-    const follows = await ctx.db.record.findMany({
-        select: {
-            follow: {
-                select: {
-                    userFollowedId: true
-                }
-            }
-        },
-        where: {
-            collection: "app.bsky.graph.follow",
-            authorId: did
-        }
-    })
-    return follows.filter(f => f.follow).map((f) => (f.follow ? f.follow.userFollowedId : null)).filter(s => s != null)
-}
 
 
 export async function dbHandleToDid(ctx: AppContext, handleOrDid: string): Promise<string | null> {
     if (handleOrDid.startsWith("did")) {
         return handleOrDid
     } else {
-        const res = await ctx.db.user.findFirst({
-            select: {
-                did: true
-            },
-            where: {
-                handle: handleOrDid
-            }
-        })
+        const res = await ctx.kysely
+            .selectFrom("User")
+            .select("did")
+            .where("handle", "=", handleOrDid)
+            .executeTakeFirst()
         return res?.did ?? null
     }
 }
@@ -81,15 +61,12 @@ export async function didToHandle(ctx: AppContext, did: string): Promise<string 
 
 
 export const getCAUsersDids = async (ctx: AppContext) => {
-    return (await ctx.db.user.findMany({
-        select: {
-            did: true
-        },
-        where: {
-            inCA: true,
-            hasAccess: true
-        }
-    })).map(({did}) => did)
+    return (await ctx.kysely
+        .selectFrom("User")
+        .select("did")
+        .where("inCA", "=", true)
+        .where("hasAccess", "=", true)
+        .execute()).map(({did}) => did)
 }
 
 
@@ -441,14 +418,7 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
 export const getAccount: CAHandler<{}, Account> = async (ctx, agent) => {
 
     const [caData, bskySession] = await Promise.all([
-        ctx.db.user.findUnique({
-            select: {
-                email: true
-            },
-            where: {
-                did: agent.did
-            }
-        }),
+        ctx.kysely.selectFrom("User").select("email").where("did", "=", agent.did).executeTakeFirst(),
         agent.bsky.com.atproto.server.getSession()
     ])
 
@@ -459,14 +429,10 @@ export const getAccount: CAHandler<{}, Account> = async (ctx, agent) => {
     const bskyEmail = bskySession.data.email
 
     if (bskyEmail && (!caData.email || caData.email != bskyEmail)) {
-        await ctx.db.user.update({
-            data: {
-                email: bskyEmail
-            },
-            where: {
-                did: agent.did
-            }
-        })
+        await ctx.kysely.updateTable("User")
+            .set("email", bskyEmail)
+            .where("did", "=", agent.did)
+            .execute()
     }
 
     return {
@@ -485,23 +451,21 @@ export const setSeenTutorial: CAHandler<{ params: { tutorial: Tutorial } }, {}> 
     const did = agent.did
     console.log("setting seen tutorial", tutorial)
     if (tutorial == "topic-minimized") {
-        await ctx.db.user.update({data: {seenTopicMinimizedTutorial: true}, where: {did}})
+        await ctx.kysely.updateTable("User").set("seenTopicMinimizedTutorial", true).where("did", "=", did).execute()
     } else if (tutorial == "home") {
-        await ctx.db.user.update({data: {seenTutorial: true}, where: {did}})
+        await ctx.kysely.updateTable("User").set("seenTutorial", true).where("did", "=", did).execute()
     } else if (tutorial == "topics") {
-        await ctx.db.user.update({data: {seenTopicsTutorial: true}, where: {did}})
+        await ctx.kysely.updateTable("User").set("seenTopicsTutorial", true).where("did", "=", did).execute()
     } else if (tutorial == "topic-normal") {
-        await ctx.db.user.update({data: {seenTopicMaximizedTutorial: true}, where: {did}})
+        await ctx.kysely.updateTable("User").set("seenTopicMaximizedTutorial", true).where("did", "=", did).execute()
     } else if (tutorial == "panel-de-autor") {
-        await ctx.db.user.update({
-            data: {
-                authorStatus: {
-                    isAuthor: true,
-                    seenAuthorTutorial: true
-                }
-            },
-            where: {did}
-        })
+        await ctx.kysely.updateTable("User")
+            .set("authorStatus", {
+                isAuthor: true,
+                seenAuthorTutorial: true
+            })
+            .where("did", "=", did)
+            .execute()
     } else {
         console.log("Unknown tutorial", tutorial)
     }
@@ -510,53 +474,17 @@ export const setSeenTutorial: CAHandler<{ params: { tutorial: Tutorial } }, {}> 
 
 
 async function getFollowxFromCA(ctx: AppContext, did: string, data: Dataplane, kind: "follows" | "followers") {
-    const users = kind == "follows" ?
-        (await ctx.db.follow.findMany({
-            select: {
-                userFollowed: {
-                    select: {
-                        did: true,
-                        handle: true,
-                        displayName: true,
-                        CAProfileUri: true,
-                        avatar: true,
-                        userValidationHash: true,
-                        orgValidation: true
-                    }
-                }
-            },
-            where: {
-                record: {
-                    authorId: did
-                }
-            }
-        })).map(u => u.userFollowed) :
-        (await ctx.db.follow.findMany({
-            select: {
-                record: {
-                    select: {
-                        author: {
-                            select: {
-                                did: true,
-                                handle: true,
-                                displayName: true,
-                                CAProfileUri: true,
-                                avatar: true,
-                                userValidationHash: true,
-                                orgValidation: true
-                            }
-                        }
-                    }
-                }
-            },
-            where: {
-                userFollowedId: did
-            }
-        })).map(u => u.record.author)
+    const dids = kind == "follows" ?
+        await getCAFollowsDids(ctx, did) :
+        await getCAFollowersDids(ctx, did)
 
-    const views: CAProfileViewBasic[] = users.map(dbUserToProfileViewBasic).filter(u => u != null)
+    await data.fetchUsersHydrationData(dids)
+    const views = dids
+        .map(u => hydrateProfileViewBasic(u, data))
+        .filter(u => u != null)
 
-    data.caUsers = joinMaps(data.caUsers, new Map(views.map(u => [u.did, u])))
+    const m = new Map(views.map(u => [u.did, u]))
+    data.caUsers = joinMaps(data.caUsers, m)
     return views.map(u => u.did)
 }
 

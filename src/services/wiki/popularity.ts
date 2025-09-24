@@ -9,26 +9,28 @@ import {
 import {updateReferences} from "#/services/wiki/references";
 
 
+async function getHumanUsers(ctx: AppContext) {
+    const users = await ctx.kysely
+        .selectFrom("User")
+        .select("did")
+        .where("orgValidation", "is", null)
+        .where("handle", "not in", testUsers)
+        .execute()
+
+    return new Set(users.map(u => u.did))
+}
+
+
 export async function updateTopicPopularities(ctx: AppContext, topicIds: string[]) {
     const lastMonth = new Date(Date.now() - 1000*3600*24*30)
     const lastWeek = new Date(Date.now() - 1000*3600*24*7)
     const lastDay = new Date(Date.now() - 1000*3600*24)
 
-    const humanUsers = new Set((await ctx.db.user.findMany({
-        select: {
-            did: true
-        },
-        where: {
-            orgValidation: null,
-            handle: {
-                notIn: testUsers
-            }
-        }
-    })).map(d => d.did))
+    const humanUsers = await getHumanUsers(ctx)
+
 
     let batchSize = 2000
     for(let i = 0; i < topicIds.length; i+=batchSize){
-        console.log("Updating batch", i)
         const batchIds = topicIds.slice(i, i+batchSize)
         const batchInteractions = await ctx.kysely
             .selectFrom("TopicInteraction")
@@ -37,7 +39,6 @@ export async function updateTopicPopularities(ctx: AppContext, topicIds: string[
             .where("Record.created_at", ">", lastMonth)
             .where("TopicInteraction.topicId", "in", batchIds)
             .execute()
-        console.log(`Got ${batchInteractions.length} interactions in batch`)
 
         const m = new Map<string, {
             interactionsLastDay: Set<string>
@@ -59,7 +60,6 @@ export async function updateTopicPopularities(ctx: AppContext, topicIds: string[
                 if(humanUsers.has(authorId)){
                     cur.interactionsLastMonth.add(authorId)
                     if(d.created_at > lastWeek){
-                        console.log(`Interaction: ${d.recordId}, ${d.topicId}`)
                         cur.interactionsLastWeek.add(authorId)
                     }
                     if(d.created_at > lastDay){

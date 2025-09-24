@@ -7,9 +7,26 @@ generator kysely {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AccessRequest {
+  id           String      @id
+  created_at   DateTime    @default(now())
+  email        String
+  comment      String
+  sentInviteAt DateTime?
+  inviteCodeId String?     @unique
+  InviteCode   InviteCode? @relation(fields: [inviteCodeId], references: [code])
+
+  @@index([inviteCodeId])
+}
+
+model Article {
+  title   String
+  uri     String  @id
+  Content Content @relation(fields: [uri], references: [uri])
 }
 
 model AuthSession {
@@ -22,517 +39,135 @@ model AuthState {
   state String
 }
 
-model User {
-  did                        String       @id @db.VarChar(255) // https://atproto.com/guides/identity
-  handle                     String?
-  displayName                String?
-  avatar                     String?
-  banner                     String?
-  email                      String?
-  description                String?
-  hasAccess                  Boolean      @default(false) // si tiene o no acceso al período de prueba
-  inCA                       Boolean      @default(false)
-  CAProfile                  Record?      @relation("CAProfile", fields: [CAProfileUri], references: [uri])
-  CAProfileUri               String?      @unique
-  createdAt                  DateTime     @default(now()) @map("created_at")
-  editorStatus               EditorStatus @default(Beginner) // permisos de editor en la wiki
-  platformAdmin              Boolean      @default(false) // si tiene acceso o no a /admin
-  records                    Record[]
-  blobs                      Blob[]
-  followers                  Follow[]
-  usedInviteCode             InviteCode?  @relation("invite-code-used")
-  recommendCodes             InviteCode[] @relation("invite-codes-available") // los códigos de invitación que tiene disponibles para usar
-  seenTutorial               Boolean      @default(false)
-  seenTopicsTutorial         Boolean      @default(false)
-  seenTopicMinimizedTutorial Boolean      @default(false)
-  seenTopicMaximizedTutorial Boolean      @default(false)
-  authorStatus               Json?
-
-  hasReacted HasReacted[]
-
-  userValidationHash String? @unique
-  orgValidation      String?
-
-  validationRequests ValidationRequest[]
-
-  readSessions         ReadSession[] @relation("readUser")
-  readSessionsReceived ReadSession[] @relation("readAuthor")
-
-  donations Donation[]
-  months    UserMonth[]
-
-  notifications Notification[]
-
-  lastSeenNotifications DateTime @default(dbgenerated("'1970-01-01 00:00:00'::timestamp"))
-
-  moderationState ModerationState @default(Ok)
-
-  drafts Draft[]
-
-  algorithmConfig Json?
-
-  notInterestedIn        NotInterested[] @relation("notInterested")
-  subjectOfNotInterested NotInterested[] @relation("notInterestedSubject")
-
-  articleLastMonth Boolean @default(false)
-  postLastTwoWeeks Boolean @default(false)
-
-  @@index([handle])
-  @@index([inCA, did])
-  @@index([did, inCA])
-  @@index([CAProfileUri])
-  @@index([createdAt])
-  @@index([articleLastMonth, did])
-  @@index([postLastTwoWeeks, did])
-}
-
-model NotInterested {
-  id       String @id @default(cuid())
-  authorId String
-  author   User   @relation("notInterested", fields: [authorId], references: [did])
-
-  subjectId String
-  subject   User   @relation("notInterestedSubject", fields: [subjectId], references: [did])
-
-  @@index([authorId])
-  @@index([subjectId])
-  @@index([authorId, subjectId])
-}
-
-enum ModerationState {
-  Ok
-  ShadowBan
-}
-
-enum ValidationType {
-  Persona
-  Organizacion
-}
-
-enum ValidationRequestResult {
-  Aceptada
-  Rechazada
-  Pendiente
-}
-
-model ValidationRequest {
-  id            String                  @id @default(cuid())
-  type          ValidationType
-  userId        String
-  user          User                    @relation(fields: [userId], references: [did])
-  dniFrente     String?
-  dniDorso      String?
-  tipoOrg       String?
-  sitioWeb      String?
-  comentarios   String?
-  email         String?
-  documentacion String[]
-  createdAt     DateTime                @default(now()) @map("created_at")
-  result        ValidationRequestResult @default(Pendiente)
-  rejectReason  String?
-
-  @@unique([userId])
-}
-
-model InviteCode {
-  code          String         @id @default(cuid())
-  usedBy        User?          @relation("invite-code-used", fields: [usedByDid], references: [did])
-  usedByDid     String?        @unique
-  usedAt        DateTime?
-  recommender   User?          @relation("invite-codes-available", fields: [recommenderId], references: [did])
-  recommenderId String?
-  accessRequest AccessRequest?
-  createdAt     DateTime?      @default(now()) @map("created_at")
-
-  @@index([usedByDid])
-  @@index([recommenderId])
-}
-
-model UserMonth {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [did])
-  monthStart DateTime
-  monthEnd   DateTime
-
-  wasActive Boolean
-  value     Float
-
-  paymentPromises PaymentPromise[]
-  promisesCreated Boolean          @default(false)
-
-  @@index([userId])
-}
-
-model Donation {
-  id             String   @id @default(cuid())
-  createdAt      DateTime @default(now()) @map("created_at")
-  userById       String?
-  userBy         User?    @relation(fields: [userById], references: [did])
-  transactionId  String?
-  amount         Int
-  mpPreferenceId String?
-
-  @@unique([mpPreferenceId])
-  @@index([userById])
-}
-
-enum PromiseStatus {
-  Pending
-  Confirmed
-  Payed
-}
-
-model PaymentPromise {
-  id          String        @id @default(cuid())
-  createdAt   DateTime      @default(now()) @map("created_at")
-  userMonth   UserMonth     @relation(fields: [userMonthId], references: [id])
-  userMonthId String
-  amount      Float
-  status      PromiseStatus @default(Pending)
-  contentId   String
-  content     Content       @relation(fields: [contentId], references: [uri])
-
-  @@unique([contentId, userMonthId])
-  @@index([userMonthId])
-  @@index([contentId])
-}
-
-model Topic {
-  id                       String             @id
-  protection               EditorStatus       @default(Beginner)
-  versions                 TopicVersion[]
-  currentVersion           TopicVersion?      @relation("currentVersion", fields: [currentVersionId], references: [uri])
-  currentVersionId         String?            @unique
-  referencedBy             Reference[]
-  categories               TopicToCategory[]
-  popularityScore          Int?               @default(1)
-  popularityScoreLastDay   Int                @default(0)
-  popularityScoreLastWeek  Int                @default(0)
-  popularityScoreLastMonth Int                @default(0)
-  lastEdit                 DateTime?          @updatedAt
-  lastContentChange        DateTime?
-  readSessions             ReadSession[]
-  interactions             TopicInteraction[]
-
-  @@index([popularityScoreLastDay(sort: Desc)])
-  @@index([popularityScoreLastWeek(sort: Desc)])
-  @@index([popularityScoreLastMonth(sort: Desc)])
-  @@index([lastEdit(sort: Desc)])
-}
-
-model TopicVersion {
-  uri              String         @id
-  content          Content        @relation(fields: [uri], references: [uri])
-  title            String?
-  topic            Topic          @relation(fields: [topicId], references: [id])
-  topicId          String
-  message          String         @default("")
-  synonyms         String?
-  categories       String?
-  authorship       Boolean        @default(true)
-  currentVersionOf Topic?         @relation("currentVersion")
-  charsAdded       Int?
-  charsDeleted     Int?
-  accCharsAdded    Int?
-  contribution     String?
-  diff             String?
-  props            Json?
-  prevAcceptedUri  String?
-  prevAccepted     TopicVersion?  @relation("prevAccepted", fields: [prevAcceptedUri], references: [uri])
-  nextVersions     TopicVersion[] @relation("prevAccepted")
-
-  @@index([topicId])
-}
-
-model TopicCategory {
-  id     String            @id
-  topics TopicToCategory[]
-  linksA CategoryLink[]    @relation("linksA")
-  linksB CategoryLink[]    @relation("linksB")
+model Blob {
+  cid       String     @id
+  authorId  String
+  User      User       @relation(fields: [authorId], references: [did])
+  Content   Content[]
+  DataBlock DataBlock?
 }
 
 model CategoryLink {
-  idCategoryA String
-  categoryA   TopicCategory @relation("linksA", fields: [idCategoryA], references: id)
-  idCategoryB String
-  categoryB   TopicCategory @relation("linksB", fields: [idCategoryB], references: id)
+  idCategoryA                                           String
+  idCategoryB                                           String
+  TopicCategory_CategoryLink_idCategoryAToTopicCategory TopicCategory @relation("CategoryLink_idCategoryAToTopicCategory", fields: [idCategoryA], references: [id])
+  TopicCategory_CategoryLink_idCategoryBToTopicCategory TopicCategory @relation("CategoryLink_idCategoryBToTopicCategory", fields: [idCategoryB], references: [id])
 
   @@id([idCategoryA, idCategoryB])
 }
 
-model TopicToCategory {
-  topicId    String
-  categoryId String
-  topic      Topic         @relation(fields: [topicId], references: [id])
-  category   TopicCategory @relation(fields: [categoryId], references: [id])
-
-  @@id([topicId, categoryId])
-}
-
-model Record {
-  uri             String   @id @unique
-  cid             String?
-  collection      String
-  rkey            String
-  author          User     @relation(fields: [authorId], references: [did])
-  authorId        String
-  createdAt       DateTime @default(now()) @map("created_at")
-  content         Content?
-  follow          Follow?
-  dataset         Dataset?
-  embeddedIn      Record?  @relation("embeddings", fields: [uri], references: [uri])
-  embeddedRecords Record[] @relation("embeddings")
-  record          String?
-
-  reaction        Reaction?
-  reactions       Reaction[]   @relation("reactions")
-  uniqueReactions HasReacted[]
-
-  uniqueLikesCount   Int @default(0)
-  uniqueRepostsCount Int @default(0)
-  uniqueAcceptsCount Int @default(0)
-  uniqueRejectsCount Int @default(0)
-
-  replies Post[] @relation("reply")
-  rootOf  Post[] @relation("root")
-
-  CAProfileOf User? @relation("CAProfile")
-
-  notificationsGenerated Notification[]
-
-  CAIndexedAt   DateTime @default(now())
-  lastUpdatedAt DateTime @default(now())
-
-  topicInteractions TopicInteraction[]
-
-  @@index([authorId, createdAt(sort: Desc)])
-  @@index([collection, createdAt(sort: Desc)])
-  @@index([authorId, collection, createdAt(sort: Desc)])
-  @@index([collection, authorId, createdAt(sort: Desc)])
-  @@index([createdAt(sort: Desc)])
-}
-
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
 model Content {
-  uri                  String           @id
-  record               Record           @relation(fields: [uri], references: [uri])
-  text                 String?
-  textBlobId           String?
-  textBlob             Blob?            @relation(fields: [textBlobId], references: [cid])
-  format               String?
-  dbFormat             String?
-  numWords             Int?
-  topicVersion         TopicVersion?
-  article              Article?
-  post                 Post?
-  references           Reference[]
-  lastReferencesUpdate DateTime?
-  selfLabels           String[]
-  embeds               Json[]
-  datasetsUsed         Dataset[]
-  readSessions         ReadSession[]
-  paymentPromises      PaymentPromise[]
+  text                    String?
+  numWords                Int?
+  uri                     String           @id
+  format                  String?
+  textBlobId              String?
+  lastReferencesUpdate    DateTime?
+  selfLabels              String[]
+  embeds                  Json[]
+  dbFormat                String?
+  created_at              DateTime         @default(now())
+  interactionsScore       Int?
+  likesScore              Int?
+  relativePopularityScore Float?
+  Article                 Article?
+  Blob                    Blob?            @relation(fields: [textBlobId], references: [cid])
+  Record                  Record           @relation(fields: [uri], references: [uri])
+  PaymentPromise          PaymentPromise[]
+  Post                    Post?
+  ReadSession             ReadSession[]
+  Reference               Reference[]
+  TopicVersion            TopicVersion?
+  Dataset                 Dataset[]
 
-  createdAt               DateTime @default(now()) @map("created_at") // createdAt de record denormalizada
-  likesScore              Int? // solo para contents, pero va acá por el índice
-  interactionsScore       Int? // solo para contents, pero va acá por el índice
-  relativePopularityScore Float? // solo para contents, pero va acá por el índice
-
-  @@index([likesScore(sort: Desc), createdAt(sort: Desc)])
-  @@index([interactionsScore(sort: Desc), createdAt(sort: Desc)])
-  @@index([relativePopularityScore(sort: Desc), createdAt(sort: Desc)])
-  @@index([createdAt(sort: Desc)])
+  @@index([created_at(sort: Desc)])
+  @@index([interactionsScore(sort: Desc), created_at(sort: Desc)])
+  @@index([likesScore(sort: Desc), created_at(sort: Desc)])
+  @@index([relativePopularityScore(sort: Desc), created_at(sort: Desc)])
 }
 
-model TopicInteraction {
-  recordId String
-  record   Record @relation(fields: [recordId], references: [uri])
-  topicId  String
-  topic    Topic  @relation(fields: [topicId], references: [id])
-
-  touched DateTime @default(now())
-
-  @@unique([recordId, topicId])
+model DataBlock {
+  cid       String  @id
+  datasetId String
+  format    String?
+  Blob      Blob    @relation(fields: [cid], references: [cid])
+  Dataset   Dataset @relation(fields: [datasetId], references: [uri])
 }
 
-model ReadSession {
-  id              String   @id @default(uuid())
-  userId          String
-  user            User     @relation("readUser", fields: [userId], references: [did])
-  createdAt       DateTime @default(now()) @map("created_at")
-  readChunks      Json
-  readContentId   String?
-  readContent     Content? @relation(fields: [readContentId], references: [uri])
-  contentAuthorId String
-  contentAuthor   User     @relation("readAuthor", fields: [contentAuthorId], references: [did])
-  topicId         String?
-  topic           Topic?   @relation(fields: [topicId], references: [id])
-
-  @@index([readContentId])
-  @@index([userId])
+model Dataset {
+  columns     String[]
+  title       String
+  uri         String      @id
+  description String?
+  DataBlock   DataBlock[]
+  Record      Record      @relation(fields: [uri], references: [uri])
+  Content     Content[]
 }
 
-model Post {
-  uri     String  @id
-  content Content @relation(fields: [uri], references: [uri])
-  facets  String?
-  embed   String?
+model Donation {
+  id             String   @id
+  userById       String?
+  created_at     DateTime @default(now())
+  transactionId  String?
+  amount         Int
+  mpPreferenceId String?  @unique
+  User           User?    @relation(fields: [userById], references: [did])
 
-  replyToId String?
-  replyTo   Record? @relation("reply", fields: [replyToId], references: [uri])
+  @@index([userById])
+}
 
-  rootId String?
-  root   Record?  @relation("root", fields: [rootId], references: [uri])
-  langs  String[]
+model Draft {
+  id         String   @id
+  created_at DateTime @default(now())
+  lastUpdate DateTime @default(now())
+  authorId   String
+  collection String
+  embeds     Json?
+  text       String
+  title      String?
+  User       User     @relation(fields: [authorId], references: [did])
 
-  @@index([replyToId])
-  @@index([rootId])
+  @@index([authorId])
 }
 
 model Follow {
-  uri            String  @id
-  record         Record  @relation(fields: [uri], references: [uri])
   userFollowedId String?
-  userFollowed   User?   @relation(fields: [userFollowedId], references: [did])
+  uri            String  @id
+  Record         Record  @relation(fields: [uri], references: [uri])
+  User           User?   @relation(fields: [userFollowedId], references: [did])
 
   @@index([userFollowedId])
 }
 
-model Reaction {
-  uri       String  @id
-  record    Record  @relation(fields: [uri], references: [uri])
-  subjectId String?
-  subject   Record? @relation("reactions", fields: [subjectId], references: [uri])
-
-  voteReject VoteReject?
-
-  @@index([subjectId])
-  @@index([uri, subjectId])
-}
-
 model HasReacted {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [did])
-
-  recordId String
-  record   Record @relation(fields: [recordId], references: [uri])
-
+  userId       String
+  recordId     String
   reactionType String
+  id           String @id
+  Record       Record @relation(fields: [recordId], references: [uri])
+  User         User   @relation(fields: [userId], references: [did])
 
   @@unique([userId, recordId, reactionType])
   @@index([recordId])
 }
 
-model VoteReject {
-  uri      String   @id
-  reaction Reaction @relation(fields: [uri], references: [uri])
-  message  String?
-  labels   String[]
-}
+model InviteCode {
+  code                                String         @id
+  usedByDid                           String?        @unique
+  usedAt                              DateTime?
+  recommenderId                       String?
+  created_at                          DateTime?      @default(now())
+  AccessRequest                       AccessRequest?
+  User_InviteCode_recommenderIdToUser User?          @relation("InviteCode_recommenderIdToUser", fields: [recommenderId], references: [did])
+  User_InviteCode_usedByDidToUser     User?          @relation("InviteCode_usedByDidToUser", fields: [usedByDid], references: [did])
 
-model Article {
-  uri     String  @id
-  content Content @relation(fields: [uri], references: [uri])
-  title   String
-}
-
-model Dataset {
-  uri         String      @id
-  record      Record      @relation(fields: [uri], references: [uri])
-  columns     String[]
-  title       String
-  dataBlocks  DataBlock[]
-  description String?
-
-  usedBy Content[]
-}
-
-model DataBlock {
-  cid       String  @id
-  blob      Blob    @relation(fields: [cid], references: [cid])
-  datasetId String
-  dataset   Dataset @relation(fields: [datasetId], references: [uri])
-  format    String?
-}
-
-model Blob {
-  cid       String     @id
-  dataBlock DataBlock?
-
-  author   User   @relation(fields: [authorId], references: [did])
-  authorId String
-
-  contentOf Content[]
-}
-
-model Reference {
-  id                   String        @id @default(uuid())
-  type                 ReferenceType
-  count                Int           @default(1)
-  referencedTopicId    String
-  referencedTopic      Topic         @relation(fields: [referencedTopicId], references: [id])
-  referencingContentId String
-  referencingContent   Content       @relation(fields: [referencingContentId], references: [uri])
-
-  @@unique([referencingContentId, referencedTopicId])
-  @@index([referencingContentId])
-  @@index([referencedTopicId])
-}
-
-enum ReferenceType {
-  Strong
-  Weak
-}
-
-model AccessRequest {
-  id           String      @id @default(cuid())
-  createdAt    DateTime    @default(now()) @map("created_at")
-  email        String
-  comment      String
-  sentInviteAt DateTime?
-  inviteCodeId String?     @unique
-  inviteCode   InviteCode? @relation(fields: [inviteCodeId], references: [code])
-
-  @@index([inviteCodeId])
-}
-
-model Draft {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now()) @map("created_at")
-  lastUpdate DateTime @default(now())
-  collection String
-  text       String
-  title      String?
-  embeds     Json?
-  author     User     @relation(fields: [authorId], references: [did])
-  authorId   String
-
-  @@index([authorId])
-}
-
-model Notification {
-  id        String           @id @default(cuid())
-  createdAt DateTime         @default(now()) @map("created_at")
-  type      NotificationType
-
-  userNotifiedId String
-  userNotified   User   @relation(fields: [userNotifiedId], references: [did])
-
-  causedByRecordId String // replies, edits, votes, mentions
-  causedByRecord   Record @relation(fields: [causedByRecordId], references: [uri])
-
-  message     String?
-  moreContext String?
-
-  reasonSubject String?
-
-  @@unique([causedByRecordId, userNotifiedId])
-  @@index([userNotifiedId])
+  @@index([recommenderId])
+  @@index([usedByDid])
 }
 
 model Meeting {
-  id          String   @id @default(cuid())
+  id          String   @id
   date        DateTime
   title       String
   url         String
@@ -542,10 +177,319 @@ model Meeting {
   @@index([show])
 }
 
+model NotInterested {
+  id                                 String @id
+  authorId                           String
+  subjectId                          String
+  User_NotInterested_authorIdToUser  User   @relation("NotInterested_authorIdToUser", fields: [authorId], references: [did])
+  User_NotInterested_subjectIdToUser User   @relation("NotInterested_subjectIdToUser", fields: [subjectId], references: [did])
+
+  @@index([authorId])
+  @@index([authorId, subjectId])
+  @@index([subjectId])
+}
+
+model Notification {
+  id               String           @id
+  type             NotificationType
+  userNotifiedId   String
+  causedByRecordId String
+  message          String?
+  moreContext      String?
+  created_at       DateTime         @default(now())
+  reasonSubject    String?
+  Record           Record           @relation(fields: [causedByRecordId], references: [uri])
+  User             User             @relation(fields: [userNotifiedId], references: [did])
+
+  @@unique([causedByRecordId, userNotifiedId])
+  @@index([userNotifiedId])
+}
+
+model PaymentPromise {
+  id          String        @id
+  created_at  DateTime      @default(now())
+  amount      Float
+  status      PromiseStatus @default(Pending)
+  contentId   String
+  userMonthId String
+  Content     Content       @relation(fields: [contentId], references: [uri])
+  UserMonth   UserMonth     @relation(fields: [userMonthId], references: [id])
+
+  @@unique([contentId, userMonthId])
+  @@index([contentId])
+  @@index([userMonthId])
+}
+
+model Post {
+  facets                        String?
+  embed                         String?
+  replyToId                     String?
+  rootId                        String?
+  uri                           String   @id
+  langs                         String[]
+  quoteToId                     String?
+  Record_Post_quoteToIdToRecord Record?  @relation("Post_quoteToIdToRecord", fields: [quoteToId], references: [uri])
+  Record_Post_replyToIdToRecord Record?  @relation("Post_replyToIdToRecord", fields: [replyToId], references: [uri])
+  Record_Post_rootIdToRecord    Record?  @relation("Post_rootIdToRecord", fields: [rootId], references: [uri])
+  Content                       Content  @relation(fields: [uri], references: [uri])
+
+  @@index([quoteToId])
+  @@index([replyToId])
+  @@index([rootId])
+}
+
+model Reaction {
+  uri                               String      @id
+  subjectId                         String?
+  Record_Reaction_subjectIdToRecord Record?     @relation("Reaction_subjectIdToRecord", fields: [subjectId], references: [uri])
+  Record_Reaction_uriToRecord       Record      @relation("Reaction_uriToRecord", fields: [uri], references: [uri])
+  VoteReject                        VoteReject?
+
+  @@index([subjectId])
+  @@index([uri, subjectId])
+}
+
+model ReadSession {
+  id                                     String   @id
+  userId                                 String
+  created_at                             DateTime @default(now())
+  readContentId                          String?
+  readChunks                             Json
+  contentAuthorId                        String
+  topicId                                String?
+  User_ReadSession_contentAuthorIdToUser User     @relation("ReadSession_contentAuthorIdToUser", fields: [contentAuthorId], references: [did])
+  Content                                Content? @relation(fields: [readContentId], references: [uri])
+  Topic                                  Topic?   @relation(fields: [topicId], references: [id])
+  User_ReadSession_userIdToUser          User     @relation("ReadSession_userIdToUser", fields: [userId], references: [did])
+
+  @@index([readContentId])
+  @@index([userId])
+}
+
+model Record {
+  uri                                 String             @id @unique
+  collection                          String
+  rkey                                String
+  authorId                            String
+  created_at                          DateTime           @default(now())
+  record                              String?
+  cid                                 String?
+  uniqueLikesCount                    Int                @default(0)
+  uniqueRepostsCount                  Int                @default(0)
+  uniqueAcceptsCount                  Int                @default(0)
+  uniqueRejectsCount                  Int                @default(0)
+  CAIndexedAt                         DateTime           @default(now())
+  lastUpdatedAt                       DateTime           @default(now())
+  quotesCount                         Int                @default(0)
+  Content                             Content?
+  Dataset                             Dataset?
+  Follow                              Follow?
+  HasReacted                          HasReacted[]
+  Notification                        Notification[]
+  Post_Post_quoteToIdToRecord         Post[]             @relation("Post_quoteToIdToRecord")
+  Post_Post_replyToIdToRecord         Post[]             @relation("Post_replyToIdToRecord")
+  Post_Post_rootIdToRecord            Post[]             @relation("Post_rootIdToRecord")
+  Reaction_Reaction_subjectIdToRecord Reaction[]         @relation("Reaction_subjectIdToRecord")
+  Reaction_Reaction_uriToRecord       Reaction?          @relation("Reaction_uriToRecord")
+  User_Record_authorIdToUser          User               @relation("Record_authorIdToUser", fields: [authorId], references: [did])
+  Record                              Record             @relation("RecordToRecord", fields: [uri], references: [uri])
+  other_Record                        Record?            @relation("RecordToRecord")
+  TopicInteraction                    TopicInteraction[]
+  User_User_CAProfileUriToRecord      User?              @relation("User_CAProfileUriToRecord")
+
+  @@index([authorId, collection, created_at(sort: Desc)])
+  @@index([authorId, created_at(sort: Desc)])
+  @@index([collection, authorId, created_at(sort: Desc)])
+  @@index([collection, created_at(sort: Desc)])
+  @@index([created_at(sort: Desc)])
+}
+
+model Reference {
+  id                   String        @id
+  type                 ReferenceType
+  referencedTopicId    String
+  referencingContentId String
+  count                Int           @default(1)
+  Topic                Topic         @relation(fields: [referencedTopicId], references: [id])
+  Content              Content       @relation(fields: [referencingContentId], references: [uri])
+
+  @@unique([referencingContentId, referencedTopicId])
+  @@index([referencedTopicId])
+  @@index([referencingContentId])
+}
+
+model Topic {
+  id                                                String             @id
+  protection                                        EditorStatus       @default(Beginner)
+  currentVersionId                                  String?            @unique
+  popularityScore                                   Int?               @default(1)
+  lastEdit                                          DateTime?
+  popularityScoreLastDay                            Int                @default(0)
+  popularityScoreLastMonth                          Int                @default(0)
+  popularityScoreLastWeek                           Int                @default(0)
+  lastContentChange                                 DateTime?
+  ReadSession                                       ReadSession[]
+  Reference                                         Reference[]
+  TopicVersion_Topic_currentVersionIdToTopicVersion TopicVersion?      @relation("Topic_currentVersionIdToTopicVersion", fields: [currentVersionId], references: [uri])
+  TopicInteraction                                  TopicInteraction[]
+  TopicToCategory                                   TopicToCategory[]
+  TopicVersion_TopicVersion_topicIdToTopic          TopicVersion[]     @relation("TopicVersion_topicIdToTopic")
+
+  @@index([lastEdit(sort: Desc)])
+  @@index([popularityScoreLastDay(sort: Desc)])
+  @@index([popularityScoreLastMonth(sort: Desc)])
+  @@index([popularityScoreLastWeek(sort: Desc)])
+}
+
+model TopicCategory {
+  id                                                   String            @id
+  CategoryLink_CategoryLink_idCategoryAToTopicCategory CategoryLink[]    @relation("CategoryLink_idCategoryAToTopicCategory")
+  CategoryLink_CategoryLink_idCategoryBToTopicCategory CategoryLink[]    @relation("CategoryLink_idCategoryBToTopicCategory")
+  TopicToCategory                                      TopicToCategory[]
+}
+
+model TopicInteraction {
+  recordId String
+  topicId  String
+  touched  DateTime @default(now())
+  Record   Record   @relation(fields: [recordId], references: [uri])
+  Topic    Topic    @relation(fields: [topicId], references: [id])
+
+  @@unique([recordId, topicId])
+}
+
+model TopicToCategory {
+  topicId       String
+  categoryId    String
+  TopicCategory TopicCategory @relation(fields: [categoryId], references: [id])
+  Topic         Topic         @relation(fields: [topicId], references: [id])
+
+  @@id([topicId, categoryId])
+}
+
+model TopicVersion {
+  topicId                                    String
+  accCharsAdded                              Int?
+  authorship                                 Boolean        @default(true)
+  categories                                 String?
+  charsAdded                                 Int?
+  charsDeleted                               Int?
+  contribution                               String?
+  diff                                       String?
+  message                                    String         @default("")
+  title                                      String?
+  synonyms                                   String?
+  uri                                        String         @id
+  props                                      Json?
+  prevAcceptedUri                            String?
+  Topic_Topic_currentVersionIdToTopicVersion Topic?         @relation("Topic_currentVersionIdToTopicVersion")
+  TopicVersion                               TopicVersion?  @relation("TopicVersionToTopicVersion", fields: [prevAcceptedUri], references: [uri])
+  other_TopicVersion                         TopicVersion[] @relation("TopicVersionToTopicVersion")
+  Topic_TopicVersion_topicIdToTopic          Topic          @relation("TopicVersion_topicIdToTopic", fields: [topicId], references: [id])
+  Content                                    Content        @relation(fields: [uri], references: [uri])
+
+  @@index([topicId])
+}
+
+model User {
+  did                                           String             @id @db.VarChar(255)
+  handle                                        String?
+  email                                         String?
+  created_at                                    DateTime           @default(now())
+  editorStatus                                  EditorStatus       @default(Beginner)
+  hasAccess                                     Boolean            @default(false)
+  avatar                                        String?
+  banner                                        String?
+  description                                   String?
+  displayName                                   String?
+  inCA                                          Boolean            @default(false)
+  platformAdmin                                 Boolean            @default(false)
+  CAProfileUri                                  String?            @unique
+  seenTutorial                                  Boolean            @default(false)
+  orgValidation                                 String?
+  userValidationHash                            String?            @unique
+  lastSeenNotifications                         DateTime           @default(dbgenerated("'1970-01-01 00:00:00'::timestamp without time zone"))
+  moderationState                               ModerationState    @default(Ok)
+  seenTopicMaximizedTutorial                    Boolean            @default(false)
+  seenTopicMinimizedTutorial                    Boolean            @default(false)
+  seenTopicsTutorial                            Boolean            @default(false)
+  algorithmConfig                               Json?
+  authorStatus                                  Json?
+  articleLastMonth                              Boolean            @default(false)
+  postLastTwoWeeks                              Boolean            @default(false)
+  Blob                                          Blob[]
+  Donation                                      Donation[]
+  Draft                                         Draft[]
+  Follow                                        Follow[]
+  HasReacted                                    HasReacted[]
+  InviteCode_InviteCode_recommenderIdToUser     InviteCode[]       @relation("InviteCode_recommenderIdToUser")
+  InviteCode_InviteCode_usedByDidToUser         InviteCode?        @relation("InviteCode_usedByDidToUser")
+  NotInterested_NotInterested_authorIdToUser    NotInterested[]    @relation("NotInterested_authorIdToUser")
+  NotInterested_NotInterested_subjectIdToUser   NotInterested[]    @relation("NotInterested_subjectIdToUser")
+  Notification                                  Notification[]
+  ReadSession_ReadSession_contentAuthorIdToUser ReadSession[]      @relation("ReadSession_contentAuthorIdToUser")
+  ReadSession_ReadSession_userIdToUser          ReadSession[]      @relation("ReadSession_userIdToUser")
+  Record_Record_authorIdToUser                  Record[]           @relation("Record_authorIdToUser")
+  Record_User_CAProfileUriToRecord              Record?            @relation("User_CAProfileUriToRecord", fields: [CAProfileUri], references: [uri])
+  UserMonth                                     UserMonth[]
+  ValidationRequest                             ValidationRequest?
+
+  @@index([CAProfileUri])
+  @@index([articleLastMonth, did])
+  @@index([created_at])
+  @@index([did, inCA])
+  @@index([handle])
+  @@index([inCA, did])
+  @@index([postLastTwoWeeks, did])
+}
+
+model UserMonth {
+  id              String           @id
+  userId          String
+  monthStart      DateTime
+  monthEnd        DateTime
+  wasActive       Boolean
+  value           Float
+  promisesCreated Boolean          @default(false)
+  PaymentPromise  PaymentPromise[]
+  User            User             @relation(fields: [userId], references: [did])
+
+  @@index([userId])
+}
+
+model ValidationRequest {
+  id            String                  @id
+  type          ValidationType
+  userId        String                  @unique
+  dniFrente     String?
+  dniDorso      String?
+  comentarios   String?
+  documentacion String[]
+  email         String?
+  sitioWeb      String?
+  tipoOrg       String?
+  created_at    DateTime                @default(now())
+  rejectReason  String?
+  result        ValidationRequestResult @default(Pendiente)
+  User          User                    @relation(fields: [userId], references: [did])
+}
+
+model VoteReject {
+  uri      String   @id
+  labels   String[]
+  message  String?
+  Reaction Reaction @relation(fields: [uri], references: [uri])
+}
+
 enum EditorStatus {
   Beginner
   Editor
   Administrator
+}
+
+enum ModerationState {
+  Ok
+  ShadowBan
 }
 
 enum NotificationType {
@@ -553,4 +497,26 @@ enum NotificationType {
   Mention
   TopicEdit
   TopicVersionVote
+}
+
+enum PromiseStatus {
+  Pending
+  Confirmed
+  Payed
+}
+
+enum ReferenceType {
+  Strong
+  Weak
+}
+
+enum ValidationRequestResult {
+  Aceptada
+  Rechazada
+  Pendiente
+}
+
+enum ValidationType {
+  Persona
+  Organizacion
 }

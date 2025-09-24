@@ -1,7 +1,7 @@
 import WebSocket, {RawData} from 'ws';
 import {getCAUsersDids} from "#/services/user/users";
 import {AppContext} from "#/setup";
-import {isCAProfile, isFollow} from "#/utils/uri";
+import {getUri, isCAProfile, isFollow} from "#/utils/uri";
 import {addPendingEvent, getCAUsersAndFollows} from "#/services/sync/sync-user";
 import {CommitEvent, JetstreamEvent} from "#/lib/types";
 import * as Follow from "#/lex-api/types/app/bsky/graph/follow"
@@ -10,6 +10,10 @@ import {LRUCache} from 'lru-cache'
 
 function formatEventsPerSecond(events: number, elapsed: number) {
     return (events / (elapsed / 1000)).toFixed(2)
+}
+
+export function getUriFromCommitEvent(commitEvent: CommitEvent) {
+    return getUri(commitEvent.did, commitEvent.commit.collection, commitEvent.commit.rkey)
 }
 
 export class MirrorMachine {
@@ -151,17 +155,27 @@ export class MirrorMachine {
     async processEvent(ctx: AppContext, e: JetstreamEvent, inCA: boolean) {
         this.relevantEventCounter++
         const mirrorStatus = await ctx.redisCache.mirrorStatus.get(e.did, inCA)
-        ctx.logger.pino.info({did: e.did, mirrorStatus}, `sync event`)
+
+        if(e.kind == "commit"){
+            const uri = getUriFromCommitEvent(e as CommitEvent)
+            ctx.logger.pino.info({uri, mirrorStatus}, `sync event`)
+        } else {
+            ctx.logger.pino.info({did: e.did, mirrorStatus}, `sync event`)
+        }
 
         if(mirrorStatus == "Sync"){
             if(e.kind == "commit"){
                 const t1 = Date.now()
-                await processEventsBatch(ctx, [e])
+                try {
+                    await processEventsBatch(ctx, [e])
+                } catch (error) {
+                    ctx.logger.pino.error({event: e, error}, "error processing event")
+                    await ctx.redisCache.mirrorStatus.set(e.did, "Dirty", inCA)
+                }
                 const t2 = Date.now()
                 const c = (e as CommitEvent)
-                ctx.logger.logTimes(`process commit ${c.commit.operation} event: ${c.commit.uri}`, [t1, t2])
+                ctx.logger.pino.info({time: t2-t1, uri: getUriFromCommitEvent(c)}, `commit event processed`)
             }
-
         } else if(mirrorStatus == "Dirty"){
             await ctx.redisCache.mirrorStatus.set(e.did, "InProcess", inCA)
             await ctx.worker?.addJob("sync-user", {

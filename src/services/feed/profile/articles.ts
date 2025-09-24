@@ -3,24 +3,17 @@ import {GetSkeletonProps} from "#/services/feed/feed";
 
 export const getArticlesProfileFeedSkeleton = (did: string) : GetSkeletonProps => {
     return async (ctx, agent, data, cursor) => {
-        const skeleton = (await ctx.db.record.findMany({
-            select: {
-                uri: true,
-                createdAt: true
-            },
-            where: {
-                authorId: did,
-                collection: {
-                    in: ["ar.cabildoabierto.feed.article", "ar.com.cabildoabierto.article"]
-                },
-                createdAt: cursor ? {
-                    lte: new Date(cursor)
-                } : undefined
-            }
-        })).map(({uri, createdAt}) => ({post: uri, createdAt}))
+
+        const skeleton = await ctx.kysely
+            .selectFrom("Record")
+            .select(["uri", "created_at"])
+            .where("collection", "=", "ar.cabildoabierto.feed.article")
+            .where("authorId", "=", did)
+            .$if(cursor != null, qb => qb.where("created_at", "<=", new Date(cursor!)))
+            .execute()
 
         return {
-            skeleton,
+            skeleton: skeleton.map(({uri, created_at}) => ({post: uri, created_at})),
             cursor: undefined
         }
     }

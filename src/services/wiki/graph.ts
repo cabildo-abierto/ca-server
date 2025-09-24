@@ -98,12 +98,9 @@ export const updateCategoriesGraph = async (ctx: AppContext) => {
 }
 
 export const getCategoriesGraph: CAHandlerNoAuth<{}, TopicsGraph> = async (ctx, agent, {}) => {
-    const links = await ctx.db.categoryLink.findMany({
-        select: {
-            idCategoryA: true,
-            idCategoryB: true
-        }
-    })
+    const links = await ctx.kysely.selectFrom("CategoryLink")
+        .select(["idCategoryA", "idCategoryB"])
+        .execute()
 
     const {data: categories, error} = await getCategoriesWithCounts(ctx, agent, {})
     if (!categories) {

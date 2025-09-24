@@ -8,10 +8,11 @@ import {getUsersWithReadSessions} from "#/services/monetization/user-months";
 import {isWeeklyActiveUser} from "#/services/monetization/donations";
 import {count, listOrderDesc, sortByKey} from "#/utils/arrays";
 import {sql} from "kysely";
+import {jsonArrayFrom} from "kysely/helpers/postgres";
 
 
 export type StatsDashboard = {
-    lastUsers: (ProfileViewBasicCA & { lastReadSession: Date | null, CAProfileCreatedAt?: Date })[]
+    lastUsers: (ProfileViewBasicCA & { lastReadSession: Date | null, CAProfileCreatedAt?: Date | null })[]
     counts: {
         registered: number
         active: number
@@ -43,34 +44,26 @@ export const testUsers = [
 
 
 async function getRegisteredUsers(ctx: AppContext, agent: SessionAgent): Promise<StatsDashboard["lastUsers"]> {
-    const users = await ctx.db.user.findMany({
-        select: {
-            did: true,
-            createdAt: true,
-            userValidationHash: true,
-            orgValidation: true,
-            readSessions: {
-                select: {
-                    createdAt: true
-                },
-                orderBy: {
-                    createdAt: "desc"
-                }
-            },
-            CAProfile: {
-                select: {
-                    createdAt: true
-                }
-            }
-        },
-        where: {
-            inCA: true,
-            hasAccess: true,
-            handle: {
-                notIn: testUsers
-            }
-        }
-    })
+    const users = await ctx.kysely
+        .selectFrom("User")
+        .leftJoin("Record as CAProfile", "CAProfile.uri", "User.CAProfileUri")
+        .select([
+            "did",
+            "created_at",
+            "userValidationHash",
+            "orgValidation",
+            eb => jsonArrayFrom(eb
+                .selectFrom("ReadSession")
+                .select("created_at")
+                .whereRef("ReadSession.userId", "=", "User.did")
+                .orderBy("created_at desc")
+            ).as("readSessions"),
+            "CAProfile.created_at as CAProfileCreatedAt"
+        ])
+        .where("User.inCA", "=", true)
+        .where("User.hasAccess", "=", true)
+        .where("User.handle", "not in", testUsers)
+        .execute()
 
     const dataplane = new Dataplane(ctx, agent)
     await dataplane.fetchUsersHydrationData(users.map(u => u.did))
@@ -81,9 +74,9 @@ async function getRegisteredUsers(ctx: AppContext, agent: SessionAgent): Promise
         if (user) {
             return {
                 ...p,
-                CAProfileCreatedAt: user.CAProfile?.createdAt,
-                lastReadSession: user.readSessions.length > 0 ? user?.readSessions[0].createdAt : null,
-                createdAt: user.createdAt.toString(),
+                CAProfileCreatedAt: user.CAProfileCreatedAt,
+                lastReadSession: user.readSessions.length > 0 ? user?.readSessions[0].created_at : null,
+                createdAt: user.created_at?.toString(),
             }
         }
         return null
@@ -121,66 +114,46 @@ async function getWAUPlot(ctx: AppContext, verified: boolean) {
 
 
 async function getTopicVersionsPlot(ctx: AppContext) {
-    const tv = await ctx.db.record.findMany({
-        select: {
-            createdAt: true
-        },
-        where: {
-            collection: "ar.cabildoabierto.wiki.topicVersion",
-            authorId: {
-                notIn: [
-                    "cabildoabierto.ar"
-                ]
-            }
-        }
-    })
+    const tv = await ctx.kysely
+        .selectFrom("TopicVersion")
+        .innerJoin("Record", "TopicVersion.uri", "Record.uri")
+        .select("Record.created_at")
+        .where("authorId", "!=", "cabildoabierto.ar")
+        .execute()
 
     return dailyPlotData(
         tv,
-        (x, d) => x.createdAt.toDateString() == d.toDateString()
+        (x, d) => x.created_at.toDateString() == d.toDateString()
     )
 }
 
 
 async function getArticlesPlot(ctx: AppContext) {
-    const tv = await ctx.db.record.findMany({
-        select: {
-            createdAt: true
-        },
-        where: {
-            collection: "ar.cabildoabierto.feed.article"
-        }
-    })
+    const tv = await ctx.kysely
+        .selectFrom("Record")
+        .select("created_at")
+        .where("collection", "=", "ar.cabildoabierto.feed.article")
+        .execute()
 
     return dailyPlotData(
         tv,
-        (x, d) => x.createdAt.toDateString() == d.toDateString()
+        (x, d) => x.created_at.toDateString() == d.toDateString()
     )
 }
 
 
 async function getCACommentsPlot(ctx: AppContext) {
-    const tv = await ctx.db.record.findMany({
-        select: {
-            createdAt: true
-        },
-        where: {
-            content: {
-                post: {
-                    root: {
-                        collection: {
-                            in: ["ar.cabildoabierto.feed.article", "ar.cabildoabierto.wiki.topicVersion"]
-                        }
-                    }
-                }
-            },
-            collection: "app.bsky.feed.post"
-        }
-    })
+    const tv = await ctx.kysely
+        .selectFrom("Post")
+        .innerJoin("Record", "Record.uri", "Post.uri")
+        .innerJoin("Record as Root", "Root.uri", "Post.rootId")
+        .select("Record.created_at")
+        .where("Root.collection", "in", ["ar.cabildoabierto.feed.article", "ar.cabildoabierto.wiki.topicVersion"])
+        .execute()
 
     return dailyPlotData(
         tv,
-        (x, d) => x.createdAt.toDateString() == d.toDateString()
+        (x, d) => x.created_at.toDateString() == d.toDateString()
     )
 }
 

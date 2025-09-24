@@ -1,6 +1,6 @@
 import {AppContext} from "#/setup";
 import {CommitEvent, JetstreamEvent} from "#/lib/types";
-import {getCollectionFromUri, getUri, isCAProfile} from "#/utils/uri";
+import {getUri, isCAProfile} from "#/utils/uri";
 import {getRecordProcessor} from "#/services/sync/event-processing/get-record-processor";
 import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor";
 import {RefAndRecord} from "#/services/sync/types";

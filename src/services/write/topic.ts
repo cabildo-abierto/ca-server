@@ -151,18 +151,18 @@ type CreateTopicVersionProps = {
 
 export const createTopicVersion: CAHandler<CreateTopicVersionProps> = async (ctx, agent, params) => {
     if(params.text == undefined){
-        const exists = await ctx.db.topic.findFirst({
-            where: {
-                id: {
-                    equals: params.id,
-                    mode: 'insensitive'
-                },
-                versions: {
-                    some: {}
-                }
-            }
-        })
-        if(exists){
+        const exists = await ctx.kysely
+            .selectFrom("Topic")
+            .select("id")
+            .where("id", "ilike", params.id)
+            .where(eb => eb.exists(
+                eb
+                    .selectFrom("TopicVersion")
+                    .whereRef("TopicVersion.topicId", "=", "Topic.id")
+            ))
+            .executeTakeFirst()
+
+        if(exists != null){
             return {error: "Ya existe un tema con ese nombre."}
         }
     }

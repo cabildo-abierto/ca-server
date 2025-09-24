@@ -128,7 +128,6 @@ export type CommitEvent = JetstreamEvent & {
         operation: "create" | "delete" | "update"
         rkey: string
         cid: string
-        uri: string
         record?: any
     }
 }

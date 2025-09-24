@@ -1,5 +1,5 @@
 import {cleanText} from "#/utils/strings";
-import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
+import {CAHandlerNoAuth} from "#/utils/handler";
 import {FeedPipelineProps, getFeed, GetFeedOutput, GetSkeletonProps} from "#/services/feed/feed";
 import {sql} from "kysely";
 

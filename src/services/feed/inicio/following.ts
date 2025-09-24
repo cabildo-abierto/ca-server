@@ -1,5 +1,4 @@
 import {Agent, SessionAgent} from "#/utils/session-agent";
-import {getFollowing} from "#/services/user/users";
 import {AppContext} from "#/setup";
 import {FeedPipelineProps, FeedSkeleton, FollowingFeedFilter, GetSkeletonProps} from "#/services/feed/feed";
 import {rootCreationDateSortKey} from "#/services/feed/utils";
@@ -17,18 +16,16 @@ import {FollowingFeedSkeletonKey} from "#/services/redis/cache";
 
 export type RepostQueryResult = {
     uri?: string
-    createdAt: Date | null
-    reaction: {
-        subjectId: string | null
-    } | null
+    created_at: Date | null
+    subjectId: string | null
 }
 
 
 function skeletonFromArticleReposts(p: RepostQueryResult): SkeletonFeedPost | null {
-    if (p.reaction && p.reaction.subjectId) {
+    if (p.subjectId) {
         return {
             $type: "app.bsky.feed.defs#skeletonFeedPost",
-            post: p.reaction.subjectId,
+            post: p.subjectId,
             reason: {
                 $type: "app.bsky.feed.defs#skeletonReasonRepost",
                 repost: p.uri
@@ -162,11 +159,9 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: 
     const qrs: RepostQueryResult[] = []
     res.forEach(r => {
         const qr = {
-            reaction: {
-                subjectId: r.recordUri
-            },
+            subjectId: r.recordUri,
             uri: r.repostUri,
-            createdAt: r.repostCreatedAt,
+            created_at: r.repostCreatedAt,
         }
         qrs.push(qr)
         dataplane.reposts.set(r.recordUri, qr)
@@ -236,7 +231,7 @@ async function getFollowingFeedSkeletonAllCASide(ctx: AppContext, agent: Session
     const [articles, articleReposts, following] = await Promise.all([
         articlesQuery,
         articleRepostsQuery,
-        getFollowing(ctx, agent.did)
+        getFollowsDids(ctx, agent.did)
     ])
 
     const t3 = Date.now()
@@ -269,7 +264,7 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
     if (lastInTimeline) {
         const lastInTimelineDate = new Date(lastInTimeline)
         articles = articles.filter(a => a.created_at >= lastInTimelineDate && a.created_at <= cursorDate)
-        articleReposts = articleReposts.filter(a => a.createdAt && a.createdAt >= lastInTimelineDate && a.createdAt <= cursorDate)
+        articleReposts = articleReposts.filter(a => a.created_at && a.created_at >= lastInTimelineDate && a.created_at <= cursorDate)
     }
 
     const timelineSkeleton = getSkeletonFromTimeline(ctx, timeline.feed, following)
@@ -293,7 +288,36 @@ const getFollowingFeedSkeletonAll: GetSkeletonProps = async (ctx, agent, data, c
 }
 
 
-async function getCAFollows(ctx: AppContext, did: string): Promise<string[]> {
+export async function getCAFollowersDids(ctx: AppContext, did: string): Promise<string[]> {
+    const rows = await ctx.kysely
+        .selectFrom("Follow")
+        .innerJoin("Record", "Follow.uri", "Record.uri")
+        .select("Record.authorId")
+        .innerJoin("User as Follower", "Follower.did", "Record.authorId")
+        .where("Follow.userFollowedId", "=", did)
+        .where("Follower.inCA", "=", true)
+        .execute()
+
+    return rows
+        .map(x => x.authorId)
+}
+
+
+export async function getFollowsDids(ctx: AppContext, did: string): Promise<string[]> {
+    const rows = await ctx.kysely
+        .selectFrom("Follow")
+        .select("Follow.userFollowedId as did")
+        .innerJoin("Record", "Follow.uri", "Record.uri")
+        .where("Record.authorId", "=", did)
+        .execute();
+
+    return rows
+        .map(x => x.did)
+        .filter(x => x != null)
+}
+
+
+export async function getCAFollowsDids(ctx: AppContext, did: string): Promise<string[]> {
     await ctx.redisCache.CAFollows.get(did)
 
     const rows = await ctx.kysely
@@ -305,7 +329,9 @@ async function getCAFollows(ctx: AppContext, did: string): Promise<string[]> {
         .where("User.inCA", "=", true)
         .execute();
 
-    const dids = rows.map(x => x.did).filter(x => x != null);
+    const dids = rows
+        .map(x => x.did)
+        .filter(x => x != null);
 
     await ctx.redisCache.CAFollows.set(did, dids)
 
@@ -338,7 +364,7 @@ export type FollowingFeedSkeletonElement = {
 
 const followingFeedOnlyCASkeletonQuery: FollowingFeedSkeletonQuery<FollowingFeedSkeletonElement> = async (ctx, did, from, to, limit) => {
     const t1 = Date.now()
-    const follows = await getCAFollows(ctx, did)
+    const follows = await getCAFollowsDids(ctx, did)
     const t2 = Date.now()
 
     const res = await ctx.kysely
@@ -402,7 +428,7 @@ const followingFeedOnlyCASkeletonQuery: FollowingFeedSkeletonQuery<FollowingFeed
 
 
 const followingFeedOnlyArticlesSkeletonQuery: FollowingFeedSkeletonQuery<FollowingFeedSkeletonElement> = async (ctx, did, from, to, limit) => {
-    const follows = await getCAFollows(ctx, did)
+    const follows = await getCAFollowsDids(ctx, did)
 
     const res = await ctx.kysely
         .selectFrom("Record")

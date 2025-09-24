@@ -427,18 +427,12 @@ export async function getSynonymsToTopicsMap(
 
 export async function cleanNotCAReferences(ctx: AppContext) {
     const caUsers = await getCAUsersDids(ctx)
-    const count = await ctx.db.reference.deleteMany({
-        where: {
-            referencingContent: {
-                record: {
-                    authorId: {
-                        notIn: caUsers
-                    }
-                }
-            }
-        }
-    })
-    console.log(`Removed ${count.count} references.`)
+
+    await ctx.kysely
+        .deleteFrom("Reference")
+        .innerJoin("Record", "Reference.referencingContentId", "Record.uri")
+        .where("Record.authorId", "not in", caUsers)
+        .execute()
 }
 
 

@@ -1,7 +1,7 @@
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import MercadoPagoConfig, {Preference} from "mercadopago";
 import {AppContext} from "#/setup";
-import {getUsersWithReadSessions} from "#/services/monetization/user-months";
+import {getUsersWithReadSessions, UserWithReadSessions} from "#/services/monetization/user-months";
 import {count} from "#/utils/arrays";
 import {v4 as uuidv4} from "uuid";
 
@@ -13,16 +13,18 @@ type Donation = {
 export type DonationHistory = Donation[]
 
 export const getDonationHistory: CAHandler<{}, DonationHistory> = async (ctx, agent, {}) => {
-    const subscriptions = await ctx.db.donation.findMany({
-        where: {
-            userById: agent.did
-        }
-    })
+    const subscriptions = await ctx.kysely
+        .selectFrom("Donation")
+        .select(["created_at", "amount"])
+        .where("userById", "=", agent.did)
+        .execute()
 
-    return {data: subscriptions.map(s => ({
-        date: s.createdAt,
-        amount: s.amount
-    }))}
+    return {
+        data: subscriptions.map(s => ({
+            date: s.created_at,
+            amount: s.amount
+        }))
+    }
 }
 
 
@@ -36,18 +38,18 @@ export function getMonthlyValue() {
 }
 
 
-export function isWeeklyActiveUser(u: {handle: string, readSessions: {createdAt: Date, readContentId: string | null}[]}, at: Date = new Date()): boolean {
-    const lastWeekStart = new Date(at.getTime() - 1000*3600*24*7)
+export function isWeeklyActiveUser(u: UserWithReadSessions, at: Date = new Date()): boolean {
+    const lastWeekStart = new Date(at.getTime() - 1000 * 3600 * 24 * 7)
     const recentSessions = u.readSessions
-        .filter(x => x.createdAt > lastWeekStart && x.createdAt < at)
+        .filter(x => x.created_at > lastWeekStart && x.created_at < at)
     return recentSessions.length > 0
 }
 
 
-export function isMonthlyActiveUser(u: {handle: string, readSessions: {createdAt: Date, readContentId: string | null}[]}, at: Date = new Date()): boolean {
-    const lastMonthStart = new Date(at.getTime() - 1000*3600*24*30)
+export function isMonthlyActiveUser(u: UserWithReadSessions, at: Date = new Date()): boolean {
+    const lastMonthStart = new Date(at.getTime() - 1000 * 3600 * 24 * 30)
     const recentSessions = u.readSessions
-        .filter(x => x.createdAt > lastMonthStart && x.createdAt < at)
+        .filter(x => x.created_at > lastMonthStart && x.created_at < at)
     return recentSessions.length > 0
 }
 
@@ -97,8 +99,8 @@ export const getFundingStateHandler: CAHandlerNoAuth<{}, number> = async (ctx, a
 }
 
 
-export const createPreference: CAHandler<{amount: number}, {id: string}> = async (ctx, agent, {amount}) => {
-    const client = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN! })
+export const createPreference: CAHandler<{ amount: number }, { id: string }> = async (ctx, agent, {amount}) => {
+    const client = new MercadoPagoConfig({accessToken: process.env.MP_ACCESS_TOKEN!})
     const preference = new Preference(client)
 
     const title = "Aporte de $" + amount + " a Cabildo Abierto"
@@ -118,11 +120,11 @@ export const createPreference: CAHandler<{amount: number}, {id: string}> = async
         const result = await preference.create({
             body: {
                 back_urls: {
-                    success: frontendUrl+"/aportar/pago-exitoso",
-                    pending: frontendUrl+"/aportar/pago-pendiente",
-                    failure: frontendUrl+"/aportar/pago-fallido"
+                    success: frontendUrl + "/aportar/pago-exitoso",
+                    pending: frontendUrl + "/aportar/pago-pendiente",
+                    failure: frontendUrl + "/aportar/pago-fallido"
                 },
-                notification_url: frontendUrl+"/api/pago?source_news=webhooks",
+                notification_url: frontendUrl + "/api/pago?source_news=webhooks",
                 items: items,
                 metadata: {
                     user_id: agent.did,
@@ -135,7 +137,7 @@ export const createPreference: CAHandler<{amount: number}, {id: string}> = async
                 }
             }
         })
-        if(!result.id){
+        if (!result.id) {
             console.log("No id", result)
             return {error: "Ocurrió un error al iniciar el pago."}
         } else {
@@ -173,7 +175,7 @@ const getPaymentDetails = async (orderId: string) => {
     const body = await response.json()
     console.log(`order ${orderId} resulted in body`, body)
     const payments = body.payments
-    if(payments && payments.length > 0){
+    if (payments && payments.length > 0) {
         const payment = payments[0]
         const id = payment.id
         const amount = payment.transaction_amount
@@ -196,13 +198,13 @@ type MPNotificationBody = {
     type: string
     user_id: string
     params: any
-    query: {"data.id": string}
+    query: { "data.id": string }
 }
 
 export const processPayment: CAHandlerNoAuth<MPNotificationBody, {}> = async (ctx, agent, body) => {
     console.log("processing payment notification with body", body)
     let orderId = body.id
-    if(!orderId){
+    if (!orderId) {
         console.log("No order id", orderId)
         return {error: "Ocurrió un error al procesar el identificador de la transacción."}
     }
@@ -210,7 +212,7 @@ export const processPayment: CAHandlerNoAuth<MPNotificationBody, {}> = async (ct
     const paymentDetails = await getPaymentDetails(orderId)
     console.log("got payment details", paymentDetails)
 
-    if(paymentDetails.paymentStatus != "approved"){
+    if (paymentDetails.paymentStatus != "approved") {
         console.log("status was", paymentDetails.paymentStatus)
         return {error: "El pago no fue aprobado."}
     }
@@ -224,7 +226,7 @@ export const processPayment: CAHandlerNoAuth<MPNotificationBody, {}> = async (ct
         .where("mpPreferenceId", "=", preferenceId)
         .execute()
 
-    if(donationId.length > 0){
+    if (donationId.length > 0) {
         const id = donationId[0].id
         console.log("found donation", id)
 

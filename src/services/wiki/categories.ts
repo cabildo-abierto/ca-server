@@ -66,7 +66,7 @@ export async function updateTopicsCategories(ctx: AppContext) {
         }
         const batchSize = 2000;
 
-        console.log("Inserting new relations")
+        ctx.logger.pino.info({count: topicCategoryValues.length}, "inserting new category relations")
 
         for(let i = 0; i < topicCategoryValues.length; i += batchSize) {
             console.log(`Batch ${i}.`)
@@ -82,11 +82,12 @@ export async function updateTopicsCategories(ctx: AppContext) {
         }
         const toDelete = existing.filter(r => !topicCategoryValues.some(v => v.topicId == r.topicId && v.categoryId == r.categoryId));
 
-        console.log("Deleting old relations", toDelete.length)
+
+        ctx.logger.pino.info({count: toDelete.length}, "deleting old category relations")
+
         try {
             if(toDelete.length > 0) {
                 for (let i = 0; i < toDelete.length; i += batchSize) {
-                    console.log(`Deleting batch starting at ${i} of ${toDelete.length} relations.`)
                     const chunk = toDelete.slice(i, i + batchSize);
                     try {
                         await trx
@@ -100,12 +101,13 @@ export async function updateTopicsCategories(ctx: AppContext) {
                             )
                             .execute();
                     } catch (err) {
-                        console.log(`Error deleting batch: ${err}.`);
+                        ctx.logger.pino.error({error: err}, "error deleting old relations")
+                        console.log({error: err},  `error deleting batch`);
                     }
                 }
             }
         } catch (err) {
-            console.log("Error deleting old relations", err)
+            ctx.logger.pino.error({error: err}, "error deleting old category relations")
         }
 
         await trx
@@ -115,14 +117,10 @@ export async function updateTopicsCategories(ctx: AppContext) {
                 "not in",
                 trx.selectFrom("TopicToCategory").select("categoryId")
             )
-            .execute();
+            .execute()
     })
 
-
-
-
-
-    console.log('Done after', Date.now() - t1);
+    ctx.logger.logTimes("update-topic-categories done", [t1, Date.now()])
 }
 
 

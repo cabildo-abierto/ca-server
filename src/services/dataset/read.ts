@@ -1,8 +1,7 @@
 import {decompress} from "#/utils/compression";
 import {Column, DatasetView, DatasetViewBasic, TopicsDatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
 import {CAHandlerNoAuth} from "#/utils/handler";
-import {dbUserToProfileViewBasic} from "#/services/wiki/topics";
-import {getUri} from "#/utils/uri";
+import {getDidFromUri, getUri} from "#/utils/uri";
 import {AppContext} from "#/setup";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {getObjectKey, listOrderDesc, sortByKey} from "#/utils/arrays";
@@ -14,6 +13,7 @@ import {
 import {sql} from "kysely";
 import {$Typed} from "@atproto/api";
 import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 
 
 export function hydrateTopicsDatasetView(ctx: AppContext, filters: $Typed<ColumnFilter>[], dataplane: Dataplane): $Typed<TopicsDatasetView> | null {
@@ -68,10 +68,12 @@ export const getDataset: CAHandlerNoAuth<{
     const uri = getUri(did, collection, rkey)
 
     const dataplane = new Dataplane(ctx, agent)
+
+    // No se pueden paralelizar
     await dataplane.fetchDatasetsHydrationData([uri])
     await dataplane.fetchDatasetContents([uri])
 
-    const view = hydrateDatasetView(uri, dataplane)
+    const view = hydrateDatasetView(ctx, uri, dataplane)
     if(!view) return {error: "Ocurrió un error al obtener el dataset."}
     return {data: view}
 }
@@ -147,22 +149,20 @@ export const getTopicsDatasetHandler: CAHandlerNoAuth<TopicDatasetSpec, TopicsDa
 
 
 export async function getDatasetList(ctx: AppContext) {
-    return (await ctx.db.record.findMany({
-        select: {
-            uri: true
-        },
-        where: {
-            collection: {
-                in: ["ar.com.cabildoabierto.dataset", "ar.cabildoabierto.data.dataset"]
-            }
-        }
-    })).map(d => d.uri)
+    const res = await ctx.kysely
+        .selectFrom("Dataset")
+        .innerJoin("Record", "Record.uri", "Dataset.uri")
+        .select("uri")
+        .where("Record.record", "is not", null)
+        .where("Record.cid", "is not", null)
+        .execute()
+    return res.map(r => r.uri)
 }
 
 
-export const hydrateDatasetView = (uri: string, data: Dataplane): $Typed<DatasetView> | null => {
+export const hydrateDatasetView = (ctx: AppContext, uri: string, data: Dataplane): $Typed<DatasetView> | null => {
     const d = data.datasets.get(uri)
-    if(!d || !d.dataset) return null
+    if(!d) return null
 
     const basicView = hydrateDatasetViewBasic(uri, data)
     if(!basicView) return null
@@ -171,17 +171,19 @@ export const hydrateDatasetView = (uri: string, data: Dataplane): $Typed<Dataset
 
     let rows: any[] = []
 
-    if(content && content.length === d.dataset.dataBlocks.length) {
+    if(content && content.length === d.dataBlocks.length) {
         for(let i = 0; i < content.length; i++) {
-            if(d.dataset.dataBlocks[i].format == "json-compressed"){
+            if(d.dataBlocks[i].format == "json-compressed"){
                 const json: any[] = JSON.parse(decompress(content[i]))
                 rows = [...rows, ...json]
             } else {
-                console.warn("Formato de dataset no soportado:", d.dataset.dataBlocks[i].format)
+                ctx.logger.pino.warn({format: d.dataBlocks[i].format, uri}, "dataset format not supported")
             }
         }
     } else if(content){
-        console.log(content.length, "!=", d.dataset.dataBlocks.length)
+        ctx.logger.pino.error(
+            {contentLength: content.length, dataBlocksLength: d.dataBlocks.length},
+            "data blocks length differ")
     }
 
     return {
@@ -196,18 +198,19 @@ export const hydrateDatasetViewBasic = (uri: string, data: Dataplane): DatasetVi
     const d = data.datasets?.get(uri)
     if(!d) return null
 
-    const author = dbUserToProfileViewBasic(d.author)
+    const authorId = getDidFromUri(uri)
+    const author = hydrateProfileViewBasic(authorId, data)
 
-    if (d.dataset && d.cid && author) {
+    if (d && author) {
         return {
             $type: "ar.cabildoabierto.data.dataset#datasetViewBasic",
-            name: d.dataset.title,
+            name: d.title,
             uri: d.uri,
             cid: d.cid,
             author,
-            description: d.dataset.description ?? undefined,
-            createdAt: new Date(d.createdAt).toISOString(),
-            columns: d.dataset.columns.map(c => ({
+            description: d.description ?? undefined,
+            createdAt: new Date(d.created_at).toISOString(),
+            columns: d.columns.map(c => ({
                 $type: "ar.cabildoabierto.data.dataset#column",
                 name: c
             }))

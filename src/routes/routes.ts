@@ -25,6 +25,7 @@ import {
 import {createPost} from "#/services/write/post";
 import {addLike, removeLike, removeRepost, repost} from "#/services/reactions/reactions";
 import {getThread} from "#/services/thread/thread";
+import {getLikes, getReposts, getQuotes} from "#/services/thread/get-details";
 import {
     getTopicHandler,
     getTopicVersionHandler,
@@ -402,6 +403,12 @@ export const createRouter = (ctx: AppContext) => {
     router.post("/delete-ca-profile", makeHandler(ctx, deleteCAProfile))
 
     router.get("/follow-suggestions/:limit/:cursor", makeHandler(ctx, getFollowSuggestions))
+
+    router.get("/likes/:did/:collection/:rkey", makeHandlerNoAuth(ctx, getLikes))
+
+    router.get("/reposts/:did/:collection/:rkey", makeHandlerNoAuth(ctx, getReposts))
+
+    router.get("/quotes/:did/:collection/:rkey", makeHandlerNoAuth(ctx, getQuotes))
 
     router.post("/not-interested/:subject", makeHandler(ctx, setNotInterested))
 

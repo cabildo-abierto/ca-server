@@ -17,7 +17,8 @@ import {updateTopicContributionsHandler} from "#/services/wiki/contributions";
 import {getActivityStats, getStatsDashboard} from "#/services/admin/stats";
 import {getRepoCounts} from "#/services/admin/repo";
 import {startJob} from "#/jobs/worker";
-import {clearRedisHandler} from "#/services/admin/cache";
+
+import {clearRedisHandler} from "#/services/redis/cache";
 
 
 function isAdmin(did: string) {

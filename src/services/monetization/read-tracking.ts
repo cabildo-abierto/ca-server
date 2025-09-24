@@ -1,7 +1,7 @@
 import {CAHandlerNoAuth} from "#/utils/handler";
 import {getDidFromUri, getUri, isTopicVersion} from "#/utils/uri";
 import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
-
+import {v4 as uuidv4} from "uuid";
 
 export type ReadChunk = {
     chunk: number
@@ -29,18 +29,23 @@ export const storeReadSession: CAHandlerNoAuth<{
     }
 
     try {
-        await ctx.db.readSession.create({
-            data: {
-                userId: agent.hasSession() ? agent.did : "anonymous",
-                readContentId: uri,
-                readChunks: {
-                    chunks: params.chunks,
-                    totalChunks: params.totalChunks
-                },
-                contentAuthorId: getDidFromUri(uri),
-                topicId: topicId ?? undefined
-            }
-        })
+        await ctx.kysely
+            .insertInto("ReadSession")
+            .values([
+                {
+                    id: uuidv4(),
+                    readChunks: {
+                        chunks: params.chunks,
+                        totalChunks: params.totalChunks
+                    },
+                    userId: agent.hasSession() ? agent.did : "anonymous",
+                    readContentId: uri,
+                    contentAuthorId: getDidFromUri(uri),
+                    topicId: topicId ?? undefined
+                }
+            ])
+            .execute()
+
     } catch {
         return {error: "Ocurrió un error al actualizar la base de datos."}
     }
