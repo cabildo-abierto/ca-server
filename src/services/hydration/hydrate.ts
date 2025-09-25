@@ -336,6 +336,10 @@ export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): 
     const post = data.bskyPosts?.get(uri)
     const caData = data.caContents?.get(uri)
 
+    if(uri == "at://did:plc:oky5czdrnfjpqslsw2a5iclo/app.bsky.feed.post/3lzduaypsv22f"){
+        ctx.logger.pino.info({uri, caData: !!caData}, "hydrating post view")
+    }
+
     if (!post) {
         console.log("Warning: No se encontró el post en Bluesky. Uri: ", uri)
         return {error: "Ocurrió un error al cargar el contenido."}

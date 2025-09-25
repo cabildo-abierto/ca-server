@@ -198,12 +198,13 @@ export class Dataplane {
         uris = uris.filter(u => !this.caContents?.has(u))
         if (uris.length == 0) return
 
+        this.ctx.logger.pino.info({included: uris.includes('at://did:plc:oky5czdrnfjpqslsw2a5iclo/app.bsky.feed.post/3lzduaypsv22f')},
+            "fetching ca contents")
+
         const contents = await this.ctx.kysely
             .selectFrom("Record")
             .where("Record.uri", "in", uris)
-            .where("Record.cid", "is not", null)
-            .where("Record.record", "is not", null)
-            .innerJoin("Content", "Content.uri", "Record.uri")
+            .leftJoin("Content", "Content.uri", "Record.uri")
             .leftJoin("Article", "Article.uri", "Record.uri")
             .leftJoin("TopicVersion", "TopicVersion.uri", "Record.uri")
             .select([
@@ -238,14 +239,22 @@ export class Dataplane {
             ])
             .execute()
 
+
+
         contents.forEach(c => {
+            if(c.uri == "at://did:plc:oky5czdrnfjpqslsw2a5iclo/app.bsky.feed.post/3lzduaypsv22f"){
+                this.ctx.logger.pino.info(c, "got content")
+            }
             if(c.cid){
                 this.caContents.set(c.uri, {
                     ...c,
                     repliesCount: c.repliesCount ?? 0,
                     quotesCount: c.quotesCount ?? 0,
-                    cid: c.cid
+                    cid: c.cid,
+                    selfLabels: c.selfLabels ?? []
                 })
+            } else {
+                this.ctx.logger.pino.warn({uri: c.uri}, "content ignored, no cid")
             }
         })
     }
@@ -268,6 +277,10 @@ export class Dataplane {
         const required = uris.flatMap(u => this.requires.get(u)).filter(x => x != null)
         uris = unique([...uris, ...required])
         const dids = unique([...uris.map(getDidFromUri), ...otherDids])
+
+        if(uris.includes("at://did:plc:oky5czdrnfjpqslsw2a5iclo/app.bsky.feed.post/3lzduaypsv22f")){
+            this.ctx.logger.pino.info("got uri in fetfh post and articles h date")
+        }
 
         const t1 = Date.now()
         await Promise.all([

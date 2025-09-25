@@ -18,8 +18,6 @@ export class Server {
     }
 
     static async create(roles: Role[]) {
-        const {NODE_ENV, HOST, PORT} = env
-
         const {ctx} = await setupAppContext(roles)
         ctx.logger.pino.info("app context created")
 
@@ -75,10 +73,10 @@ export class Server {
         app.use(router)
         app.use(express.static('public'))
         app.use((_req, res) => res.sendStatus(404))
-        ctx.logger.pino.info(`running listen on ${HOST}:${PORT}`)
-        const server = app.listen(env.PORT, HOST)
+        ctx.logger.pino.info(`running listen on ${env.HOST}:${env.PORT}`)
+        const server = app.listen(env.PORT, env.HOST)
         await events.once(server, 'listening')
-        ctx.logger.pino.info(`Server (${NODE_ENV}) running on port http://${HOST}:${PORT}`)
+        ctx.logger.pino.info(`Server (${env.NODE_ENV}) running on port http://${env.HOST}:${env.PORT}`)
 
         return new Server(app, server, ctx)
     }

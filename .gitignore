@@ -25,8 +25,5 @@ dist-ssr
 .nvmrc
 .vscode
 /generated/prisma
-/generated/prisma
-
-/generated/prisma
-
-/generated/prisma
+ecosystem.config.*
+*.sql

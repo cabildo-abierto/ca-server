@@ -43,10 +43,21 @@ export class MirrorMachine {
         }, "mirrored users size")
     }
 
+    useExtended() {
+        const v = process.env.MIRROR_EXTENDED_USERS
+        if(typeof v == "string") {
+            return v == "string"
+        } else if(typeof v == "boolean") {
+            return v
+        } else {
+            return false
+        }
+    }
+
     async fetchUsers(){
         const dids = await getCAUsersDids(this.ctx)
         let extendedUsers: string[] = []
-        if(process.env.MIRROR_EXTENDED_USERS == "true"){
+        if(this.useExtended()){
             extendedUsers = (await getCAUsersAndFollows(this.ctx)).map(x => x.did)
         }
         this.caUsers = new Set(dids)
