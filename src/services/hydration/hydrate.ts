@@ -377,8 +377,6 @@ export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): 
         return {error: "No se encontraron los datos del autor."}
     }
 
-    ctx.logger.pino.warn({post}, "Hydrating post view with bsky post")
-
     const viewer = hydrateViewer(post.uri, data)
 
     const rootCreationDate = data.rootCreationDates?.get(uri)
