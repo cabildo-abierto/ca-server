@@ -20,46 +20,74 @@ import {processDirtyRecordsBatch, processRecordsBatch} from "#/services/sync/eve
 import {processContentsBatch} from "#/services/sync/event-processing/content";
 import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
 import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
+import {isMain as isMainRecordEmbed} from "#/lex-api/types/app/bsky/embed/record";
+import {isMain as isMainRecordEmbedWithMedia} from "#/lex-api/types/app/bsky/embed/recordWithMedia";
+import {Transaction} from "kysely";
+import {DB} from "../../../../prisma/generated/types";
 
 
 export class PostRecordProcessor extends RecordProcessor<Post.Record> {
 
     validateRecord = Post.validateRecord
 
+    async createReferences(records: RefAndRecord<Post.Record>[], trx: Transaction<DB>){
+        const referencedRefs: ATProtoStrongRef[] = records.reduce((acc, r) => {
+            const quoteRef = this.getQuotedPostRef(r.record)
+            return [
+                ...acc,
+                ...(r.record.reply?.root ? [{uri: r.record.reply.root.uri, cid: r.record.reply.root.cid}] : []),
+                ...(r.record.reply?.parent ? [{uri: r.record.reply.parent.uri, cid: r.record.reply.parent.cid}] : []),
+                ...(quoteRef? [quoteRef] : [])
+            ]
+        }, [] as ATProtoStrongRef[])
+        await processDirtyRecordsBatch(trx, referencedRefs)
+    }
+
+    async createContents(records: RefAndRecord<Post.Record>[], trx: Transaction<DB>){
+        const contents: { ref: ATProtoStrongRef, record: SyncContentProps }[] = records.map(r => {
+            let datasetsUsed: string[] = []
+            if (isVisualizationEmbed(r.record.embed) && isDatasetDataSource(r.record.embed.dataSource)) {
+                datasetsUsed.push(r.record.embed.dataSource.dataset)
+            }
+
+            return {
+                ref: r.ref,
+                record: {
+                    format: "plain-text",
+                    text: r.record.text,
+                    selfLabels: isSelfLabels(r.record.labels) ? r.record.labels.values.map(l => l.val) : undefined,
+                    datasetsUsed,
+                    embeds: []
+                }
+            }
+        })
+
+        await processContentsBatch(trx, contents)
+    }
+
+    getQuotedPostRef(r: Post.Record){
+        if (!r.embed){
+            return undefined
+        }
+        else {
+            let quoteRef: ATProtoStrongRef | undefined = undefined
+            if (isMainRecordEmbed(r.embed)){
+                quoteRef = {uri: r.embed.record.uri, cid: r.embed.record.cid}
+            }
+            else {
+                if (isMainRecordEmbedWithMedia(r.embed)){
+                    quoteRef = {uri: r.embed.record.record.uri, cid: r.embed.record.record.cid}
+                }
+            }
+            return quoteRef
+        }
+    }
+
     async addRecordsToDB(records: RefAndRecord<Post.Record>[]) {
         const insertedPosts = await this.ctx.kysely.transaction().execute(async (trx) => {
             await processRecordsBatch(trx, records)
-            const referencedRefs: ATProtoStrongRef[] = records.reduce((acc, r) => {
-                return [
-                    ...acc,
-                    ...(r.record.reply?.root ? [{uri: r.record.reply.root.uri, cid: r.record.reply.root.cid}] : []),
-                    ...(r.record.reply?.parent ? [{
-                        uri: r.record.reply.parent.uri,
-                        cid: r.record.reply.parent.cid
-                    }] : []),
-                ]
-            }, [] as ATProtoStrongRef[])
-            await processDirtyRecordsBatch(trx, referencedRefs)
-
-            const contents: { ref: ATProtoStrongRef, record: SyncContentProps }[] = records.map(r => {
-                let datasetsUsed: string[] = []
-                if (isVisualizationEmbed(r.record.embed) && isDatasetDataSource(r.record.embed.dataSource)) {
-                    datasetsUsed.push(r.record.embed.dataSource.dataset)
-                }
-
-                return {
-                    ref: r.ref,
-                    record: {
-                        format: "plain-text",
-                        text: r.record.text,
-                        selfLabels: isSelfLabels(r.record.labels) ? r.record.labels.values.map(l => l.val) : undefined,
-                        datasetsUsed,
-                        embeds: []
-                    }
-                }
-            })
-
-            await processContentsBatch(trx, contents)
+            await this.createReferences(records, trx)
+            await this.createContents(records, trx)
 
             const posts = records.map(({ref, record: r}) => {
                 return {
@@ -67,6 +95,7 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
                     embed: r.embed ? JSON.stringify(r.embed) : null,
                     uri: ref.uri,
                     replyToId: r.reply ? r.reply.parent.uri as string : null,
+                    quoteToId: this.getQuotedPostRef(r)?.uri,
                     rootId: r.reply && r.reply.root ? r.reply.root.uri : null,
                     langs: r.langs ?? []
                 }
@@ -87,7 +116,10 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
                     oc.column("uri").doUpdateSet({
                         facets: (eb) => eb.ref('excluded.facets'),
                         replyToId: (eb) => eb.ref('excluded.replyToId'),
+                        quoteToId: (eb) => eb.ref('excluded.quoteToId'),
                         rootId: (eb) => eb.ref('excluded.rootId'),
+                        embed: (eb) => eb.ref('excluded.embed'),
+                        langs: (eb) => eb.ref('excluded.langs')
                     })
                 )
                 .execute()
@@ -97,26 +129,15 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
         })
 
         if (insertedPosts) {
-            const insertedUris = insertedPosts
-                .map(r => r.uri)
-            const replyToUris = insertedPosts
-                .map(p => p.replyToId)
-                .filter(x => x != null)
             await Promise.all([
                 this.createNotifications(insertedPosts),
-                this.ctx.worker?.addJob("update-contents-topic-mentions", {uris: insertedUris}),
-                this.ctx.worker?.addJob("update-interactions-score", {
-                    uris: [
-                        ...insertedUris,
-                        ...replyToUris
-                    ]
-                })
+                this.ctx.worker?.addJob("update-contents-topic-mentions", {uris: insertedPosts.map(r => r.uri)})
             ])
         }
     }
 
-    async createNotifications(posts: { replyToId: string | null, uri: string }[]) {
-        for (const p of posts) {
+    async createNotifications(posts: {replyToId: string | null, uri: string}[]) {
+        for(const p of posts) {
             if (p.replyToId) {
                 const replyToDid = getDidFromUri(p.replyToId)
                 if (replyToDid != getDidFromUri(p.uri)) {
@@ -139,7 +160,7 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
 
 
 export class PostDeleteProcessor extends DeleteProcessor {
-    async deleteRecordsFromDB(uris: string[]) {
+    async deleteRecordsFromDB(uris: string[]){
         await this.ctx.kysely.transaction().execute(async (trx) => {
             await trx
                 .deleteFrom("TopicInteraction")

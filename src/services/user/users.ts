@@ -376,11 +376,13 @@ function isFullSessionData(data: SessionData | null): data is Session {
 
 export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session> = async (ctx, agent, {params}) => {
     if (!agent.hasSession()) {
+        ctx.logger.pino.info("sin sesión")
         return {error: "No session."}
     }
 
     const data = await getSessionData(ctx, agent.did)
     if (isFullSessionData(data) && data.hasAccess) {
+        ctx.logger.pino.info("sin session data")
         return {data}
     }
 
@@ -398,9 +400,11 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
             return {data: newUserData}
         }
     } else if (code) {
+        ctx.logger.pino.info("creando usuario de ca")
         // el usuario no está en la db (o está pero no tiene acceso) y logró iniciar sesión, creamos un nuevo usuario de CA
         const {error} = await createCAUser(ctx, agent, code)
         if (error) {
+            ctx.logger.pino.error({did: agent.did, error}, "error creating ca user")
             return {error}
         }
 
@@ -411,6 +415,7 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
     }
 
     await deleteSession(ctx, agent)
+    ctx.logger.pino.error({did: agent.did}, "error getting session data")
     return {error: "Ocurrió un error al crear el usuario."}
 }
 

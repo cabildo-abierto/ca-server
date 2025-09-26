@@ -90,10 +90,10 @@ export const getFundingStateHandler: CAHandlerNoAuth<{}, number> = async (ctx, a
         getTotalSpending(ctx)
     ])
     const monthlyValue = getMonthlyValue()
-
     const months = 6
 
     const state = Math.max(Math.min((grossIncome - incomeSpent) / (mau * monthlyValue * months), 1), 0) * 100
+    ctx.logger.pino.info({monthlyValue, mau, grossIncome, incomeSpent, months, state}, "funding state")
 
     return {data: state}
 }

@@ -242,14 +242,11 @@ export class Dataplane {
 
 
         contents.forEach(c => {
-            if(c.uri == "at://did:plc:oky5czdrnfjpqslsw2a5iclo/app.bsky.feed.post/3lzduaypsv22f"){
-                this.ctx.logger.pino.info(c, "got content")
-            }
             if(c.cid){
                 this.caContents.set(c.uri, {
                     ...c,
-                    repliesCount: c.repliesCount ?? 0,
-                    quotesCount: c.quotesCount ?? 0,
+                    repliesCount: c.repliesCount ? Number(c.repliesCount) : 0,
+                    quotesCount: c.quotesCount ? Number(c.quotesCount) : 0,
                     cid: c.cid,
                     selfLabels: c.selfLabels ?? []
                 })
@@ -277,10 +274,6 @@ export class Dataplane {
         const required = uris.flatMap(u => this.requires.get(u)).filter(x => x != null)
         uris = unique([...uris, ...required])
         const dids = unique([...uris.map(getDidFromUri), ...otherDids])
-
-        if(uris.includes("at://did:plc:oky5czdrnfjpqslsw2a5iclo/app.bsky.feed.post/3lzduaypsv22f")){
-            this.ctx.logger.pino.info("got uri in fetfh post and articles h date")
-        }
 
         const t1 = Date.now()
         await Promise.all([
@@ -852,13 +845,15 @@ export class Dataplane {
         const datasets = await Promise.all(manyFilters.map(async filters => {
 
             const filtersByOperator = new Map<string, {column: string, operands: string[]}[]>()
-
             filters.forEach(f => {
                 if(["includes", "=", "in"].includes(f.operator) && f.operands && f.operands.length > 0){
                     const cur = filtersByOperator.get(f.operator) ?? []
                     filtersByOperator.set(f.operator, [...cur, {column: f.column, operands: f.operands}])
                 }
             })
+
+            this.ctx.logger.pino.info({filters},"fetching filtered topics")
+
             if(filtersByOperator.size > 0){
                 let query = this.ctx.kysely
                     .selectFrom('Topic')
@@ -892,6 +887,8 @@ export class Dataplane {
                 return null
             }
         }))
+
+        this.ctx.logger.pino.info({datasets}, "fetched filtered topics")
 
         datasets.forEach((d, index) => {
             if(d){

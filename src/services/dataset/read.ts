@@ -152,7 +152,7 @@ export async function getDatasetList(ctx: AppContext) {
     const res = await ctx.kysely
         .selectFrom("Dataset")
         .innerJoin("Record", "Record.uri", "Dataset.uri")
-        .select("uri")
+        .select("Record.uri")
         .where("Record.record", "is not", null)
         .where("Record.cid", "is not", null)
         .execute()

@@ -70,14 +70,20 @@ export async function checkValidCode(ctx: AppContext, code: string, did: string)
 export async function createCAUser(ctx: AppContext, agent: SessionAgent, code?: string) {
     const did = agent.did
 
-    await ctx.kysely
-        .insertInto("User")
-        .values([{did}])
-        .onConflict(oc => oc.doNothing())
-        .execute()
+    ctx.logger.pino.info({did}, "creating ca user")
 
+    try {
+        await ctx.kysely
+            .insertInto("User")
+            .values([{did}])
+            .onConflict(oc => oc.column("did").doNothing())
+            .execute()
+    } catch (error) {
+        ctx.logger.pino.error({error}, "error inserting did for new ca user")
+    }
     if(code){
         const {error} = await assignInviteCode(ctx, agent, code)
+        if(error) ctx.logger.pino.error({error}, "error assigning invite code")
         if(error) return {error}
     }
 
@@ -143,7 +149,7 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
             .executeTakeFirst(),
         ctx.kysely
             .selectFrom("User")
-            .innerJoin("InviteCode", "InviteCode.usedByDid", "User.did")
+            .leftJoin("InviteCode", "InviteCode.usedByDid", "User.did")
             .select([
                 "inCA",
                 "hasAccess",

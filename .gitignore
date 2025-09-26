@@ -27,3 +27,4 @@ dist-ssr
 /generated/prisma
 ecosystem.config.*
 *.sql
+prisma/generated

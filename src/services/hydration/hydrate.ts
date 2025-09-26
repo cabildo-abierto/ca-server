@@ -57,9 +57,11 @@ import {AppContext} from "#/setup";
 
 
 export function hydrateViewer(uri: string, data: Dataplane): { repost?: string, like?: string } {
+    const bskyPost = data.bskyPosts.get(uri)
     return {
-        repost: data.reposts?.get(uri)?.uri ?? undefined,
-        like: data.likes?.get(uri) ?? undefined
+        ...bskyPost?.viewer,
+        repost: bskyPost?.viewer?.repost ?? data.reposts?.get(uri)?.uri ?? undefined,
+        like: bskyPost?.viewer?.like ?? data.likes?.get(uri) ?? undefined
     }
 }
 
@@ -336,12 +338,8 @@ export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): 
     const post = data.bskyPosts?.get(uri)
     const caData = data.caContents?.get(uri)
 
-    if(uri == "at://did:plc:oky5czdrnfjpqslsw2a5iclo/app.bsky.feed.post/3lzduaypsv22f"){
-        ctx.logger.pino.info({uri, caData: !!caData}, "hydrating post view")
-    }
-
     if (!post) {
-        console.log("Warning: No se encontró el post en Bluesky. Uri: ", uri)
+        ctx.logger.pino.warn({uri}, "Warning: No se encontró el post en Bluesky.")
         return {error: "Ocurrió un error al cargar el contenido."}
     }
 
@@ -354,30 +352,34 @@ export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): 
         if (view) {
             embedView = view;
         } else {
-            console.log("Warning: No se encontraron los datos para el selection quote en el post: ", uri)
+            ctx.logger.pino.warn({uri}, "Warning: No se encontraron los datos para el selection quote en el post")
         }
     } else if(isVisualizationEmbed(embed)) {
         const view = hydrateVisualizationEmbedView(ctx, embed, data)
         if (view) {
             embedView = view;
         } else {
-            console.log("Warning: No se encontraron los datos para la visualización: ", uri)
+            ctx.logger.pino.warn({uri}, "Warning: No se encontraron los datos para la visualización")
         }
     } else if(isRecordEmbed(embed) || isCARecordEmbed(embed)){
         const view = hydrateRecordEmbedView(ctx, embed, data)
         if (view) {
             embedView = view;
         } else {
-            console.log("Warning: No se encontraron los datos para el record embed:", embed.record.uri, "embedido en", uri)
+            ctx.logger.pino.warn({uri, embedRecordUri: embed.record.uri}, "Warning: No se encontraron los datos para el record embed")
         }
     }
 
     const authorId = getDidFromUri(post.uri)
     const author = hydrateProfileViewBasic(authorId, data)
     if(!author) {
-        console.log("Warning: No se encontraron los datos del autor:", post.uri)
+        ctx.logger.pino.warn({uri}, "Warning: No se encontraron los datos del autor")
         return {error: "No se encontraron los datos del autor."}
     }
+
+    ctx.logger.pino.warn({post}, "Hydrating post view with bsky post")
+
+    const viewer = hydrateViewer(post.uri, data)
 
     const rootCreationDate = data.rootCreationDates?.get(uri)
 
@@ -391,15 +393,18 @@ export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): 
             ...(caData ? {
                 likeCount: caData.uniqueLikesCount,
                 repostCount: caData.uniqueRepostsCount,
+                quoteCount: caData.quotesCount
             } : {
                 likeCount: 0,
-                repostCount: 0
+                repostCount: 0,
+                quoteCount: 0
             }),
             bskyLikeCount: post.likeCount,
             bskyRepostCount: post.repostCount,
             bskyQuoteCount: post.quoteCount,
             replyCount: post.replyCount,
-            rootCreationDate: rootCreationDate?.toISOString()
+            rootCreationDate: rootCreationDate?.toISOString(),
+            viewer
         }
     }
 }

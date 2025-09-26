@@ -1,4 +1,4 @@
-import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {FeedViewContent, isFeedViewContent, isPostView, PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {CAHandlerNoAuth} from "#/utils/handler";
 import {FeedSkeleton, getFeed, GetSkeletonProps} from "#/services/feed/feed";
 import {AppContext} from "#/setup";
@@ -10,24 +10,18 @@ import {isNotFoundPost} from "#/lex-server/types/app/bsky/feed/defs";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
 import {getTopicTitle} from "#/services/wiki/utils";
-import {
-    TopicProp,
-} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {TopicProp,} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {getUri} from "#/utils/uri";
-import {isPostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
+import {isView as isSelectionQuoteEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/selectionQuote"
 import {
-    isView as isSelectionQuoteEmbed
-} from "#/lex-api/types/ar/cabildoabierto/embed/selectionQuote"
-import {
-    EnDiscusionMetric, EnDiscusionSkeletonElement,
+    EnDiscusionMetric,
+    EnDiscusionSkeletonElement,
     EnDiscusionTime,
     FeedFormatOption,
-    getEnDiscusionStartDate, getNextCursorEnDiscusion
+    getEnDiscusionStartDate,
+    getNextCursorEnDiscusion
 } from "#/services/feed/inicio/discusion";
-import {
-    SkeletonQuery
-} from "#/services/feed/inicio/following";
+import {SkeletonQuery} from "#/services/feed/inicio/following";
 
 
 const getTopicRepliesSkeleton = async (ctx: AppContext, id: string) => {
@@ -304,7 +298,6 @@ export const getTopicFeed: CAHandlerNoAuth<{ params: {kind: "mentions" | "discus
             }
         }
     } else if(kind == "mentions"){
-
         const getSkeleton: GetSkeletonProps = async (ctx, agent, data, cursor) => {
             return await getTopicMentionsSkeleton(
                 ctx,
@@ -318,17 +311,18 @@ export const getTopicFeed: CAHandlerNoAuth<{ params: {kind: "mentions" | "discus
             )
         }
 
-        const mentions = await getFeed({
-            ctx,
-            agent,
-            pipeline: {
-                getSkeleton
-            },
-            cursor
-        })
-
-        return {
-            data: mentions.data
+        try {
+            return await getFeed({
+                ctx,
+                agent,
+                pipeline: {
+                    getSkeleton
+                },
+                cursor
+            })
+        } catch (error) {
+            ctx.logger.pino.error({error}, "error getting mentions feed")
+            return {error: "Ocurrió un error al obtener el muro."}
         }
     } else {
         return {error: "Solicitud inválida."}
