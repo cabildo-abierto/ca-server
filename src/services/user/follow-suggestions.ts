@@ -136,6 +136,7 @@ export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: s
         getRecommendationRankingForUser(ctx, agent.did),
         getFollowSuggestionsToAvoid(ctx, agent.did)
     ])
+
     const t2 = Date.now()
 
     const limit = parseInt(params.limit)

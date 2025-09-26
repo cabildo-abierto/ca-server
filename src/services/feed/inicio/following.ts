@@ -318,8 +318,11 @@ export async function getFollowsDids(ctx: AppContext, did: string): Promise<stri
 
 
 export async function getCAFollowsDids(ctx: AppContext, did: string): Promise<string[]> {
-    await ctx.redisCache.CAFollows.get(did)
 
+    let cached_dids = await ctx.redisCache.CAFollows.get(did)
+    if (cached_dids != null) {
+        return cached_dids
+    }
     const rows = await ctx.kysely
         .selectFrom("Follow")
         .select("Follow.userFollowedId as did")

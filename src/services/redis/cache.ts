@@ -5,6 +5,7 @@ import {formatIsoDate} from "#/utils/dates";
 import {FollowingFeedSkeletonElement} from "#/services/feed/inicio/following";
 import {Profile} from "#/lib/types";
 import {CAHandler} from "#/utils/handler";
+import {Logger} from "#/utils/logger";
 
 
 class CacheKey {
@@ -176,7 +177,7 @@ class FollowSuggestionsDirtyCacheKey extends CacheKey {
         if(uris.length == 0) return
         const dids = unique(uris.map(getDidFromUri))
         for(let i = 0; i < dids.length; i++){
-            await this.setFollowSuggestionsDirty( dids[i])
+            await this.setFollowSuggestionsDirty(dids[i])
         }
     }
 
@@ -190,7 +191,7 @@ class FollowSuggestionsDirtyCacheKey extends CacheKey {
 
     async onEvent(e: RedisEvent, params: string[]) {
         if(params.length == 1){
-            const [did] = params[0]
+            const did = params[0]
             if(e == "follow-suggestions-ready"){
                 await this.setFollowSuggestionsReady(did)
             } else if(e == "follow-suggestions-dirty"){
@@ -201,7 +202,9 @@ class FollowSuggestionsDirtyCacheKey extends CacheKey {
 
     async getDirty() {
         const dirty = await this.cache.redis.smembers("follow-suggestions-dirty")
-        const requested = new Set(await this.cache.getKeysByPrefix(`follow-suggestions:`))
+        this.cache.logger.pino.info({dirty}, "dirty")
+        const requested = new Set((await this.cache.getKeysByPrefix(`follow-suggestions:`)).map(k => k.replace("follow-suggestions:", "")))
+
         return dirty.filter(did => requested.has(did))
     }
 }
@@ -288,7 +291,7 @@ export type RedisEvent = "verification-update" | "follow-suggestions-ready" | "f
 export class RedisCache {
     redis: Redis
     keys: CacheKey[] = []
-
+    logger: Logger
     followSuggestionsDirty: FollowSuggestionsDirtyCacheKey
     followSuggestions: FollowSuggestionsCacheKey
     CAFollows: CAFollowsCacheKey
@@ -299,7 +302,7 @@ export class RedisCache {
     followingFeedSkeletonCAArticles: FollowingFeedSkeletonKey
     profile: ProfileCacheKey
 
-    constructor(redis: Redis, mirrorId: string) {
+    constructor(redis: Redis, mirrorId: string, logger: Logger) {
         this.redis = redis
         this.followSuggestions = new FollowSuggestionsCacheKey(this)
         this.followSuggestionsDirty = new FollowSuggestionsDirtyCacheKey(this)
@@ -310,6 +313,7 @@ export class RedisCache {
         this.followingFeedSkeletonCAAll = new FollowingFeedSkeletonKey(this, ["ca-all"])
         this.followingFeedSkeletonCAArticles = new FollowingFeedSkeletonKey(this, ["ca-articles"])
         this.profile = new ProfileCacheKey(this)
+        this.logger = logger
 
         this.keys = [
             this.profile,
