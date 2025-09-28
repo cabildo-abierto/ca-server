@@ -423,7 +423,7 @@ export function hydrateContent(ctx: AppContext, uri: string, data: Dataplane, fu
         const res = hydrateDatasetView(ctx, uri, data)
         if(res) return {data: res}; else return {error: "No se pudo hidratar el dataset."}
     } else {
-        console.log("Warning: Hidratación no implementada para: ", collection)
+        ctx.logger.pino.warn({collection}, "hydration not implemented")
         return {error: "Hidratación no implementada para: " + collection}
     }
 }
@@ -473,16 +473,12 @@ export function hydrateFeedViewContent(ctx: AppContext, e: SkeletonFeedPost, dat
     const childBsky = data.bskyPosts?.get(e.post)
     const reply = childBsky ? (childBsky.record as PostRecord).reply : null
 
-    if (isPost(getCollectionFromUri(e.post)) && !childBsky) {
-        ctx.logger.pino.warn({uri: e.post, reason: "not in bsky posts"}, "content not found")
-    }
-
     const leaf = hydrateContent(ctx, e.post, data)
     const parent = reply && !isReasonRepost(reason) ? hydrateContent(ctx, reply.parent.uri, data) : null
     const root = reply && !isReasonRepost(reason) ? hydrateContent(ctx, reply.root.uri, data) : null
 
     if (!leaf.data || leaf.error) {
-        console.log("Warning: No se encontró el contenido. Uri: ", e.post)
+        ctx.logger.pino.warn({uri: e.post}, "content not found")
         return notFoundPost(e.post)
     } else if (!reply) {
         return {

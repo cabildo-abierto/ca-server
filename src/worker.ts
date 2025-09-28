@@ -1,8 +1,9 @@
 import {run} from "#/index-worker";
 import cluster from "cluster";
 import os from "os";
+import {env} from "#/lib/env";
 
-const maxCpus = process.env.MAX_WORKER_CPUS ? Number(process.env.MAX_WORKER_CPUS) : 1000
+const maxCpus = env.MAX_WORKER_CPUS
 
 if (cluster.isPrimary) {
     const numCPUs = Math.min(os.cpus().length, maxCpus)

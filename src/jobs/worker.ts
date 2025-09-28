@@ -33,6 +33,8 @@ import {updateFollowSuggestions} from "#/services/user/follow-suggestions";
 import {updateInteractionsScore} from "#/services/feed/feed-scores";
 import {updateAllTopicsCurrentVersions} from "#/services/wiki/current-version";
 import { Logger } from "#/utils/logger";
+import {env} from "#/lib/env";
+import {reprocessCollection} from "#/services/sync/reprocess";
 
 const mins = 60 * 1000
 
@@ -53,8 +55,8 @@ export class CAWorker {
 
     constructor(ioredis: Redis, worker: boolean, logger: Logger) {
         this.logger = logger
-        const env = process.env.NODE_ENV || "development"
-        const queueName = `${env}-queue`
+        const envName = env.NODE_ENV
+        const queueName = `${envName}-queue`
         const queuePrefix = undefined
         this.ioredis = ioredis
         this.logger.pino.info({queueName, queuePrefix}, `starting queue`)
@@ -92,6 +94,10 @@ export class CAWorker {
                 this.logger.pino.info({name: job.name}, `job completed`)
             })
         }
+    }
+
+    runCrons() {
+        return env.RUN_CRONS
     }
 
     registerJob(jobName: string, handler: (data: any) => Promise<void>) {
@@ -137,18 +143,22 @@ export class CAWorker {
         this.registerJob("update-records-created-at", () => updateRecordsCreatedAt(ctx))
         this.registerJob("update-interactions-score", (data) => updateInteractionsScore(ctx, data.uris))
         this.registerJob("update-all-interactions-score", () => updateInteractionsScore(ctx))
+        this.registerJob("reprocess-collection", (data) => reprocessCollection(ctx, (data as { collection: string }).collection))
         this.logger.pino.info("worker jobs registered")
 
         await this.removeAllRepeatingJobs()
         this.logger.pino.info("repeating jobs cleared")
 
-        await this.addRepeatingJob("update-topics-popularity", 30 * mins, 60 * mins)
-        await this.addRepeatingJob("update-topics-categories", 30 * mins, 60 * mins + 5)
-        await this.addRepeatingJob("update-categories-graph", 30 * mins, 60 * mins + 7)
-        await this.addRepeatingJob("create-user-months", 30 * mins, 60 * mins + 15)
-        await this.addRepeatingJob("batch-jobs", mins / 2, 0)
-        await this.addRepeatingJob("update-follow-suggestions", 30 * mins, 30 * mins + 18)
-        this.logger.pino.info("worker repeating jobs added")
+        if(this.runCrons()){
+            await this.addRepeatingJob("update-topics-popularity", 30 * mins, 60 * mins)
+            await this.addRepeatingJob("update-topics-categories", 30 * mins, 60 * mins + 5)
+            await this.addRepeatingJob("update-categories-graph", 30 * mins, 60 * mins + 7)
+            await this.addRepeatingJob("create-user-months", 30 * mins, 60 * mins + 15)
+            await this.addRepeatingJob("batch-jobs", mins / 2, 0)
+            await this.addRepeatingJob("update-follow-suggestions", 30 * mins, 30 * mins + 18)
+        } else {
+            this.logger.pino.info("not running cron jobs")
+        }
 
         const waitingJobs = await this.queue.getJobs(['waiting'])
         const delayedJobs = await this.queue.getJobs(['delayed'])

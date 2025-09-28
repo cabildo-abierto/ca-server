@@ -315,7 +315,8 @@ export type AlgorithmConfig = {
 type SessionData = Omit<Session, "handle"> & {handle: string | null}
 
 export const getSessionData = async (ctx: AppContext, did: string): Promise<SessionData | null> => {
-    const res = await ctx.kysely
+    const [res, mirrorStatus] = await Promise.all([
+        ctx.kysely
         .selectFrom("User")
         .select([
             "platformAdmin",
@@ -328,13 +329,16 @@ export const getSessionData = async (ctx: AppContext, did: string): Promise<Sess
             "displayName",
             "avatar",
             "hasAccess",
+            "inCA",
             "userValidationHash",
             "orgValidation",
             "algorithmConfig",
             "authorStatus",
         ])
         .where("did", "=", did)
-        .executeTakeFirst()
+        .executeTakeFirst(),
+        ctx.redisCache.mirrorStatus.get(did, true)
+    ])
 
     if(!res) return null
 
@@ -356,7 +360,8 @@ export const getSessionData = async (ctx: AppContext, did: string): Promise<Sess
         editorStatus: data.editorStatus,
         platformAdmin: data.platformAdmin,
         validation: getValidationState(data),
-        algorithmConfig: (data.algorithmConfig ?? {}) as AlgorithmConfig
+        algorithmConfig: (data.algorithmConfig ?? {}) as AlgorithmConfig,
+        mirrorStatus: data.inCA ? mirrorStatus: "Dirty"
     }
 }
 

@@ -8,6 +8,7 @@ import {CAHandler} from "#/utils/handler";
 import {processEventsBatch} from "#/services/sync/event-processing/event-processor";
 import {batchDeleteRecords, getRecordProcessor} from "#/services/sync/event-processing/get-record-processor";
 import {RefAndRecord} from "#/services/sync/types";
+import {env} from "#/lib/env";
 
 
 export async function syncAllUsers(ctx: AppContext, mustUpdateCollections?: string[]) {
@@ -277,9 +278,7 @@ export class RepoSync {
     }
 }
 
-const maxRepoMBs = process.env.MAX_REPO_MBS ?
-    Number(process.env.MAX_REPO_MBS) :
-    50
+const maxRepoMBs = env.MAX_REPO_MBS
 
 
 export async function getUserRepo(ctx: AppContext, did: string, doc: string, collections: string[]): Promise<{repo?: UserRepo, error?: string}> {

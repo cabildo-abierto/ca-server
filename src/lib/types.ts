@@ -1,6 +1,7 @@
 import {EditorStatus} from "@prisma/client";
 import {ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {AlgorithmConfig} from "#/services/user/users";
+import {MirrorStatus} from "#/services/redis/cache";
 
 
 export type ATProtoStrongRef = {
@@ -32,7 +33,6 @@ export type AuthorStatus = {
     seenAuthorTutorial: boolean
 }
 
-
 export type Session = {
     platformAdmin: boolean
     authorStatus: AuthorStatus | null
@@ -50,6 +50,7 @@ export type Session = {
     hasAccess: boolean
     validation: ValidationState
     algorithmConfig: AlgorithmConfig
+    mirrorStatus: MirrorStatus
 }
 
 

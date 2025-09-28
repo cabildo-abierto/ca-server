@@ -2,11 +2,13 @@
 SERVER_USER="root"
 SERVER_IP="216.238.122.145"
 APP_PATH="/var/www/ca-server"
-ENV="${1:-test}"
+ENV="${1:-prod}"
 
 echo_blue() {
     echo -e "\e[34m$1\e[0m"
 }
+
+echo_blue "deploying env ${ENV}"
 
 echo_blue "creating directory..."
 ssh $SERVER_USER@$SERVER_IP "mkdir -p $APP_PATH"

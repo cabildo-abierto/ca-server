@@ -83,7 +83,7 @@ export async function sessionAgent(
 
 export const cookieOptions: SessionOptions = {
     cookieName: 'sid',
-    password: process.env.COOKIE_SECRET!,
+    password: env.COOKIE_SECRET!,
     cookieOptions: {
         sameSite: env.NODE_ENV == "production" ? "none" : "lax",
         httpOnly: true,

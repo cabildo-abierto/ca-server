@@ -73,11 +73,9 @@ export async function updateReferencesForNewContents(ctx: AppContext) {
 async function updateReferencesForContentsAndTopics(ctx: AppContext, contents: ContentProps[], synonymsMap: SynonymsMap, topicIds?: string[]){
     const batchSize = 500
     for(let i = 0; i < contents.length; i += batchSize){
-        console.log("Updating references contents", i, "-", i+batchSize, "of", contents.length)
         try {
             const batchContents = contents.slice(i, i+batchSize)
             const texts = await getContentsText(ctx, batchContents, 10)
-            console.log("Apply references update")
             const referencesToInsert = getReferencesToInsert(
                 batchContents,
                 texts.map(t => t ? t.text : null),
@@ -125,16 +123,11 @@ type ReferenceToInsert = {
 function getReferencesToInsert(contents: ContentProps[], texts: (string | null)[], synonymsMap: SynonymsMap) {
     const referencesToInsert: ReferenceToInsert[] = []
 
-    console.log("Analyzing references...", contents.length, texts.length)
-    const t1 = Date.now()
     for(let i = 0; i < contents.length; i++){
         const c = contents[i]
         let text = texts[i]
 
         const references: {topicId: string, count: number}[] = getTopicsReferencedInText(withExtra(text ?? "", c), synonymsMap)
-        references.forEach(r => {
-            console.log(`Found reference! URI: ${c.uri}. Topic: ${r.topicId}. Count: ${r.count}`)
-        })
         references.forEach(r => {
             referencesToInsert.push({
                 id: uuidv4(),
@@ -145,9 +138,6 @@ function getReferencesToInsert(contents: ContentProps[], texts: (string | null)[
             })
         })
     }
-    const t2 = Date.now()
-    console.log("Done after", t2-t1)
-
     return referencesToInsert
 }
 
@@ -157,10 +147,6 @@ export async function applyReferencesUpdate(ctx: AppContext, referencesToInsert:
     // entre contentIds y topicIds
     // si contentIds es undefined son todos los contenidos y lo mismo con topicIds
     try {
-        console.log("Inserting", referencesToInsert.length, "references...")
-        console.log("Between", contentIds?.length, "contents and", topicIds?.length, "topics")
-        const t1 = Date.now()
-
         await ctx.kysely.transaction().execute(async trx => {
             let deleteQuery = trx
                 .deleteFrom("Reference")
@@ -188,12 +174,8 @@ export async function applyReferencesUpdate(ctx: AppContext, referencesToInsert:
                 }
             }
         })
-
-        const t2 = Date.now()
-        console.log("Updates applied after", t2-t1)
     } catch (e) {
-        console.log("Error applying references update")
-        console.log(e)
+        ctx.logger.pino.error({error: e},"error applying references update")
         throw e
     }
 }
@@ -246,8 +228,6 @@ export async function getContentsText(ctx: AppContext, contents: MaybeContent[],
 
     const blobTexts = await fetchTextBlobs(ctx, blobRefs.map(x => x.blob), retries)
 
-    console.log("blob texts", blobTexts.map(x => x ? x.slice(0, 50) : x))
-
     for(let i = 0; i < blobRefs.length; i++){
         const text = blobTexts[i]
         const format = contents[blobRefs[i].i].format
@@ -267,7 +247,7 @@ export async function getContentsText(ctx: AppContext, contents: MaybeContent[],
                         format: formatToDecompressed(text.format ?? "lexical-compressed")
                     }
                 } catch {
-                    console.log(`Error decompressing text ${contents[i].uri}`)
+                    ctx.logger.pino.error({uri: contents[i].uri}, `error decompressing text`)
                     texts[i] = null
                 }
             }
@@ -312,7 +292,6 @@ export async function updateReferencesForTopics(ctx: AppContext, topicIds: strin
 
     for(const t of topics) {
         const synonyms = getTopicSynonyms({id: t.id, props: t.props as TopicProp[]})
-        console.log(`updating references for topic ${t.id} with synonyms:`, synonyms)
 
         const results = await getContentsContainingSynonyms(ctx, synonyms)
         const refs: ReferenceToInsert[] = []
@@ -325,7 +304,6 @@ export async function updateReferencesForTopics(ctx: AppContext, topicIds: strin
                 referencingContentId: r.uri
             })
         }
-        console.log("got refs", refs.length)
         await applyReferencesUpdate(ctx, refs, undefined, [t.id])
     }
 }
@@ -333,16 +311,12 @@ export async function updateReferencesForTopics(ctx: AppContext, topicIds: strin
 
 export async function updateReferencesForNewTopics(ctx: AppContext) {
     const lastUpdate = await ctx.redisCache.lastReferencesUpdate.get()
-    console.log("Last reference update", lastUpdate)
 
     const topicIds = await getEditedTopics(ctx, lastUpdate)
 
     if(topicIds.length == 0) {
-        console.log("No new topics, skipping")
         return
     }
-
-    console.log("Got new topics", topicIds.length)
 
     await updateReferencesForTopics(ctx, topicIds)
 }
@@ -354,19 +328,11 @@ export async function restartReferenceLastUpdate(ctx: AppContext) {
 
 
 export async function updateReferences(ctx: AppContext){
-    console.log("Updating references")
     const updateTime = new Date()
 
-    const t1 = Date.now()
-    console.log("Updating references for new contents...")
     await updateReferencesForNewContents(ctx)
-    const t2 = Date.now()
-    console.log("Done after", t2-t1)
 
-    console.log("Updating references for new topics...")
     await updateReferencesForNewTopics(ctx)
-    const t3 = Date.now()
-    console.log("Done after", t3-t2)
 
     await ctx.redisCache.lastReferencesUpdate.set(updateTime)
 }

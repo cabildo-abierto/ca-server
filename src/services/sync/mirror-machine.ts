@@ -7,6 +7,7 @@ import {CommitEvent, JetstreamEvent} from "#/lib/types";
 import * as Follow from "#/lex-api/types/app/bsky/graph/follow"
 import {processEventsBatch} from "#/services/sync/event-processing/event-processor";
 import {LRUCache} from 'lru-cache'
+import {env} from "#/lib/env";
 
 function formatEventsPerSecond(events: number, elapsed: number) {
     return (events / (elapsed / 1000)).toFixed(2)
@@ -44,14 +45,7 @@ export class MirrorMachine {
     }
 
     useExtended() {
-        const v = process.env.MIRROR_EXTENDED_USERS
-        if(typeof v == "string") {
-            return v == "string"
-        } else if(typeof v == "boolean") {
-            return v
-        } else {
-            return false
-        }
+        return env.MIRROR_EXTENDED_USERS
     }
 
     async fetchUsers(){

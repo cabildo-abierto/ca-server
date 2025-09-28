@@ -49,14 +49,14 @@ async function getRegisteredUsers(ctx: AppContext, agent: SessionAgent): Promise
         .leftJoin("Record as CAProfile", "CAProfile.uri", "User.CAProfileUri")
         .select([
             "did",
-            "created_at",
+            "User.created_at",
             "userValidationHash",
             "orgValidation",
             eb => jsonArrayFrom(eb
                 .selectFrom("ReadSession")
-                .select("created_at")
+                .select("ReadSession.created_at")
                 .whereRef("ReadSession.userId", "=", "User.did")
-                .orderBy("created_at desc")
+                .orderBy("ReadSession.created_at desc")
             ).as("readSessions"),
             "CAProfile.created_at as CAProfileCreatedAt"
         ])
@@ -81,7 +81,9 @@ async function getRegisteredUsers(ctx: AppContext, agent: SessionAgent): Promise
         }
         return null
     }).filter(u => u != null), e => {
-        return e?.lastReadSession ? [e.lastReadSession.getTime()] : [0]
+        return e?.lastReadSession ?
+            [new Date(e.lastReadSession).getTime()] :
+            [0]
     }, listOrderDesc)
 }
 

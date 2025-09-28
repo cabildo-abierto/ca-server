@@ -3,9 +3,9 @@ import {EmbedContext} from "#/services/write/topic";
 import {ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {v4 as uuidv4} from "uuid";
 import {getArticleSummary} from "#/services/hydration/hydrate";
-import {FilePayload, uploadToSBStorage} from "#/services/user/validation";
 import {isView as isImageEmbedView} from "#/lex-api/types/app/bsky/embed/images"
 import {sql} from "kysely";
+import {FilePayload} from "#/services/storage/storage";
 
 export type Draft = {
     text: string
@@ -144,13 +144,10 @@ export const getDraft: CAHandler<{params: {id: string}}, Draft> = async (ctx, ag
         const embeds = draft.embeds as EmbedsInDB
         if(embeds.sbPaths){
             const sbPaths = embeds.sbPaths.flat().filter(x => x != null)
-            const {data} = await ctx.sb.storage.from("draft-embeds")
-                .createSignedUrls(sbPaths, 60*24)
+            const {data} = await ctx.storage.getSignedUrlsFromPaths(sbPaths, "draft-embeds")
             if(data){
                 data.forEach((r, i) => {
-                    if(!r.error){
-                        signedUrls.set(sbPaths[i], r.signedUrl)
-                    }
+                    signedUrls.set(sbPaths[i], r)
                 })
             }
         }
@@ -192,7 +189,7 @@ export const saveDraft: CAHandler<CreateDraftParams, {id: string}> = async (ctx,
                     fileName: getDraftEmbedSbUrl(id, i),
                     base64: e.base64files[0]
                 }
-                const {path, error} = await uploadToSBStorage(ctx.sb, file, "draft-embeds")
+                const {path, error} = await ctx.storage.upload(file, "draft-embeds")
                 if(error){
                     return {error: "Ocurrió un error al guardar el borrador"}
                 }

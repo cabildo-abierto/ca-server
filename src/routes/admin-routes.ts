@@ -19,6 +19,7 @@ import {getRepoCounts} from "#/services/admin/repo";
 import {startJob} from "#/jobs/worker";
 
 import {clearRedisHandler} from "#/services/redis/cache";
+import {env} from "#/lib/env";
 
 
 function isAdmin(did: string) {
@@ -54,7 +55,7 @@ function makeAdminHandlerNoAuth<P, Q>(ctx: AppContext, handler: CAHandlerNoAuth<
         const admin = agent.hasSession() && isAdmin(agent.did)
         const authHeader = req.headers.authorization || ''
         const token = authHeader.replace(/^Bearer\s+/i, '')
-        const validToken = token == process.env.ADMIN_TOKEN
+        const validToken = token == env.ADMIN_TOKEN
 
         if(admin || validToken) {
             const json = await handler(ctx, agent, params)

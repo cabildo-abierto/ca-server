@@ -4,6 +4,7 @@ import {AppContext} from "#/setup";
 import {getUsersWithReadSessions, UserWithReadSessions} from "#/services/monetization/user-months";
 import {count} from "#/utils/arrays";
 import {v4 as uuidv4} from "uuid";
+import {env} from "#/lib/env";
 
 type Donation = {
     date: Date
@@ -17,6 +18,7 @@ export const getDonationHistory: CAHandler<{}, DonationHistory> = async (ctx, ag
         .selectFrom("Donation")
         .select(["created_at", "amount"])
         .where("userById", "=", agent.did)
+        .where("transactionId", "is not", null)
         .execute()
 
     return {
@@ -100,7 +102,7 @@ export const getFundingStateHandler: CAHandlerNoAuth<{}, number> = async (ctx, a
 
 
 export const createPreference: CAHandler<{ amount: number }, { id: string }> = async (ctx, agent, {amount}) => {
-    const client = new MercadoPagoConfig({accessToken: process.env.MP_ACCESS_TOKEN!})
+    const client = new MercadoPagoConfig({accessToken: env.MP_ACCESS_TOKEN!})
     const preference = new Preference(client)
 
     const title = "Aporte de $" + amount + " a Cabildo Abierto"
@@ -168,7 +170,7 @@ const getPaymentDetails = async (orderId: string) => {
         method: 'GET',
         headers: {
             "Content-Type": "application/json",
-            'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN!}`,
+            'Authorization': `Bearer ${env.MP_ACCESS_TOKEN!}`,
         },
     });
 

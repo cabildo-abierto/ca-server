@@ -1,14 +1,11 @@
 import {CAHandler} from "#/utils/handler";
 import {ValidationRequestResult, ValidationType} from "@prisma/client";
-import {SupabaseClient} from "@supabase/supabase-js";
-import {uuid} from "@supabase/supabase-js/dist/main/lib/helpers";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {ProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 import {createHash} from "crypto";
 import {v4 as uuidv4} from "uuid";
-
-export type FilePayload = { base64: string, fileName: string }
+import { FilePayload } from "../storage/storage";
 
 type OrgType = "creador-individual" | "empresa" | "medio" | "fundacion" | "consultora" | "otro"
 
@@ -26,48 +23,11 @@ type ValidationRequestProps = {
 }
 
 
-function extractMimeType(base64: string): string | null {
-    const match = base64.match(/^data:(.*?);base64,/);
-    return match ? match[1] : null;
-}
-
-export function sanitizeFileName(fileName: string): string {
-    return fileName
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9.\-_ ]/g, "")
-        .trim()
-        .replace(/\s+/g, "-")
-        .toLowerCase();
-}
-
-export async function uploadToSBStorage(sb: SupabaseClient, file: FilePayload, bucket: string) {
-    const id = uuid();
-    const fileBuffer = Buffer.from(file.base64.split(',')[1], 'base64');
-
-    const safeFileName = sanitizeFileName(file.fileName);
-    const filePath = `${id}/${safeFileName}`;
-
-    const { data, error } = await sb.storage
-        .from(bucket)
-        .upload(filePath, fileBuffer, {
-            contentType: extractMimeType(file.base64) || 'application/octet-stream'
-        });
-
-    if (error) {
-        console.log(`Error uploading file ${filePath} to storage`);
-        console.log(error);
-    }
-
-    return { path: data?.path, error };
-}
-
-
 export const createValidationRequest: CAHandler<ValidationRequestProps, {}> = async (ctx, agent, request) => {
     try {
-        const documentacion = request.tipo == "org" && request.documentacion ? await Promise.all(request.documentacion.map((f => uploadToSBStorage(ctx.sb, f, 'validation-documents')))) : []
-        const dniFrente = request.tipo == "persona" && request.dniFrente ? await uploadToSBStorage(ctx.sb, request.dniFrente, 'validation-documents') : undefined
-        const dniDorso = request.tipo == "persona" && request.dniDorso ? await uploadToSBStorage(ctx.sb, request.dniDorso, 'validation-documents') : undefined
+        const documentacion = request.tipo == "org" && request.documentacion ? await Promise.all(request.documentacion.map((f => ctx.storage.upload(f, 'validation-documents')))) : []
+        const dniFrente = request.tipo == "persona" && request.dniFrente ? await ctx.storage.upload(request.dniFrente, 'validation-documents') : undefined
+        const dniDorso = request.tipo == "persona" && request.dniDorso ? await ctx.storage.upload(request.dniDorso, 'validation-documents') : undefined
 
         if (dniFrente && dniFrente.error) return {error: "Ocurrió un error al procesar la solicitud."}
         if (dniDorso && dniDorso.error) return {error: "Ocurrió un error al procesar la solicitud."}
@@ -217,7 +177,7 @@ export const getPendingValidationRequests: CAHandler<{}, {
                 documentacion: r.documentacion ? r.documentacion.map(d => {
                     return {
                         fileName: getFileNameFromPath(d),
-                        base64: dataplane.sbFiles.get("validation-documents:" + d) ?? "not found"
+                        base64: dataplane.s3files.get("validation-documents:" + d) ?? "not found"
                     }
                 }) : []
             }
@@ -230,11 +190,11 @@ export const getPendingValidationRequests: CAHandler<{}, {
                 user,
                 dniFrente: {
                     fileName: getFileNameFromPath(r.dniFrente),
-                    base64: dataplane.sbFiles.get("validation-documents:" + r.dniFrente) ?? "not found"
+                    base64: dataplane.s3files.get("validation-documents:" + r.dniFrente) ?? "not found"
                 },
                 dniDorso: {
                     fileName: getFileNameFromPath(r.dniDorso),
-                    base64: dataplane.sbFiles.get("validation-documents:" + r.dniDorso) ?? "not found"
+                    base64: dataplane.s3files.get("validation-documents:" + r.dniDorso) ?? "not found"
                 }
             }
             return req

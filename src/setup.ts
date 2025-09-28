@@ -8,14 +8,14 @@ import {CAWorker} from "#/jobs/worker";
 import { Kysely, PostgresDialect } from 'kysely'
 import { Pool } from 'pg'
 import { DB } from '#/../prisma/generated/types'
-import { createClient as createSBClient, SupabaseClient } from '@supabase/supabase-js'
 import 'dotenv/config'
 import {RedisCache} from "#/services/redis/cache";
 import {Logger} from "#/utils/logger";
+import { env } from './lib/env';
+import { S3Storage } from './services/storage/storage';
 
 
 export type AppContext = {
-    // db: PrismaClient
     logger: Logger
     oauthClient: OAuthClient
     resolver: BidirectionalResolver
@@ -25,23 +25,23 @@ export type AppContext = {
     mirrorId: string
     worker: CAWorker | undefined
     kysely: Kysely<DB>
-    sb: SupabaseClient
+    storage: S3Storage
 }
 
 
 export type Role = "worker" | "web" | "mirror"
 
-export const redisUrl = process.env.REDIS_URL as string
-const env = process.env.NODE_ENV ?? "development"
+export const redisUrl = env.REDIS_URL
+const envName = env.NODE_ENV
 
 export async function setupAppContext(roles: Role[]) {
-    const logger = new Logger([...roles, env].join(":"))
+    const logger = new Logger([...roles, envName].join(":"))
 
     const kysely = new Kysely<DB>({
         dialect: new PostgresDialect({
             pool: new Pool({
-                connectionString: process.env.DATABASE_URL,
-                max: process.env.MAX_CONNECTIONS ? Number(process.env.MAX_CONNECTIONS) : 9,
+                connectionString: env.DATABASE_URL,
+                max: env.MAX_CONNECTIONS,
                 idleTimeoutMillis: 30000,
                 keepAlive: true,
             })
@@ -49,14 +49,8 @@ export async function setupAppContext(roles: Role[]) {
     })
     logger.pino.info("kysely client created")
 
-    const sb = createSBClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
-        global: {
-            headers: {
-                Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`
-            }
-        }
-    })
-    logger.pino.info("sb client created")
+    const storage = new S3Storage(logger)
+    logger.pino.info("storage client created")
 
     const ioredis = new Redis(redisUrl, {maxRetriesPerRequest: null, family: 6})
     logger.pino.info("redis client created")
@@ -75,14 +69,13 @@ export async function setupAppContext(roles: Role[]) {
     const xrpc = createServer()
     logger.pino.info("xrpc server created")
 
-    const mirrorId = `mirror-${env}`
+    const mirrorId = `mirror-${envName}`
     logger.pino.info("Mirror ID", mirrorId)
 
     const redisCache = new RedisCache(ioredis, mirrorId, logger)
     logger.pino.info("redis cache created")
 
     const ctx: AppContext = {
-        // db,
         logger,
         oauthClient,
         resolver,
@@ -91,7 +84,7 @@ export async function setupAppContext(roles: Role[]) {
         redisCache,
         kysely,
         worker,
-        sb,
+        storage,
         mirrorId
     }
 

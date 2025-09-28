@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { Server } from './server'
 import cluster from 'cluster'
 import os from 'os';
+import {env} from "#/lib/env";
 
 
 export type Role = "worker" | "web" | "mirror"
@@ -19,7 +20,7 @@ export const run = async (roles: Role[]) => {
     process.on('SIGTERM', onCloseSignal)
 }
 
-const maxCpus = process.env.MAX_APP_CPUS ? Number(process.env.MAX_APP_CPUS) : 1000
+const maxCpus = env.MAX_APP_CPUS
 
 if (cluster.isPrimary) {
     const numCPUs = Math.min(os.cpus().length, maxCpus)

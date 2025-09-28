@@ -8,7 +8,7 @@ const env = { ...process.env }
 ;(async() => {
   // If running the web server then migrate existing database
   if (process.argv.slice(-3).join(' ') === 'npm run start') {
-    const url = new URL(process.env.DATABASE_URL)
+    const url = new URL(env.DATABASE_URL)
     const target = url.protocol === 'file:' && url.pathname
     await exec('npx prisma migrate deploy')
   }

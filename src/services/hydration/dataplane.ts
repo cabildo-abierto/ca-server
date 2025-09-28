@@ -38,7 +38,7 @@ import {NotificationQueryResult, NotificationsSkeleton} from "#/services/notific
 import {equalFilterCond, inFilterCond, stringListIncludes} from "#/services/dataset/read";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-import { jsonArrayFrom } from 'kysely/helpers/postgres'
+import {jsonArrayFrom} from 'kysely/helpers/postgres'
 import {
     ColumnFilter,
     isColumnFilter
@@ -127,10 +127,10 @@ export class Dataplane {
     datasets: Map<string, DatasetQueryResult> = new Map()
     datasetContents: Map<string, string[]> = new Map()
     topicsMentioned: Map<string, TopicMentionedProps[]> = new Map()
-    sbFiles: Map<string, string> = new Map()
+    s3files: Map<string, string> = new Map()
     requires: Map<string, string[]> = new Map() // mapea un uri a una lista de uris que sabemos que ese contenido requiere que fetcheemos
     notifications: Map<string, NotificationQueryResult> = new Map()
-    topicsDatasets: Map<string, {id: string, props: TopicProp[]}[]> = new Map()
+    topicsDatasets: Map<string, { id: string, props: TopicProp[] }[]> = new Map()
     rootCreationDates: Map<string, Date> = new Map()
 
     constructor(ctx: AppContext, agent?: SessionAgent | NoSessionAgent) {
@@ -158,25 +158,25 @@ export class Dataplane {
         const filters = contents.reduce((acc, cur) => {
             const filtersInContent: $Typed<ColumnFilter>[][] = []
             const record = cur.record ? JSON.parse(cur.record) : null
-            if(!record) return acc
+            if (!record) return acc
 
             const collection = getCollectionFromUri(cur.uri)
 
-            if(isArticle(collection)){
+            if (isArticle(collection)) {
                 const articleRecord = record as ArticleRecord
-                if(articleRecord.embeds){
+                if (articleRecord.embeds) {
                     articleRecord.embeds.forEach(e => {
-                        if(isVisualizationEmbed(e.value)){
-                            if(e.value.filters){
+                        if (isVisualizationEmbed(e.value)) {
+                            if (e.value.filters) {
                                 filtersInContent.push(e.value.filters.filter(isColumnFilter))
                             }
                         }
                     })
                 }
-            } else if(isPost(collection)){
+            } else if (isPost(collection)) {
                 const postRecord = record as PostRecord
-                if(postRecord.embed && isVisualizationEmbed(postRecord.embed)){
-                    if(postRecord.embed.filters){
+                if (postRecord.embed && isVisualizationEmbed(postRecord.embed)) {
+                    if (postRecord.embed.filters) {
                         filtersInContent.push(postRecord.embed.filters.filter(isColumnFilter))
                     }
                 }
@@ -240,9 +240,8 @@ export class Dataplane {
             .execute()
 
 
-
         contents.forEach(c => {
-            if(c.cid){
+            if (c.cid) {
                 this.caContents.set(c.uri, {
                     ...c,
                     repliesCount: c.repliesCount ? Number(c.repliesCount) : 0,
@@ -259,8 +258,8 @@ export class Dataplane {
     async fetchTextBlobs(blobs: BlobRef[]) {
         const batchSize = 100
         let texts: (string | null)[] = []
-        for(let i = 0; i < blobs.length; i+=batchSize) {
-            const batchTexts = await fetchTextBlobs(this.ctx, blobs.slice(i, i+batchSize))
+        for (let i = 0; i < blobs.length; i += batchSize) {
+            const batchTexts = await fetchTextBlobs(this.ctx, blobs.slice(i, i + batchSize))
             texts.push(...batchTexts)
         }
         const keys = blobs.map(b => getBlobKey(b))
@@ -289,7 +288,7 @@ export class Dataplane {
 
     async fetchTopicsBasicByUris(uris: string[]) {
         uris = uris.filter(u => !this.topicsByUri?.has(u))
-        if(uris.length == 0) return
+        if (uris.length == 0) return
 
         const data: TopicVersionQueryResultBasic[] = await this.ctx.kysely
             .selectFrom("TopicVersion")
@@ -361,9 +360,9 @@ export class Dataplane {
     }
 
 
-    async fetchRootCreationDate(uris: string[]){
+    async fetchRootCreationDate(uris: string[]) {
         uris = uris.filter(u => isPost(getCollectionFromUri(u)))
-        if(uris.length == 0) return
+        if (uris.length == 0) return
 
         const t1 = Date.now()
         const rootCreationDates = await this.ctx.kysely
@@ -381,9 +380,9 @@ export class Dataplane {
     }
 
 
-    async fetchRepostsHydrationData(uris: string[]){
+    async fetchRepostsHydrationData(uris: string[]) {
         uris = uris.filter(u => getCollectionFromUri(u) == "app.bsky.feed.repost")
-        if(uris.length > 0){
+        if (uris.length > 0) {
             const t1 = Date.now()
 
             const reposts: RepostQueryResult[] = await this.ctx.kysely
@@ -400,7 +399,7 @@ export class Dataplane {
             const t2 = Date.now()
             this.ctx.logger.logTimes("fetch reposts", [t1, t2])
             reposts.forEach(r => {
-                if(r.subjectId){
+                if (r.subjectId) {
                     this.reposts.set(r.subjectId, r)
                 }
             })
@@ -414,7 +413,7 @@ export class Dataplane {
             if (post.embed && isEmbedRecordView(post.embed) && isViewRecord(post.embed.record)) {
                 const record = post.embed.record
                 const collection = getCollectionFromUri(record.uri)
-                if(isPost(collection)){
+                if (isPost(collection) && !m.has(record.uri)) {
                     m.set(record.uri, {
                         ...record,
                         uri: record.uri,
@@ -428,27 +427,29 @@ export class Dataplane {
                         embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
                     })
                 }
-            } else if(post.embed && isEmbedRecordWithMediaView(post.embed)){
+            } else if (post.embed && isEmbedRecordWithMediaView(post.embed)) {
                 const recordView = post.embed.record
-                if(isEmbedRecordView(recordView) && isViewRecord(recordView.record)){
+                if (isEmbedRecordView(recordView) && isViewRecord(recordView.record)) {
                     const record = recordView.record
-                    m.set(record.uri, {
-                        ...record,
-                        uri: record.uri,
-                        cid: record.cid,
-                        $type: "app.bsky.feed.defs#postView",
-                        author: {
-                            ...record.author
-                        },
-                        indexedAt: record.indexedAt,
-                        record: record.value,
-                        embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
-                    })
+                    if(!m.has(record.uri)){
+                        m.set(record.uri, {
+                            ...record,
+                            uri: record.uri,
+                            cid: record.cid,
+                            $type: "app.bsky.feed.defs#postView",
+                            author: {
+                                ...record.author
+                            },
+                            indexedAt: record.indexedAt,
+                            record: record.value,
+                            embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
+                        })
+                    }
                 }
-            } else if(post.embed && isEmbedRecordView(post.embed) && isViewNotFound(post.embed.record)){
+            } else if (post.embed && isEmbedRecordView(post.embed) && isViewNotFound(post.embed.record)) {
                 const uri = post.embed.record.uri
                 const collection = getCollectionFromUri(uri)
-                if(isArticle(collection)){
+                if (isArticle(collection)) {
                     this.requires.set(post.uri, [...(this.requires.get(post.uri) ?? []), uri])
                 }
             }
@@ -471,8 +472,8 @@ export class Dataplane {
         let postViews: PostView[] = []
         try {
             const t1 = Date.now()
-            if(batches.length > 1) console.log(`Warning: get bsky posts has ${batches.length} batches.`)
-            for(const b of batches) {
+            if (batches.length > 1) console.log(`Warning: get bsky posts has ${batches.length} batches.`)
+            for (const b of batches) {
                 const res = await agent.bsky.app.bsky.feed.getPosts({uris: b})
                 postViews.push(...res.data.posts)
             }
@@ -496,7 +497,7 @@ export class Dataplane {
 
     addAuthorsFromPostViews(posts: PostView[]) {
         posts.forEach(p => {
-            if(!this.bskyUsers.has(p.author.did)){
+            if (!this.bskyUsers.has(p.author.did)) {
                 this.bskyUsers.set(p.author.did, {
                     ...p.author,
                     $type: "app.bsky.actor.defs#profileViewBasic"
@@ -513,7 +514,7 @@ export class Dataplane {
     async fetchEngagement(uris: string[]) {
         const agent = this.agent
         if (!agent.hasSession()) return
-        if(uris.length == 0) return
+        if (uris.length == 0) return
 
         const did = agent.did
         const t1 = Date.now()
@@ -559,7 +560,7 @@ export class Dataplane {
 
         uris.forEach(u => {
             const r = this.requires.get(u)
-            if(r) uris.push()
+            if (r) uris.push()
         })
 
         const c = getCollectionFromUri(skeleton.post)
@@ -581,10 +582,14 @@ export class Dataplane {
             m.set(f.post.uri, f.post)
             if (f.reply) {
                 if (isPostView(f.reply.parent)) {
-                    m.set(f.reply.parent.uri, f.reply.parent)
+                    if (!m.has(f.reply.parent.uri)) {
+                        m.set(f.reply.parent.uri, f.reply.parent)
+                    }
                 }
                 if (isPostView(f.reply.root)) {
-                    m.set(f.reply.root.uri, f.reply.root)
+                    if (!m.has(f.reply.root.uri)) {
+                        m.set(f.reply.root.uri, f.reply.root)
+                    }
                 }
             }
             if (f.reason) {
@@ -637,8 +642,8 @@ export class Dataplane {
             this.fetchUsersHydrationData(dids)
         ])
 
-        for(const d of datasets) {
-            if(d.cid) {
+        for (const d of datasets) {
+            if (d.cid) {
                 this.datasets.set(d.uri, {
                     ...d,
                     cid: d.cid
@@ -651,7 +656,7 @@ export class Dataplane {
         uris = uris.filter(u => isDataset(getCollectionFromUri(u)))
         uris = uris.filter(u => !this.datasetContents?.has(u))
 
-        if(uris.length == 0) return
+        if (uris.length == 0) return
 
         await this.fetchDatasetsHydrationData(uris)
 
@@ -684,7 +689,7 @@ export class Dataplane {
             const uri = blobs[i].datasetUri
             const content = contents[i]
             const cur = datasetContents.get(uri)
-            if(!cur){
+            if (!cur) {
                 datasetContents.set(uri, [content])
             } else {
                 cur.push(content)
@@ -765,7 +770,7 @@ export class Dataplane {
         const didBatches: string[][] = []
         for (let i = 0; i < dids.length; i += 25) didBatches.push(dids.slice(i, i + 25))
         const profiles: ProfileViewDetailed[] = []
-        for(let i = 0; i < didBatches.length; i++){
+        for (let i = 0; i < didBatches.length; i++) {
             const b = didBatches[i]
             const res = await agent.bsky.app.bsky.actor.getProfiles({actors: b})
             profiles.push(...res.data.profiles)
@@ -789,24 +794,22 @@ export class Dataplane {
     async fetchFilesFromStorage(filePaths: string[], bucket: string) {
         for (let i = 0; i < filePaths.length; i++) {
             const path = filePaths[i]
-            const {data} = await this.ctx.sb.storage
-                .from(bucket)
-                .download(path)
+            const {data} = await this.ctx.storage.download(path, bucket)
 
             if (data) {
-                const buffer = await data.arrayBuffer();
-                const base64 = Buffer.from(buffer).toString('base64');
-                const mimeType = data.type;
+                const buffer = data.file
+                const base64 = Buffer.from(buffer).toString('base64')
+                const mimeType = data.contentType
 
-                const fullBase64 = `data:${mimeType};base64,${base64}`;
-                this.sbFiles.set(bucket + ":" + path, fullBase64);
+                const fullBase64 = `data:${mimeType};base64,${base64}`
+                this.s3files.set(bucket + ":" + path, fullBase64)
             }
         }
     }
 
 
     async fetchNotificationsHydrationData(skeleton: NotificationsSkeleton) {
-        if(!this.agent.hasSession() || skeleton.length == 0) return
+        if (!this.agent.hasSession() || skeleton.length == 0) return
 
         const reqAuthors = skeleton.map(n => getDidFromUri(n.causedByRecordId))
 
@@ -841,76 +844,72 @@ export class Dataplane {
     }
 
 
-    async fetchFilteredTopics(manyFilters: $Typed<ColumnFilter>[][]){
+    async fetchFilteredTopics(manyFilters: $Typed<ColumnFilter>[][]) {
         const datasets = await Promise.all(manyFilters.map(async filters => {
 
-            const filtersByOperator = new Map<string, {column: string, operands: string[]}[]>()
+            const filtersByOperator = new Map<string, { column: string, operands: string[] }[]>()
             filters.forEach(f => {
-                if(["includes", "=", "in"].includes(f.operator) && f.operands && f.operands.length > 0){
+                if (["includes", "=", "in"].includes(f.operator) && f.operands && f.operands.length > 0) {
                     const cur = filtersByOperator.get(f.operator) ?? []
                     filtersByOperator.set(f.operator, [...cur, {column: f.column, operands: f.operands}])
                 }
             })
 
-            this.ctx.logger.pino.info({filters},"fetching filtered topics")
-
-            if(filtersByOperator.size > 0){
+            if (filtersByOperator.size > 0) {
                 let query = this.ctx.kysely
                     .selectFrom('Topic')
                     .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
                     .select(['id', 'TopicVersion.props'])
 
                 const includesFilters = filtersByOperator.get("includes")
-                if(includesFilters){
+                if (includesFilters) {
                     query = query.where((eb) =>
                         eb.and(includesFilters.map(f => stringListIncludes(f.column, f.operands[0])))
                     )
                 }
 
                 const equalFilters = filtersByOperator.get("=")
-                if(equalFilters){
+                if (equalFilters) {
                     query = query.where((eb) =>
                         eb.and(equalFilters.map(f => equalFilterCond(f.column, f.operands[0])))
                     )
                 }
 
                 const inFilters = filtersByOperator.get("in")
-                if(inFilters){
+                if (inFilters) {
                     query = query.where((eb) =>
                         eb.and(inFilters.map(f => inFilterCond(f.column, f.operands)))
                     )
                 }
 
                 return await query
-                    .execute() as {id: string, props: TopicProp[]}[]
+                    .execute() as { id: string, props: TopicProp[] }[]
             } else {
                 return null
             }
         }))
 
-        this.ctx.logger.pino.info({datasets}, "fetched filtered topics")
-
         datasets.forEach((d, index) => {
-            if(d){
+            if (d) {
                 this.topicsDatasets.set(getObjectKey(manyFilters[index]), d)
             }
         })
     }
 
     saveDataFromPostThread(thread: ThreadViewPost, includeParents: boolean, excludeChild?: string) {
-        if(thread.post){
+        if (thread.post) {
             this.addAuthorsFromPostViews([thread.post])
             this.bskyPosts.set(thread.post.uri, thread.post)
             this.addEmbedsToPostsMap(this.bskyPosts)
 
-            if(includeParents && thread.parent && isThreadViewPost(thread.parent)){
+            if (includeParents && thread.parent && isThreadViewPost(thread.parent)) {
                 this.saveDataFromPostThread(thread.parent, true, thread.post.uri)
             }
 
-            if(thread.replies){
+            if (thread.replies) {
                 thread.replies.forEach(r => {
-                    if(isThreadViewPost(r)){
-                        if(r.post.uri != excludeChild){
+                    if (isThreadViewPost(r)) {
+                        if (r.post.uri != excludeChild) {
                             this.saveDataFromPostThread(r, true)
                         }
                     } else {
