@@ -51,9 +51,9 @@ export class ArticleRecordProcessor extends RecordProcessor<Article.Record> {
 
         const authors = unique(records.map(r => getDidFromUri(r.ref.uri)))
         await Promise.all([
-            this.ctx.worker?.addJob("update-author-status", {dids: authors}),
-            this.ctx.worker?.addJob("update-contents-topic-mentions", {uris: records.map(r => r.ref.uri)}),
-            this.ctx.worker?.addJob("update-interactions-score", {uris: records.map(r => r.ref.uri)})
+            this.ctx.worker?.addJob("update-author-status", {dids: authors}, 11),
+            this.ctx.worker?.addJob("update-contents-topic-mentions", {uris: records.map(r => r.ref.uri)}, 11),
+            this.ctx.worker?.addJob("update-interactions-score", {uris: records.map(r => r.ref.uri)}, 11)
         ])
     }
 }

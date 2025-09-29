@@ -2,7 +2,7 @@
 SERVER_USER="root"
 SERVER_IP="216.238.122.145"
 APP_PATH="/var/www/ca-server"
-ENV="${1:-prod}"
+ENV="${1:-test}"
 
 echo_blue() {
     echo -e "\e[34m$1\e[0m"
@@ -12,6 +12,8 @@ echo_blue "deploying env ${ENV}"
 
 echo_blue "creating directory..."
 ssh $SERVER_USER@$SERVER_IP "mkdir -p $APP_PATH"
+
+export NEXT_PUBLIC_BACKEND_URL="https://api.cabildoabierto.ar"
 
 echo_blue "building locally..."
 npm run build

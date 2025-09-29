@@ -22,6 +22,7 @@ export const env = cleanEnv(process.env, {
   CLOUDFLARE_SECRET_ACCESS_KEY: str(),
 
   DATABASE_URL: str(),
+  DIRECT_URL: str(),
   MAX_APP_CPUS: num({devDefault: 1}),
   MAX_WORKER_CPUS: num({devDefault: 1}),
   MAX_REPO_MBS: num({devDefault: 300}),

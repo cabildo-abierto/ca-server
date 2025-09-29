@@ -99,7 +99,7 @@ export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Re
         await addUpdateContributionsJobForTopics(this.ctx, topics.map(t => t.id))
 
         const authors = unique(records.map(r => getDidFromUri(r.ref.uri)))
-        await this.ctx.worker?.addJob("update-author-status", {dids: authors})
+        await this.ctx.worker?.addJob("update-author-status", {dids: authors}, 11)
     }
 }
 

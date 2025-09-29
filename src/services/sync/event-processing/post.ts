@@ -131,7 +131,7 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
         if (insertedPosts) {
             await Promise.all([
                 this.createNotifications(insertedPosts),
-                this.ctx.worker?.addJob("update-contents-topic-mentions", {uris: insertedPosts.map(r => r.uri)})
+                this.ctx.worker?.addJob("update-contents-topic-mentions", {uris: insertedPosts.map(r => r.uri)}, 11)
             ])
         }
     }
@@ -150,7 +150,7 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
                             createdAt: new Date().toISOString(),
                             reasonSubject: p.replyToId,
                         }
-                        this.ctx.worker?.addJob("create-notification", data)
+                        this.ctx.worker?.addJob("create-notification", data, 10)
                     }
                 }
             }

@@ -186,8 +186,9 @@ export class MirrorMachine {
             await ctx.worker?.addJob("sync-user", {
                 handleOrDid: e.did,
                 collectionsMustUpdate: inCA ? undefined : ["app.bsky.graph.follow"]
-            })
-
+            },
+                inCA ? 5 : 10
+            )
         } else if(mirrorStatus == "InProcess"){
             await addPendingEvent(ctx, e.did, e)
 

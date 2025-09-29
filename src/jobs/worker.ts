@@ -174,14 +174,14 @@ export class CAWorker {
     }
 
 
-    async addJob(name: string, data: any, priority: number = 2) {
+    // priority va de 1 a 2097152, más bajo significa mayor prioridad
+    async addJob(name: string, data: any, priority: number = 10) {
         this.logger.pino.info({name}, "job added")
         await this.queue.add(name, data, {priority})
     }
 
     async removeAllRepeatingJobs() {
         const jobs = await this.queue.getJobSchedulers()
-        this.logger.pino.info("gott job schedulers")
         for (const job of jobs) {
             if(job.key){
                 this.logger.pino.info({name: job.name}, "repeat job removed")

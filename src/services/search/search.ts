@@ -15,14 +15,24 @@ import {sql} from "kysely";
 
 
 export async function searchUsersInCA(ctx: AppContext, query: string, dataplane: Dataplane): Promise<string[]> {
+    const MIN_SIMILARITY_THRESHOLD = 0.1
+
     let users = await ctx.kysely
         .selectFrom("User")
-        .select(["did"])
+        .select([
+            "did",
+            eb => sql<number>`GREATEST(
+                similarity(${eb.ref('User.displayName')}::text, ${eb.val(query)}::text),
+                similarity(${eb.ref('User.handle')}::text, ${eb.val(query)}::text)
+            )`.as('match_score')
+
+        ])
         .where("User.inCA", "=", true)
         .where(eb => eb.or([
-            eb("User.displayName", "ilike", `%${query}%`),
-            eb("User.handle", "ilike", `%${query}%`)
+            eb(sql<number>`similarity(${eb.ref('User.displayName')}::text, ${eb.val(query)}::text)`, ">=", MIN_SIMILARITY_THRESHOLD),
+            eb(sql<number>`similarity(${eb.ref('User.handle')}::text, ${eb.val(query)}::text)`, ">=", MIN_SIMILARITY_THRESHOLD)
         ]))
+        .orderBy("match_score desc")
         .limit(25)
         .execute()
 
@@ -117,25 +127,14 @@ export const searchTopics: CAHandlerNoAuth<{params: {q: string}, query: {c: stri
         .select(eb => [
             sql<number>`similarity(${eb.ref('title')}::text, ${eb.val(searchQuery)}::text)`.as('match_score')
         ])
-        .where((eb) => {
-            const conditions = [
-                eb(eb.fn('unaccent', [eb.ref('title')]), 'ilike', eb.val(`%${searchQuery}%`))
-            ]
-
-            if (categories) {
-                conditions.push(
-                    categories.includes("Sin categoría") ?
-                        eb.val(stringListIsEmpty("Categorías")) :
-                        eb.and(categories.map(c => stringListIncludes("Categorías", c)))
-                )
-            }
-
-            return eb.and(conditions)
-        })
+        .$if(categories != null, qb => qb.where(eb => categories!.includes("Sin categoría") ?
+            eb.val(stringListIsEmpty("Categorías")) :
+            eb.and(categories!.map(c => stringListIncludes("Categorías", c)))))
+        .where(eb => sql<number>`similarity(${eb.ref('title')}::text, ${eb.val(searchQuery)}::text)`, ">", 0.1)
         .orderBy('match_score', 'desc')
         .orderBy('popularityScoreLastDay', 'desc')
         .limit(20)
-        .execute();
+        .execute()
 
     return {
         data: topics.map(t => topicQueryResultToTopicViewBasic({

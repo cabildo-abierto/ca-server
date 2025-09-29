@@ -114,6 +114,7 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
             likeCount: e.uniqueLikesCount,
             repostCount: e.uniqueRepostsCount,
             replyCount: e.repliesCount,
+            quoteCount: e.quotesCount,
             viewer,
             topicsMentioned: topicsMentioned.map(m => ({
                 count: m.count,
@@ -529,7 +530,7 @@ type ThreadViewContentReply = $Typed<ThreadViewContent> | $Typed<NotFoundPost> |
 
 export const threadRepliesSortKey = (authorId: string) => (r: ThreadViewContentReply) => {
     return isThreadViewContent(r) && isPostView(r.content) && r.content.author.did == authorId ?
-        [1, -new Date(r.content.indexedAt).getTime()] : [0, 0]
+        [1, new Date(r.content.indexedAt).getTime()] : [0, 0]
 }
 
 
