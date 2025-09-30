@@ -4,7 +4,7 @@ import {AppContext} from "#/setup";
 import {getUri, isCAProfile, isFollow} from "#/utils/uri";
 import {addPendingEvent, getCAUsersAndFollows} from "#/services/sync/sync-user";
 import {CommitEvent, JetstreamEvent} from "#/lib/types";
-import * as Follow from "#/lex-api/types/app/bsky/graph/follow"
+import {AppBskyGraphFollow} from "@atproto/api"
 import {processEventsBatch} from "#/services/sync/event-processing/event-processor";
 import {LRUCache} from 'lru-cache'
 import {env} from "#/lib/env";
@@ -137,7 +137,7 @@ export class MirrorMachine {
         if(inCA){
             await this.processEvent(this.ctx, c, inCA)
             if(isFollow(c.commit.collection)){
-                const record: Follow.Record = c.commit.record
+                const record: AppBskyGraphFollow.Record = c.commit.record
                 if(c.commit.operation == "create"){
                     this.extendedUsers.add(record.subject)
                     this.ctx.logger.pino.info({did: record.subject} , "added extended user to mirror")

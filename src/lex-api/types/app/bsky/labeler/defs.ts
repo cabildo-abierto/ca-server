@@ -9,9 +9,8 @@ import {
   is$typed as _is$typed,
   type OmitKey,
 } from '../../../../util'
-import type * as AppBskyActorDefs from '../actor/defs.js'
-import type * as ComAtprotoLabelDefs from '../../../com/atproto/label/defs.js'
-import type * as ComAtprotoModerationDefs from '../../../com/atproto/moderation/defs.js'
+import type * as AppBskyActorDefs from '../actor/defs'
+import type * as ComAtprotoLabelDefs from '../../../com/atproto/label/defs'
 
 const is$typed = _is$typed,
   validate = _validate
@@ -36,34 +35,6 @@ export function isLabelerView<V>(v: V) {
 
 export function validateLabelerView<V>(v: V) {
   return validate<LabelerView & V>(v, id, hashLabelerView)
-}
-
-export interface LabelerViewDetailed {
-  $type?: 'app.bsky.labeler.defs#labelerViewDetailed'
-  uri: string
-  cid: string
-  creator: AppBskyActorDefs.ProfileView
-  policies: LabelerPolicies
-  likeCount?: number
-  viewer?: LabelerViewerState
-  indexedAt: string
-  labels?: ComAtprotoLabelDefs.Label[]
-  /** The set of report reason 'codes' which are in-scope for this service to review and action. These usually align to policy categories. If not defined (distinct from empty array), all reason types are allowed. */
-  reasonTypes?: ComAtprotoModerationDefs.ReasonType[]
-  /** The set of subject types (account, record, etc) this service accepts reports on. */
-  subjectTypes?: ComAtprotoModerationDefs.SubjectType[]
-  /** Set of record types (collection NSIDs) which can be reported to this service. If not defined (distinct from empty array), default is any record type. */
-  subjectCollections?: string[]
-}
-
-const hashLabelerViewDetailed = 'labelerViewDetailed'
-
-export function isLabelerViewDetailed<V>(v: V) {
-  return is$typed(v, id, hashLabelerViewDetailed)
-}
-
-export function validateLabelerViewDetailed<V>(v: V) {
-  return validate<LabelerViewDetailed & V>(v, id, hashLabelerViewDetailed)
 }
 
 export interface LabelerViewerState {

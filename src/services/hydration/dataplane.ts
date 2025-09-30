@@ -2,13 +2,11 @@ import {AppContext} from "#/setup";
 import {bskyPublicAPI, NoSessionAgent, SessionAgent} from "#/utils/session-agent";
 import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs";
 import {ProfileViewBasic, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
 import {
     BlobRef, ThreadSkeleton
 } from "#/services/hydration/hydrate";
 import {FeedSkeleton} from "#/services/feed/feed";
 import {getObjectKey, removeNullValues, unique} from "#/utils/arrays";
-import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
 import {
     getCollectionFromUri,
     getDidFromUri,
@@ -18,7 +16,7 @@ import {
     postUris,
     topicVersionUris
 } from "#/utils/uri";
-import {$Typed} from "@atproto/api";
+import {$Typed, AtpBaseClient} from "@atproto/api";
 import {TopicVersionQueryResultBasic} from "#/services/wiki/topics";
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {
@@ -29,7 +27,6 @@ import {
 } from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {fetchTextBlobs} from "#/services/blob";
 import {env} from "#/lib/env";
-import {AtpBaseClient} from "#/lex-api";
 import {RepostQueryResult} from "#/services/feed/inicio/following";
 import {isView as isEmbedRecordView} from "#/lex-api/types/app/bsky/embed/record"
 import {isView as isEmbedRecordWithMediaView} from "#/lex-api/types/app/bsky/embed/recordWithMedia"
@@ -45,7 +42,11 @@ import {
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
 import {getUrisFromThreadSkeleton} from "#/services/thread/thread";
 import {prettyPrintJSON} from "#/utils/strings";
-import {ProfileView} from "#/lex-api/types/app/bsky/actor/defs";
+import {getValidationState} from "../user/users";
+import {AppBskyActorDefs} from "@atproto/api"
+import {AppBskyFeedPost, ArCabildoabiertoActorDefs} from "#/lex-api/index"
+import { CAProfile } from "#/lib/types";
+import {hydrateProfileView} from "#/services/hydration/profile";
 
 
 export type FeedElementQueryResult = {
@@ -120,8 +121,6 @@ export class Dataplane {
     bskyPosts: Map<string, BskyPostView> = new Map()
     likes: Map<string, string | null> = new Map()
     reposts: Map<string, RepostQueryResult | null> = new Map() // mapea uri del post a información del repost asociado
-    bskyUsers: Map<string, $Typed<ProfileViewBasic> | $Typed<ProfileViewDetailed> | $Typed<ProfileView>> = new Map()
-    caUsers: Map<string, CAProfileViewBasic> = new Map()
     topicsByUri: Map<string, TopicVersionQueryResultBasic> = new Map()
     textBlobs: Map<string, string> = new Map()
     datasets: Map<string, DatasetQueryResult> = new Map()
@@ -132,6 +131,12 @@ export class Dataplane {
     notifications: Map<string, NotificationQueryResult> = new Map()
     topicsDatasets: Map<string, { id: string, props: TopicProp[] }[]> = new Map()
     rootCreationDates: Map<string, Date> = new Map()
+
+    bskyBasicUsers: Map<string, $Typed<ProfileViewBasic>> = new Map()
+    bskyDetailedUsers: Map<string, $Typed<ProfileViewDetailed>> = new Map()
+    caUsers: Map<string, CAProfile> = new Map()
+    profiles: Map<string, ArCabildoabiertoActorDefs.ProfileViewDetailed> = new Map()
+    profileViewers: Map<string, AppBskyActorDefs.ViewerState> = new Map()
 
     constructor(ctx: AppContext, agent?: SessionAgent | NoSessionAgent) {
         this.ctx = ctx
@@ -174,7 +179,7 @@ export class Dataplane {
                     })
                 }
             } else if (isPost(collection)) {
-                const postRecord = record as PostRecord
+                const postRecord = record as AppBskyFeedPost.Record
                 if (postRecord.embed && isVisualizationEmbed(postRecord.embed)) {
                     if (postRecord.embed.filters) {
                         filtersInContent.push(postRecord.embed.filters.filter(isColumnFilter))
@@ -207,6 +212,7 @@ export class Dataplane {
             .leftJoin("Content", "Content.uri", "Record.uri")
             .leftJoin("Article", "Article.uri", "Record.uri")
             .leftJoin("TopicVersion", "TopicVersion.uri", "Record.uri")
+
             .select([
                 "Record.uri",
                 "Record.cid",
@@ -236,11 +242,13 @@ export class Dataplane {
                     .select("_ContentToDataset.B as uri")
                     .whereRef("_ContentToDataset.A", "=", "Content.uri")
                 ).as("datasetsUsed")
+
             ])
             .execute()
 
 
         contents.forEach(c => {
+            this.ctx.logger.pino.info({uri: c.uri, created_at: c.created_at.toISOString()}, "got ca content")
             if (c.cid) {
                 this.caContents.set(c.uri, {
                     ...c,
@@ -343,8 +351,8 @@ export class Dataplane {
             ...repostUris,
             ...caPosts.map(p => p.replyToId),
             ...caPosts.map(p => p.rootId),
-            ...bskyPosts.map(p => (p.record as PostRecord).reply?.root?.uri),
-            ...bskyPosts.map(p => (p.record as PostRecord).reply?.parent?.uri),
+            ...bskyPosts.map(p => (p.record as AppBskyFeedPost.Record).reply?.root?.uri),
+            ...bskyPosts.map(p => (p.record as AppBskyFeedPost.Record).reply?.parent?.uri),
             // faltan quote posts
         ].filter(x => x != null))
     }
@@ -497,8 +505,8 @@ export class Dataplane {
 
     addAuthorsFromPostViews(posts: PostView[]) {
         posts.forEach(p => {
-            if (!this.bskyUsers.has(p.author.did)) {
-                this.bskyUsers.set(p.author.did, {
+            if (!this.bskyBasicUsers.has(p.author.did)) {
+                this.bskyBasicUsers.set(p.author.did, {
                     ...p.author,
                     $type: "app.bsky.actor.defs#profileViewBasic"
                 })
@@ -719,51 +727,87 @@ export class Dataplane {
     }
 
     async fetchUsersHydrationDataFromCA(dids: string[]) {
-        dids = dids.filter(d => !this.caUsers.has(d))
+        dids = unique(dids.filter(d => !this.caUsers.has(d)))
         if (dids.length == 0) return
 
         const t1 = Date.now()
 
-        const data = await this.ctx.kysely
+        const profiles = await this.ctx.kysely
             .selectFrom("User")
             .select([
-                "did",
-                "CAProfileUri",
-                "displayName",
-                "handle",
-                "avatar",
+                "User.did",
+                "User.CAProfileUri",
+                "editorStatus",
                 "userValidationHash",
-                "orgValidation"
+                "orgValidation",
+                (eb) =>
+                    eb
+                        .selectFrom("Follow")
+                        .innerJoin("Record", "Record.uri", "Follow.uri")
+                        .innerJoin("User", "User.did", "Record.authorId")
+                        .select(eb.fn.countAll<number>().as("count"))
+                        .where("User.inCA", "=", true)
+                        .whereRef("Follow.userFollowedId", "=", "User.did")
+                        .as("followersCount"),
+                (eb) =>
+                    eb
+                        .selectFrom("Record")
+                        .whereRef("Record.authorId", "=", "User.did")
+                        .innerJoin("Follow", "Follow.uri", "Record.uri")
+                        .innerJoin("User as UserFollowed", "UserFollowed.did", "Follow.userFollowedId")
+                        .where("UserFollowed.inCA", "=", true)
+                        .select(eb.fn.countAll<number>().as("count"))
+                        .as("followsCount"),
+                (eb) =>
+                    eb
+                        .selectFrom("Record")
+                        .innerJoin("Article", "Article.uri", "Record.uri")
+                        .select(eb.fn.countAll<number>().as("count"))
+                        .whereRef("Record.authorId", "=", "User.did")
+                        .where("Record.collection", "=", "ar.cabildoabierto.feed.article")
+                        .as("articlesCount"),
+                (eb) =>
+                    eb
+                        .selectFrom("Record")
+                        .innerJoin("TopicVersion", "TopicVersion.uri", "Record.uri")
+                        .select(eb.fn.countAll<number>().as("count"))
+                        .whereRef("Record.authorId", "=", "User.did")
+                        .where("Record.collection", "=", "ar.cabildoabierto.wiki.topicVersion")
+                        .as("editsCount"),
             ])
-            .where("did", "in", dids)
+            .where("User.did", "in", dids)
             .execute()
 
-        const res: CAProfileViewBasic[] = []
+        if (profiles.length == 0) return null
 
-        data.forEach(u => {
-            if (u.handle != null) res.push({
-                ...u,
-                handle: u.handle,
-                displayName: u.displayName ?? undefined,
-                avatar: u.avatar ?? undefined,
-                caProfile: u.CAProfileUri ?? undefined,
-                verification: u.orgValidation ? "org" : (u.userValidationHash ? "person" : undefined)
-            })
+        const formattedProfiles: CAProfile[] = profiles.map(profile => {
+            if(profile.CAProfileUri){
+                return {
+                    did: profile.did,
+                    editorStatus: profile.editorStatus,
+                    caProfile: profile.CAProfileUri,
+                    followsCount: profile.followsCount ?? 0,
+                    followersCount: profile.followersCount ?? 0,
+                    articlesCount: profile.articlesCount ?? 0,
+                    editsCount: profile.editsCount ?? 0,
+                    verification: getValidationState(profile)
+                }
+            }
+            return null
+        }).filter(x => x != null)
+
+        formattedProfiles.forEach(p => {
+            this.caUsers.set(p.did, p)
         })
-
-        this.caUsers = joinMaps(
-            this.caUsers,
-            new Map(res.map(r => [r.did, r]))
-        )
 
         const t2 = Date.now()
         this.ctx.logger.logTimes(`fetch users data from ca (N = ${dids.length})`, [t1, t2])
     }
 
-    async fetchUsersHydrationDataFromBsky(dids: string[]) {
+    async fetchUsersDetailedHydrationDataFromBsky(dids: string[]) {
         const agent = this.agent
 
-        dids = dids.filter(d => !this.bskyUsers.has(d))
+        dids = unique(dids.filter(d => !this.bskyDetailedUsers.has(d)))
         if (dids.length == 0) return
 
         const t1 = Date.now()
@@ -776,19 +820,92 @@ export class Dataplane {
             profiles.push(...res.data.profiles)
         }
 
-        this.bskyUsers = joinMaps(
-            this.bskyUsers,
-            new Map(profiles.map(v => [v.did, {$type: "app.bsky.actor.defs#profileViewDetailed", ...v}]))
+        this.bskyDetailedUsers = joinMaps(
+            this.bskyDetailedUsers,
+            new Map(profiles.map(v => [v.did, {...v, $type: "app.bsky.actor.defs#profileViewDetailed"}]))
+        )
+        this.bskyBasicUsers = joinMaps(
+            this.bskyBasicUsers,
+            new Map(profiles.map(v => [v.did, {...v, $type: "app.bsky.actor.defs#profileViewBasic"}]))
         )
         const t2 = Date.now()
         this.ctx.logger.logTimes(`fetch users data from bsky (N = ${dids.length})`, [t1, t2])
     }
 
+
+    async fetchProfilesViewerState(dids: string[]){
+        const {agent, ctx} = this
+        if(!agent.hasSession()) {
+            dids.forEach(d => {
+                this.profileViewers.set(d, {})
+            })
+            return
+        }
+
+        const t1 = Date.now()
+
+        const follows = await ctx.kysely
+            .selectFrom("Follow")
+            .innerJoin("Record", "Record.uri", "Follow.uri")
+            .select("Follow.uri")
+            .where(eb => eb.or([
+                eb.and([
+                    eb("Follow.userFollowedId", "in", dids),
+                    eb("Record.authorId", "=", agent.did),
+                ]),
+                eb.and([
+                    eb("Follow.userFollowedId", "=", agent.did),
+                    eb("Record.authorId", "in", dids)
+                ])
+            ]))
+            .execute()
+
+        ctx.logger.logTimes("fetch profiles viewer state", [t1, Date.now()])
+
+        dids.forEach(did => {
+            const following = follows.find(f => getDidFromUri(f.uri) == agent.did)
+            const followedBy = follows.find(f => getDidFromUri(f.uri) == did)
+
+            this.profileViewers.set(did, {
+                following: following ? following.uri : undefined,
+                followedBy: followedBy ? followedBy.uri : undefined
+            })
+        })
+    }
+
     async fetchUsersHydrationData(dids: string[]) {
-        await Promise.all([
-            this.fetchUsersHydrationDataFromCA(dids),
-            this.fetchUsersHydrationDataFromBsky(dids)
+        if(dids.length == 0) return
+
+        const [profiles] = await Promise.all([
+            this.ctx.redisCache.profile.getMany(dids),
+            this.fetchProfilesViewerState(dids)
         ])
+
+        profiles.forEach(p => {
+            if(p) {
+                this.profiles.set(p.did, p)
+            }
+        })
+
+        const missedDids = dids.filter((_, i) => {
+            return profiles[i] == null
+        })
+        if(missedDids.length == 0) return
+
+        await Promise.all([
+            this.fetchUsersHydrationDataFromCA(missedDids),
+            this.fetchUsersDetailedHydrationDataFromBsky(missedDids)
+        ])
+
+        const newProfiles: ArCabildoabiertoActorDefs.ProfileViewDetailed[] = missedDids
+            .map(d => hydrateProfileView(this.ctx, d, this))
+            .filter(x => x != null)
+
+        newProfiles.forEach(p => {
+            this.profiles.set(p.did, p)
+        })
+
+        await this.ctx.redisCache.profile.setMany(newProfiles)
     }
 
     async fetchFilesFromStorage(filePaths: string[], bucket: string) {

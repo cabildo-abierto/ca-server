@@ -6,7 +6,7 @@ import {Record as CAProfileRecord} from "#/lex-server/types/ar/cabildoabierto/ac
 import {v4 as uuidv4} from "uuid";
 import {range} from "#/utils/arrays";
 import {BskyProfileRecordProcessor, CAProfileRecordProcessor} from "#/services/sync/event-processing/profile";
-import * as BskyProfile from "#/lex-api/types/app/bsky/actor/profile"
+import {AppBskyActorProfile} from "@atproto/api"
 
 async function getCAStatus(ctx: AppContext, did: string): Promise<{inCA: boolean, hasAccess: boolean} | null> {
     return await ctx.kysely
@@ -110,7 +110,7 @@ export async function createCAUser(ctx: AppContext, agent: SessionAgent, code?: 
         new CAProfileRecordProcessor(ctx)
             .processValidated([{ref: {uri: data.uri, cid: data.cid}, record: caProfileRecord}]),
         new BskyProfileRecordProcessor(ctx)
-            .processValidated([{ref: {uri: bskyProfile.uri, cid: bskyProfile.cid!}, record: bskyProfile.value as BskyProfile.Record}])
+            .processValidated([{ref: {uri: bskyProfile.uri, cid: bskyProfile.cid!}, record: bskyProfile.value as AppBskyActorProfile.Record}])
     ])
 
     return {}

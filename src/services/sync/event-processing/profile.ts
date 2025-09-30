@@ -1,7 +1,7 @@
 import {getDidFromUri} from "#/utils/uri";
 import {didToHandle} from "#/services/user/users";
 import * as CAProfile from "#/lex-api/types/ar/cabildoabierto/actor/caProfile"
-import * as BskyProfile from "#/lex-api/types/app/bsky/actor/profile"
+import {AppBskyActorProfile} from "@atproto/api"
 import {AppContext} from "#/setup";
 import {ATProtoStrongRef} from "#/lib/types";
 import {getCidFromBlobRef} from "#/services/sync/utils";
@@ -79,11 +79,11 @@ async function processCAProfile(ctx: AppContext, {ref, record}: RefAndRecord) {
 }
 
 
-export class BskyProfileRecordProcessor extends RecordProcessor<BskyProfile.Record> {
+export class BskyProfileRecordProcessor extends RecordProcessor<AppBskyActorProfile.Record> {
 
-    validateRecord = BskyProfile.validateRecord
+    validateRecord = AppBskyActorProfile.validateRecord
 
-    async addRecordsToDB(records: RefAndRecord<BskyProfile.Record>[]) {
+    async addRecordsToDB(records: RefAndRecord<AppBskyActorProfile.Record>[]) {
         for(const {ref, record: r} of records) {
             const ctx = this.ctx
             const did = getDidFromUri(ref.uri)

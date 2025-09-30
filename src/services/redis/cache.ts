@@ -3,9 +3,12 @@ import {getCollectionFromUri, getDidFromUri, isCAProfile, isFollow, splitUri} fr
 import {unique} from "#/utils/arrays";
 import {formatIsoDate} from "#/utils/dates";
 import {FollowingFeedSkeletonElement} from "#/services/feed/inicio/following";
-import {Profile} from "#/lib/types";
 import {CAHandler} from "#/utils/handler";
 import {Logger} from "#/utils/logger";
+import { ArCabildoabiertoActorDefs } from "#/lex-api";
+import {RefAndRecord} from "#/services/sync/types";
+import {AppBskyGraphFollow} from "@atproto/api";
+import {NextMeeting} from "#/services/admin/meetings";
 
 
 class CacheKey {
@@ -15,20 +18,29 @@ class CacheKey {
         this.cache = cache
     }
 
-    async onUpdateRecord(uri: string) {
+    async onUpdateRecord(r: RefAndRecord<any>) {
 
     }
 
-    async onUpdateRecords(uris: string[]) {
-        for(const uri of uris) {
-            await this.onUpdateRecord(uri)
+    async onDeleteRecord(uri: string) {
+
+    }
+
+    async onDeleteRecords(uris: string[]) {
+        for(const r of uris) {
+            await this.onDeleteRecord(r)
+        }
+    }
+
+    async onUpdateRecords(records: RefAndRecord<any>[]) {
+        for(const r of records) {
+            await this.onUpdateRecord(r)
         }
     }
 
     async onEvent(e: RedisEvent, params: string[]) {
 
     }
-
 
     buildKey(params: string[]) {
         return params.join(":")
@@ -41,13 +53,29 @@ class ProfileCacheKey extends CacheKey {
     // Cambia el record del perfil de Bluesky o Cabildo Abierto
     // Se verifica al usuario
     // Cambia el nivel de edicion del usuario (todavía no)
-    // Cuando
+    // Alguien sigue al usuario o el usuario sigue a alguien
 
-    async onUpdateRecord(uri: string) {
-        const {did, collection, rkey} = splitUri(uri)
+    async onUpdateRecord(r: RefAndRecord<any>) {
+        // TO DO: Hacer en pipeline para muchos records
+        const {did, collection, rkey} = splitUri(r.ref.uri)
         if(collection == "app.bsky.actor.profile" && rkey == "self"){
             await this.del(did)
         } else if(isCAProfile(collection)){
+            await this.del(did)
+        } else if(isFollow(collection)){
+            await this.del(did)
+            const follow: AppBskyGraphFollow.Record = r.record
+            await this.del(follow.subject)
+        }
+    }
+
+    async onDeleteRecord(uri: string) {
+        const {did, collection, rkey} = splitUri(uri)
+        if(collection == "app.bsky.actor.profile" && rkey == "self"){
+            await this.del(did)
+        } else if(isCAProfile(collection)) {
+            await this.del(did)
+        } else if(isFollow(collection)){
             await this.del(did)
         }
     }
@@ -57,39 +85,43 @@ class ProfileCacheKey extends CacheKey {
     }
 
     key(did: string) {
-        return `profile:${did}`
+        return `profile-detailed:${did}`
     }
 
-    formatCached(p: string | null): Profile | null {
+    formatCached(p: string | null): ArCabildoabiertoActorDefs.ProfileViewDetailed | null {
         if(p == null) return null
-        const profile: Profile = JSON.parse(p)
+        const profile: ArCabildoabiertoActorDefs.ProfileViewDetailed = JSON.parse(p)
 
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const {viewer, ...bskyNoViewer} = profile.bsky
+        const {viewer, ...profileNoViewer} = profile
 
         // sacamos al viewer porque depende del agent
-        return {
-            ca: profile.ca,
-            bsky: bskyNoViewer
-        }
+        return profileNoViewer
     }
 
-    async get(did: string): Promise<Profile | null> {
+    async get(did: string): Promise<ArCabildoabiertoActorDefs.ProfileViewDetailed | null> {
         const cached = await this.cache.redis.get(this.key(did))
         if(!cached) return null
         return this.formatCached(cached)
     }
 
     async getMany(dids: string[]) {
-        const cached = await this.cache.redis.mget(dids.map(this.key))
-        const profiles: (Profile | null)[] = cached.map(this.formatCached)
+        if(dids.length == 0) return []
+        const cached = await this.cache.redis.mget(dids.map(d => this.key(d)))
+        const profiles: (ArCabildoabiertoActorDefs.ProfileViewDetailed | null)[] = cached.map(this.formatCached)
         return profiles
     }
 
-    async set(did: string, profile: Profile) {
+    async set(did: string, profile: ArCabildoabiertoActorDefs.ProfileViewDetailed) {
         await this.cache.redis.set(
             this.key(did),
             JSON.stringify(profile)
+        )
+    }
+
+    async setMany(profiles: ArCabildoabiertoActorDefs.ProfileViewDetailed[]) {
+        await this.cache.setMany(
+            profiles.map(p => [this.key(p.did), JSON.stringify(p)])
         )
     }
 
@@ -139,7 +171,15 @@ export class FollowingFeedSkeletonKey extends CacheKey {
 
 
 class CAFollowsCacheKey extends CacheKey {
-    async onUpdateRecords(uris: string[]) {
+    async onUpdateRecords(r: RefAndRecord<any>[]) {
+        await this.onUpdateOrDeleteRecords(r.map(r => r.ref.uri))
+    }
+
+    async onDeleteRecords(uris: string[]) {
+        await this.onUpdateOrDeleteRecords(uris)
+    }
+
+    async onUpdateOrDeleteRecords(uris: string[]) {
         uris = uris.filter(u => isFollow(getCollectionFromUri(u)))
         if(uris.length == 0) return
         const dids = unique(uris.map(getDidFromUri))
@@ -172,7 +212,15 @@ class CAFollowsCacheKey extends CacheKey {
 
 
 class FollowSuggestionsDirtyCacheKey extends CacheKey {
-    async onUpdateRecords(uris: string[]) {
+    async onUpdateRecords(records: RefAndRecord<any>[]) {
+        await this.onUpdateOrDeleteRecords(records.map(r => r.ref.uri))
+    }
+
+    async onDeleteRecords(uris: string[]) {
+        await this.onUpdateOrDeleteRecords(uris)
+    }
+
+    async onUpdateOrDeleteRecords(uris: string[]) {
         uris = uris.filter(u => isFollow(getCollectionFromUri(u)))
         if(uris.length == 0) return
         const dids = unique(uris.map(getDidFromUri))
@@ -286,6 +334,29 @@ class MirrorStatusCacheKey extends CacheKey {
     }
 }
 
+class SingleKey<T> extends CacheKey {
+    key: string
+    ttl: number | undefined
+    constructor(cache: RedisCache, key: string, ttl?: number) {
+        super(cache)
+        this.key = key
+        this.ttl = ttl
+    }
+
+    async get(): Promise<T | null> {
+        const res = await this.cache.redis.get(this.key)
+        return res ? JSON.parse(res) : null
+    }
+
+    async set(v: T) {
+        if(this.ttl){
+            await this.cache.redis.set(this.key, JSON.stringify(v), "EX", this.ttl)
+        } else {
+            await this.cache.redis.set(this.key, JSON.stringify(v))
+        }
+    }
+}
+
 export type RedisEvent = "verification-update" | "follow-suggestions-ready" | "follow-suggestions-dirty"
 
 export class RedisCache {
@@ -301,6 +372,7 @@ export class RedisCache {
     followingFeedSkeletonCAAll: FollowingFeedSkeletonKey
     followingFeedSkeletonCAArticles: FollowingFeedSkeletonKey
     profile: ProfileCacheKey
+    nextMeeting: SingleKey<NextMeeting>
 
     constructor(redis: Redis, mirrorId: string, logger: Logger) {
         this.redis = redis
@@ -313,6 +385,7 @@ export class RedisCache {
         this.followingFeedSkeletonCAAll = new FollowingFeedSkeletonKey(this, ["ca-all"])
         this.followingFeedSkeletonCAArticles = new FollowingFeedSkeletonKey(this, ["ca-articles"])
         this.profile = new ProfileCacheKey(this)
+        this.nextMeeting = new SingleKey<NextMeeting>(this, "next-meeting", 60*60)
         this.logger = logger
 
         this.keys = [
@@ -325,9 +398,15 @@ export class RedisCache {
         ]
     }
 
-    async onUpdateRecords(uris: string[]) {
+    async onUpdateRecords(records: RefAndRecord<any>[]) {
         for(const k of this.keys) {
-            await k.onUpdateRecords(uris)
+            await k.onUpdateRecords(records)
+        }
+    }
+
+    async onDeleteRecords(uris: string[]) {
+        for(const k of this.keys) {
+            await k.onDeleteRecords(uris)
         }
     }
 
@@ -354,6 +433,19 @@ export class RedisCache {
 
     async getKeysByPrefix(prefix: string) {
         return this.redis.keys(`${prefix}*`)
+    }
+
+    async setMany(items: [string, string][], ttl?: number) {
+        const pipeline = this.redis.pipeline()
+
+        items.forEach(([key, value]) => {
+            // Queue the SET command
+            pipeline.set(key, value);
+            // Queue the EXPIRE command
+            if(ttl) pipeline.expire(key, ttl)
+        })
+
+        await pipeline.exec()
     }
 }
 

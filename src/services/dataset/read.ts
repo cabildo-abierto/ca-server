@@ -164,7 +164,7 @@ export const hydrateDatasetView = (ctx: AppContext, uri: string, data: Dataplane
     const d = data.datasets.get(uri)
     if(!d) return null
 
-    const basicView = hydrateDatasetViewBasic(uri, data)
+    const basicView = hydrateDatasetViewBasic(ctx, uri, data)
     if(!basicView) return null
 
     const content = data.datasetContents.get(uri)
@@ -194,12 +194,12 @@ export const hydrateDatasetView = (ctx: AppContext, uri: string, data: Dataplane
 }
 
 
-export const hydrateDatasetViewBasic = (uri: string, data: Dataplane): DatasetViewBasic | null => {
+export const hydrateDatasetViewBasic = (ctx: AppContext, uri: string, data: Dataplane): DatasetViewBasic | null => {
     const d = data.datasets?.get(uri)
     if(!d) return null
 
     const authorId = getDidFromUri(uri)
-    const author = hydrateProfileViewBasic(authorId, data)
+    const author = hydrateProfileViewBasic(ctx, authorId, data)
 
     if (d && author) {
         return {
@@ -228,7 +228,7 @@ export const getDatasets: CAHandlerNoAuth<{}, DatasetViewBasic[]> = async (ctx, 
     await data.fetchDatasetsHydrationData(datasetList)
 
     const views: DatasetViewBasic[] = datasetList
-        .map(d => hydrateDatasetViewBasic(d, data))
+        .map(d => hydrateDatasetViewBasic(ctx, d, data))
         .filter(v => v != null)
 
     return {data: sortByKey(views, x => [new Date(x.createdAt).getTime()], listOrderDesc)}

@@ -16,7 +16,7 @@ async function getLikesSkeleton(ctx: AppContext, agent: Agent, uri: string, data
 {
     const likesSkeletonResponse = await agent.bsky.app.bsky.feed.getLikes({uri, limit, cursor: cursor})
     for (const user of likesSkeletonResponse.data.likes) {
-        dataplane.bskyUsers.set(user.actor.did, {...user.actor, $type: "app.bsky.actor.defs#profileView"})
+        dataplane.bskyBasicUsers.set(user.actor.did, {...user.actor, $type: "app.bsky.actor.defs#profileViewBasic"})
     }
 
     return {dids: likesSkeletonResponse.success ? likesSkeletonResponse.data.likes.map((value) => value.actor.did) : [],
@@ -30,7 +30,7 @@ async function getRepostsSkeleton(ctx: AppContext, agent: Agent, uri: string, da
 {
     const repostsSkeletonResponse = await agent.bsky.app.bsky.feed.getRepostedBy({uri, limit, cursor: cursor})
     for (const user of repostsSkeletonResponse.data.repostedBy) {
-        dataplane.bskyUsers.set(user.did, {...user, $type: "app.bsky.actor.defs#profileView"})
+        dataplane.bskyBasicUsers.set(user.did, {...user, $type: "app.bsky.actor.defs#profileViewBasic"})
     }
 
     return {dids: repostsSkeletonResponse.success ? repostsSkeletonResponse.data.repostedBy.map((value) => value.did) : [],
@@ -60,7 +60,7 @@ export const getLikes: GetInteractionsType = async (ctx, agent, {params, query})
     const {dids, cursor} = await getLikesSkeleton(ctx, agent, uri, dataplane, parseInt(query.limit ?? "25"), query.cursor)
     await dataplane.fetchUsersHydrationData(dids)
 
-    const data = {profiles: dids.map(d => hydrateProfileViewBasic(d, dataplane)).filter(x => x != null),
+    const data = {profiles: dids.map(d => hydrateProfileViewBasic(ctx, d, dataplane)).filter(x => x != null),
                   cursor : cursor
     }
     return {data}
@@ -73,7 +73,7 @@ export const getReposts: GetInteractionsType = async (ctx, agent, {params, query
     const {dids, cursor} = await getRepostsSkeleton(ctx, agent, uri, dataplane, parseInt(query.limit ?? "25"), query.cursor)
     await dataplane.fetchUsersHydrationData(dids)
 
-    const data = {profiles: dids.map(d => hydrateProfileViewBasic(d, dataplane)).filter(x => x != null),
+    const data = {profiles: dids.map(d => hydrateProfileViewBasic(ctx, d, dataplane)).filter(x => x != null),
         cursor : cursor
     }
     return {data}

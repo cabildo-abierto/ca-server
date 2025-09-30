@@ -158,7 +158,7 @@ export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: s
     ctx.logger.logTimes("follow suggestions", [t1, t2, t3])
 
     const profiles = dids
-        .map(d => hydrateProfileViewBasic(d, dataplane))
+        .map(d => hydrateProfileViewBasic(ctx, d, dataplane))
         .filter(x => x != null)
 
     const cursor = nextIndex >= ranking.length ? undefined : nextIndex.toString()

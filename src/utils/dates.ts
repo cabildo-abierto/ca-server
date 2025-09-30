@@ -2,7 +2,7 @@
 
 export const formatIsoDate = (isoDate: string | Date) => {
     const date = new Date(isoDate);
-    const argentinaTime = new Intl.DateTimeFormat("es-AR", {
+    return new Intl.DateTimeFormat("es-AR", {
         year: "numeric",
         month: "long",
         day: "numeric",
@@ -11,8 +11,6 @@ export const formatIsoDate = (isoDate: string | Date) => {
         hour12: false,
         timeZone: "America/Argentina/Buenos_Aires",
     }).format(date);
-
-    return argentinaTime;
 }
 
 

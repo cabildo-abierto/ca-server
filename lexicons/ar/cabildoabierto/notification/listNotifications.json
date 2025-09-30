@@ -58,7 +58,7 @@
       "properties": {
         "uri": { "type": "string", "format": "at-uri" },
         "cid": { "type": "string", "format": "cid" },
-        "author": { "type": "ref", "ref": "ar.cabildoabierto.actor.defs#profileView" },
+        "author": { "type": "ref", "ref": "ar.cabildoabierto.actor.defs#profileViewBasic" },
         "reason": {
           "type": "string",
           "description": "Expected values are 'like', 'repost', 'follow', 'mention', 'reply', 'quote', and 'starterpack-joined'.",

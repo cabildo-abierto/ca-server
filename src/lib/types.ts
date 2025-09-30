@@ -1,5 +1,4 @@
 import {EditorStatus} from "@prisma/client";
-import {ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import {AlgorithmConfig} from "#/services/user/users";
 import {MirrorStatus} from "#/services/redis/cache";
 
@@ -9,22 +8,17 @@ export type ATProtoStrongRef = {
     cid: string
 }
 
-
-export type Profile = {
-    bsky: ProfileViewDetailed
-    ca: CAProfile | null
-}
-
 export type ValidationState = "org" | "persona" | null
 
 export type CAProfile = {
-    inCA: boolean
+    did: string
+    caProfile: string
     followersCount: number
     followsCount: number
     articlesCount: number
     editsCount: number
     editorStatus: EditorStatus
-    validation: ValidationState
+    verification: ValidationState
 }
 
 
@@ -63,40 +57,6 @@ export type TopicsGraph = {
     nodeIds: string[]
     edges: {x: string, y: string}[]
     data?: {id: string, categorySize?: number}[]
-}
-
-
-export type MentionProps = {
-    did: string
-    handle: string
-    displayName?: string
-    avatar?: string
-}
-
-
-export type SubscriptionProps = {
-    id: string
-    userId?: string
-    createdAt: Date
-    boughtByUserId: string
-    usedAt: Date | null
-    endsAt: Date | null
-    price: number
-}
-
-
-export type UserStats = {
-    posts: number
-    entityEdits: number
-    editedEntities: number
-    reactionsInPosts: number
-    reactionsInEntities: number
-    income: number
-    pendingConfirmationIncome: number
-    pendingPayIncome: number
-    entityAddedChars: number
-    viewsInPosts: number
-    viewsInEntities: number
 }
 
 

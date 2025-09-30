@@ -148,19 +148,28 @@ export async function getThreadSkeleton(ctx: AppContext, agent: Agent, uri: stri
 export const getThread: CAHandlerNoAuth<{params: {handleOrDid: string, collection: string, rkey: string}}, ThreadViewContent> = async (ctx, agent, {params})  => {
     let {handleOrDid, collection, rkey} = params
     collection = shortCollectionToCollection(collection)
+
+    const t1 = Date.now()
+
     const did = await handleToDid(ctx, agent, handleOrDid)
     if(!did) {
         return {error: "No se encontró el autor."}
     }
     const data = new Dataplane(ctx, agent)
+    const t2 = Date.now()
 
     const uri = getUri(did, collection, rkey)
     const skeleton = await getThreadSkeleton(ctx, agent, uri, data)
 
+    const t3 = Date.now()
     await data.fetchThreadHydrationData(skeleton)
+    const t4 = Date.now()
 
     let thread = hydrateThreadViewContent(ctx, skeleton, data, true, true)
 
+    const t5 = Date.now()
+
+    ctx.logger.logTimes("get thread", [t1, t2, t3, t4, t5])
     return thread ? {data: thread} : {error: "Ocurrió un error al obtener el contenido."}
 }
 

@@ -16,8 +16,7 @@ import {
 import {processDirtyRecordsBatch, processRecordsBatch} from "#/services/sync/event-processing/record";
 import {DB} from "../../../../prisma/generated/types";
 import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
-import * as Repost from "#/lex-api/types/app/bsky/feed/repost"
-import * as Like from "#/lex-api/types/app/bsky/feed/like"
+import {AppBskyFeedLike, AppBskyFeedRepost} from "@atproto/api"
 import * as VoteAccept from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept"
 import * as VoteReject from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject"
 import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
@@ -169,12 +168,12 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
 
 
 export class LikeRecordProcessor extends ReactionRecordProcessor {
-    validateRecord = Like.validateRecord
+    validateRecord = AppBskyFeedLike.validateRecord
 }
 
 
 export class RepostRecordProcessor extends ReactionRecordProcessor {
-    validateRecord = Repost.validateRecord
+    validateRecord = AppBskyFeedRepost.validateRecord
 }
 
 

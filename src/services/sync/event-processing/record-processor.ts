@@ -22,7 +22,7 @@ export class RecordProcessor<T> {
     async processValidated(records: RefAndRecord<T>[]) {
         if(records.length == 0) return
         await this.addRecordsToDB(records)
-        await this.ctx.redisCache.onUpdateRecords(records.map(r => r.ref.uri))
+        await this.ctx.redisCache.onUpdateRecords(records)
     }
 
     validateRecord(record: any): ValidationResult<T> {

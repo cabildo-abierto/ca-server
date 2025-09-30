@@ -9,7 +9,7 @@ import {
   is$typed as _is$typed,
   type OmitKey,
 } from '../../../../util'
-import type * as ArCabildoabiertoDataDataset from '../data/dataset.js'
+import type * as ArCabildoabiertoDataDataset from '../data/dataset'
 
 const is$typed = _is$typed,
   validate = _validate

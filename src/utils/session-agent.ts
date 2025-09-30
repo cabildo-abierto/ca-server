@@ -1,8 +1,7 @@
 import type {IncomingMessage, ServerResponse} from "node:http";
 import {getIronSession, SessionOptions} from "iron-session";
 import express from "express";
-import {AtpBaseClient} from "src/lex-api";
-import {Agent as BskyAgent} from "@atproto/api";
+import {AtpBaseClient, Agent as BskyAgent} from "@atproto/api";
 import {env} from "#/lib/env";
 import {AppContext} from "#/setup";
 

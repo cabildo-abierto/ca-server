@@ -1,7 +1,7 @@
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {AtpAgent} from "@atproto/api";
 import {Secp256k1Keypair} from "@atproto/crypto";
-import {OutputSchema as Credentials} from "#/lex-api/types/com/atproto/identity/getRecommendedDidCredentials"
+import {OutputSchema as Credentials} from "@atproto/api/dist/client/types/com/atproto/identity/getRecommendedDidCredentials"
 
 const NEW_PDS_URL = "https://cabildo.ar"
 

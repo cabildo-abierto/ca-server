@@ -1,25 +1,14 @@
 import {CAHandler} from "#/utils/handler";
-import {Notification as BskyNotification} from "#/lex-api/types/app/bsky/notification/listNotifications"
-import {Notification} from "#/lex-api/types/ar/cabildoabierto/notification/listNotifications"
 import {AppContext} from "#/setup";
 import {v4 as uuidv4} from "uuid";
 import {NotificationType} from "../../../prisma/generated/types";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
-import {ProfileView} from "#/lex-api/types/app/bsky/actor/defs";
 import {sortByKey, unique} from "#/utils/arrays";
 import {sortDatesDescending} from "#/utils/dates";
 import {SessionAgent} from "#/utils/session-agent";
 import {getDidFromUri} from "#/utils/uri";
-
-
-function bskyNotificationToCA(n: BskyNotification): Notification {
-    return {
-        ...n,
-        $type: "ar.cabildoabierto.notification.listNotifications#notification"
-    }
-}
+import {ArCabildoabiertoNotificationListNotifications} from "#/lex-api/index"
 
 
 export type NotificationQueryResult = {
@@ -37,15 +26,7 @@ export type NotificationQueryResult = {
 }
 
 
-function profileViewBasicToProfileView(user: CAProfileViewBasic): ProfileView {
-    return {
-        ...user,
-        $type: "app.bsky.actor.defs#profileView"
-    }
-}
-
-
-function hydrateCANotification(id: string, dataplane: Dataplane, lastReadTime: Date): Notification | null {
+function hydrateCANotification(ctx: AppContext, id: string, dataplane: Dataplane, lastReadTime: Date): ArCabildoabiertoNotificationListNotifications.Notification | null {
     const data = dataplane.notifications.get(id)
     if (!data) {
         console.log(`No hydration data for notification: ${id}`)
@@ -57,13 +38,13 @@ function hydrateCANotification(id: string, dataplane: Dataplane, lastReadTime: D
         return null
     }
 
-    const author = hydrateProfileViewBasic(getDidFromUri(data.causedByRecordId), dataplane)
+    const author = hydrateProfileViewBasic(ctx, getDidFromUri(data.causedByRecordId), dataplane)
     if (!author) {
         console.log(`No author hydration data for notification: ${id}`)
         return null
     }
 
-    let reason: Notification["reason"]
+    let reason: ArCabildoabiertoNotificationListNotifications.Notification["reason"]
     if (data.type == "Reply") {
         reason = "reply"
     } else if (data.type == "Mention") {
@@ -79,7 +60,10 @@ function hydrateCANotification(id: string, dataplane: Dataplane, lastReadTime: D
         reason,
         uri: data.causedByRecordId,
         cid: data.cid,
-        author: profileViewBasicToProfileView(author),
+        author: {
+            ...author,
+            $type: "ar.cabildoabierto.actor.defs#profileViewBasic"
+        },
         record: data.record ? JSON.parse(data.record) : undefined,
         isRead: data.created_at < lastReadTime,
         indexedAt: data.created_at.toISOString(),
@@ -97,7 +81,7 @@ export type NotificationsSkeleton = {
 
 
 
-async function getCANotifications(ctx: AppContext, agent: SessionAgent): Promise<Notification[]> {
+async function getCANotifications(ctx: AppContext, agent: SessionAgent): Promise<ArCabildoabiertoNotificationListNotifications.Notification[]> {
     const dataplane = new Dataplane(ctx, agent)
 
     const [skeleton, lastSeen] = await Promise.all([
@@ -123,7 +107,7 @@ async function getCANotifications(ctx: AppContext, agent: SessionAgent): Promise
     await dataplane.fetchNotificationsHydrationData(skeleton)
 
     return skeleton
-        .map(n => hydrateCANotification(n.id, dataplane, lastSeen[0].lastSeenNotifications))
+        .map(n => hydrateCANotification(ctx, n.id, dataplane, lastSeen[0].lastSeenNotifications))
         .filter(n => n != null)
 }
 
@@ -137,7 +121,7 @@ async function updateSeenCANotifications(ctx: AppContext, agent: SessionAgent) {
 }
 
 
-export const getNotifications: CAHandler<{}, Notification[]> = async (ctx, agent, {}) => {
+export const getNotifications: CAHandler<{}, ArCabildoabiertoNotificationListNotifications.Notification[]> = async (ctx, agent, {}) => {
     const [{data}, caNotifications] = await Promise.all([
         agent.bsky.app.bsky.notification.listNotifications(),
         getCANotifications(ctx, agent),
@@ -145,7 +129,15 @@ export const getNotifications: CAHandler<{}, Notification[]> = async (ctx, agent
         updateSeenCANotifications(ctx, agent)
     ])
 
-    const bskyNotifications = data.notifications.map(bskyNotificationToCA)
+    const bskyNotifications: ArCabildoabiertoNotificationListNotifications.Notification[] = data.notifications.map(n => ({
+        ...n,
+        author: {
+            ...n.author,
+            verification: undefined, // TO DO
+            $type: "ar.cabildoabierto.actor.defs#profileViewBasic"
+        },
+        $type: "ar.cabildoabierto.notification.listNotifications#notification"
+    }))
 
     const notifications = sortByKey(
         [...bskyNotifications, ...caNotifications],

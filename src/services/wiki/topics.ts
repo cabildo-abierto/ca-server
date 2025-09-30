@@ -411,7 +411,8 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
         return {error: "No se encontró la versión."}
     }
 
-    const author = hydrateProfileViewBasic(authorId, dataplane)
+    // TO DO: Hace falta el autor?
+    const author = hydrateProfileViewBasic(ctx, authorId, dataplane)
 
     if(!author) {
         ctx.logger.pino.warn({did: authorId}, "user not found")

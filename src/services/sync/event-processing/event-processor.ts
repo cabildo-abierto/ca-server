@@ -69,7 +69,7 @@ class CommitCreateOrUpdateEventProcessor extends CommitEventProcessor {
         for(const e of events) {
             const c = e as CommitEvent
             const collection = c.commit.collection
-            const uri = c.commit.uri ? c.commit.uri : getUri(c.did, c.commit.collection, c.commit.rkey)
+            const uri = getUri(c.did, c.commit.collection, c.commit.rkey)
             const ref = {uri, cid: c.commit.cid}
             const refAndRecord = {ref, record: c.commit.record}
 
@@ -97,7 +97,7 @@ class CommitDeleteEventProcessor extends CommitEventProcessor {
         for(const e of events) {
             const c = e as CommitEvent
             const collection = c.commit.collection
-            const uri = c.commit.uri ? c.commit.uri : getUri(c.did, c.commit.collection, c.commit.rkey)
+            const uri = getUri(c.did, c.commit.collection, c.commit.rkey)
 
             const cur = byCollection.get(collection)
             if(!cur) {

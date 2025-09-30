@@ -2,8 +2,7 @@ import {AppContext} from "#/setup";
 import {ATProtoStrongRef} from "#/lib/types";
 import {CAHandler} from "#/utils/handler";
 import {getCollectionFromUri, getUri} from "#/utils/uri";
-import {Record as LikeRecord} from "#/lex-api/types/app/bsky/feed/like";
-import {Record as RepostRecord} from "#/lex-api/types/app/bsky/feed/repost";
+import {AppBskyFeedLike, AppBskyFeedRepost} from "@atproto/api"
 import {Record as VoteAcceptRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept";
 import {Record as VoteRejectRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject";
 import {SessionAgent} from "#/utils/session-agent";
@@ -11,6 +10,7 @@ import {$Typed} from "@atproto/api";
 import {createVoteAcceptAT, createVoteRejectAT, VoteRejectProps} from "#/services/wiki/votes";
 import {deleteRecordAT} from "#/services/delete";
 import {ReactionDeleteProcessor, ReactionRecordProcessor} from "#/services/sync/event-processing/reaction";
+
 
 
 export type ReactionType =
@@ -21,8 +21,8 @@ export type ReactionType =
 
 
 export type ReactionRecord =
-    $Typed<LikeRecord>
-    | $Typed<RepostRecord>
+    $Typed<AppBskyFeedLike.Record>
+    | $Typed<AppBskyFeedRepost.Record>
     | $Typed<VoteAcceptRecord>
     | $Typed<VoteRejectRecord>
 

@@ -66,7 +66,7 @@ export function hydrateViewer(uri: string, data: Dataplane): { repost?: string, 
 }
 
 
-export function hydrateFullArticleView(uri: string, data: Dataplane): {
+export function hydrateFullArticleView(ctx: AppContext, uri: string, data: Dataplane): {
     data?: $Typed<FullArticleView>
     error?: string
 } {
@@ -76,9 +76,12 @@ export function hydrateFullArticleView(uri: string, data: Dataplane): {
     const topicsMentioned = data.topicsMentioned?.get(uri) ?? []
 
     const authorId = getDidFromUri(e.uri)
-    const author = hydrateProfileViewBasic(authorId, data)
+    const author = hydrateProfileViewBasic(ctx, authorId, data)
     const viewer = hydrateViewer(e.uri, data)
-    if (!author) return {error: "Ocurrió un error al cargar el contenido."}
+    if (!author) {
+        ctx.logger.pino.error({authorId, uri}, "author not found during full article view hydration")
+        return {error: "Ocurrió un error al cargar el contenido."}
+    }
 
     const record = e.record ? JSON.parse(e.record) as ArticleRecord : undefined
 
@@ -177,7 +180,7 @@ export function hydrateArticleView(ctx: AppContext, uri: string, data: Dataplane
 
     const viewer = hydrateViewer(e.uri, data)
     const authorId = getDidFromUri(e.uri)
-    const author = hydrateProfileViewBasic(authorId, data)
+    const author = hydrateProfileViewBasic(ctx, authorId, data)
     if (!author) {
         console.log("No se enconctró el autor del contenido.", uri)
         return {error: "No se encontró el autor del contenido."}
@@ -225,12 +228,12 @@ export function hydrateArticleView(ctx: AppContext, uri: string, data: Dataplane
 }
 
 
-function hydrateSelectionQuoteEmbedView(embed: SelectionQuoteEmbed, quotedContent: string, data: Dataplane): $Typed<SelectionQuoteEmbedView> | null {
+function hydrateSelectionQuoteEmbedView(ctx: AppContext, embed: SelectionQuoteEmbed, quotedContent: string, data: Dataplane): $Typed<SelectionQuoteEmbedView> | null {
     const caData = data.caContents?.get(quotedContent)
 
     if (caData) {
         const authorId = getDidFromUri(caData.uri)
-        const author = hydrateProfileViewBasic(authorId, data)
+        const author = hydrateProfileViewBasic(ctx, authorId, data)
         if (!author) {
             console.log("couldn't find author of quoted content:", authorId)
             return null
@@ -349,7 +352,7 @@ export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): 
 
     let embedView: PostView["embed"] = post.embed
     if (isSelectionQuoteEmbed(embed) && record.reply) {
-        const view = hydrateSelectionQuoteEmbedView(embed, record.reply.parent.uri, data)
+        const view = hydrateSelectionQuoteEmbedView(ctx, embed, record.reply.parent.uri, data)
         if (view) {
             embedView = view;
         } else {
@@ -372,7 +375,7 @@ export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): 
     }
 
     const authorId = getDidFromUri(post.uri)
-    const author = hydrateProfileViewBasic(authorId, data)
+    const author = hydrateProfileViewBasic(ctx, authorId, data)
     if(!author) {
         ctx.logger.pino.warn({uri}, "Warning: No se encontraron los datos del autor")
         return {error: "No se encontraron los datos del autor."}
@@ -417,7 +420,7 @@ export function hydrateContent(ctx: AppContext, uri: string, data: Dataplane, fu
     if (isPost(collection)) {
         return hydratePostView(ctx, uri, data)
     } else if (isArticle(collection)) {
-        return full ? hydrateFullArticleView(uri, data) : hydrateArticleView(ctx, uri, data)
+        return full ? hydrateFullArticleView(ctx, uri, data) : hydrateArticleView(ctx, uri, data)
     } else if (isTopicVersion(collection)) {
         return hydrateTopicViewBasicFromUri(uri, data)
     } else if(isDataset(collection)) {
@@ -439,10 +442,10 @@ export function notFoundPost(uri: string): $Typed<NotFoundPost> {
 }
 
 
-function hydrateFeedViewContentReason(subjectUri: string, reason: SkeletonFeedPost["reason"], data: Dataplane): FeedViewContent["reason"] | null {
+function hydrateFeedViewContentReason(ctx: AppContext, subjectUri: string, reason: SkeletonFeedPost["reason"], data: Dataplane): FeedViewContent["reason"] | null {
     if(!reason) return null
     if(isSkeletonReasonRepost(reason) && reason.repost){
-        const user = hydrateProfileViewBasic(getDidFromUri(reason.repost), data)
+        const user = hydrateProfileViewBasic(ctx, getDidFromUri(reason.repost), data)
         if(!user) {
             console.log("Warning: no se encontró el usuario autor del repost", getDidFromUri(reason.repost))
             return null
@@ -469,7 +472,7 @@ function hydrateFeedViewContentReason(subjectUri: string, reason: SkeletonFeedPo
 
 
 export function hydrateFeedViewContent(ctx: AppContext, e: SkeletonFeedPost, data: Dataplane): $Typed<FeedViewContent> | $Typed<NotFoundPost> {
-    const reason = hydrateFeedViewContentReason(e.post, e.reason, data) ?? undefined
+    const reason = hydrateFeedViewContentReason(ctx, e.post, e.reason, data) ?? undefined
 
     const childBsky = data.bskyPosts?.get(e.post)
     const reply = childBsky ? (childBsky.record as PostRecord).reply : null
@@ -543,7 +546,10 @@ export const threadPostRepliesSortKey = (authorId: string) => (r: ThreadViewPost
 
 export function hydrateThreadViewContent(ctx: AppContext, skeleton: ThreadSkeleton, data: Dataplane, includeReplies: boolean = false, isMain: boolean = false): $Typed<ThreadViewContent> | null {
     const content = hydrateContent(ctx, skeleton.post, data, isMain).data
-    if (!content) return null
+    if (!content) {
+        ctx.logger.pino.error({uri: skeleton.post}, "content not found during thread hydration")
+        return null
+    }
 
     const authorDid = getDidFromUri(skeleton.post)
 

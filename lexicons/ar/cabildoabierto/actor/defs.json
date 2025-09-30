@@ -66,7 +66,7 @@
         }
       }
     },
-    "profileView": {
+    "profileViewDetailed": {
       "type": "object",
       "required": ["did", "handle"],
       "properties": {
@@ -83,9 +83,21 @@
           "maxLength": 2560
         },
         "avatar": { "type": "string", "format": "uri" },
+        "banner": { "type": "string", "format": "uri" },
+        "followersCount": { "type": "integer" },
+        "followsCount": { "type": "integer" },
+        "bskyFollowersCount": { "type": "integer" },
+        "bskyFollowsCount": { "type": "integer" },
+        "postsCount": { "type": "integer" },
+        "articlesCount": { "type": "integer" },
+        "editsCount": { "type": "integer" },
         "associated": {
           "type": "ref",
           "ref": "app.bsky.actor.defs#profileAssociated"
+        },
+        "joinedViaStarterPack": {
+          "type": "ref",
+          "ref": "app.bsky.graph.defs#starterPackViewBasic"
         },
         "indexedAt": { "type": "string", "format": "datetime" },
         "createdAt": { "type": "string", "format": "datetime" },
@@ -93,7 +105,40 @@
         "labels": {
           "type": "array",
           "items": { "type": "ref", "ref": "com.atproto.label.defs#label" }
+        },
+        "pinnedPost": {
+          "type": "ref",
+          "ref": "com.atproto.repo.strongRef"
+        },
+        "caProfile": {
+          "type": "string",
+          "format": "at-uri"
+        },
+        "verification": {
+          "type": "string",
+          "knownValues": [
+            "person",
+            "org"
+          ]
+        },
+        "editorStatus": {
+          "type": "string",
+          "knownValues": [
+            "Editor principiante",
+            "Editor",
+            "Administrador"
+          ]
         }
+      }
+    },
+    "profileAssociated": {
+      "type": "object",
+      "properties": {
+        "lists": { "type": "integer" },
+        "feedgens": { "type": "integer" },
+        "starterPacks": { "type": "integer" },
+        "labeler": { "type": "boolean" },
+        "chat": { "type": "ref", "ref": "app.bsky.actor.defs#profileAssociatedChat" }
       }
     }
   }

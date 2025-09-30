@@ -11,6 +11,11 @@ export type NextMeeting = {show: false} | {
 
 
 export const getNextMeeting: CAHandlerNoAuth<{}, NextMeeting> = async (ctx, agent, {}) => {
+    const cached = await ctx.redisCache.nextMeeting.get()
+    if(cached) {
+        return {data: cached}
+    }
+
     const meetings = await ctx.kysely
         .selectFrom("Meeting")
         .select(["Meeting.date", "Meeting.title", "Meeting.description", "Meeting.url", "Meeting.show"])
@@ -21,16 +26,20 @@ export const getNextMeeting: CAHandlerNoAuth<{}, NextMeeting> = async (ctx, agen
     if(meetings && meetings.length > 0){
         const next = meetings[0]
         if(next.show){
+            const data: NextMeeting = {
+                show: true,
+                date: next.date,
+                title: next.title,
+                description: next.description,
+                url: next.url
+            }
+            await ctx.redisCache.nextMeeting.set(data)
             return {
-                data: {
-                    show: true,
-                    date: next.date,
-                    title: next.title,
-                    description: next.description,
-                    url: next.url
-                }
+                data
             }
         }
     }
-    return {data: {show: false}}
+    const data: NextMeeting = {show: false}
+    await ctx.redisCache.nextMeeting.set(data)
+    return {data}
 }

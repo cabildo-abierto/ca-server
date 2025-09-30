@@ -11,7 +11,7 @@ export class DeleteProcessor {
 
     async process(uris: string[]) {
         await this.deleteRecordsFromDB(uris)
-        await this.ctx.redisCache.onUpdateRecords(uris)
+        await this.ctx.redisCache.onDeleteRecords(uris)
     }
 
     async deleteRecordsFromDB(uris: string[]) {

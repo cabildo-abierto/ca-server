@@ -43,8 +43,8 @@ export async function searchUsersInCA(ctx: AppContext, query: string, dataplane:
 export async function searchUsersInBsky(agent: Agent, query: string, dataplane: Dataplane): Promise<string[]> {
     const {data} = await agent.bsky.app.bsky.actor.searchActorsTypeahead({q: query})
 
-    dataplane.bskyUsers = joinMaps(
-        dataplane.bskyUsers,
+    dataplane.bskyBasicUsers = joinMaps(
+        dataplane.bskyBasicUsers,
         new Map<string, $Typed<ProfileViewBasic>>(data.actors.map(a => [a.did, {
             $type: "app.bsky.actor.defs#profileViewBasic", ...a
         }]))
@@ -78,7 +78,7 @@ export const searchUsers: CAHandlerNoAuth<{
 
     ctx.logger.logTimes(`search users ${query}`, [t1, t2, t3])
 
-    const users = userList.map(did => hydrateProfileViewBasic(did, dataplane))
+    const users = userList.map(did => hydrateProfileViewBasic(ctx, did, dataplane))
 
     return {data: users.filter(x => x != null)}
 }

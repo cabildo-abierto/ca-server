@@ -162,7 +162,7 @@ export const getPendingValidationRequests: CAHandler<{}, {
     ])
 
     const res: ValidationRequestView[] = requests.map(r => {
-        const user = hydrateProfileViewBasic(r.userId, dataplane)
+        const user = hydrateProfileViewBasic(ctx, r.userId, dataplane)
         if (!user) return null
         const tipo: "org" | "persona" = r.type == "Persona" ? "persona" : "org"
         if (tipo == "org") {

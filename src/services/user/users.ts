@@ -1,29 +1,23 @@
 import {AppContext} from "#/setup";
-import {Account, ATProtoStrongRef, AuthorStatus, CAProfile, Profile, Session, ValidationState} from "#/lib/types";
+import {Account, ATProtoStrongRef, AuthorStatus, Session, ValidationState} from "#/lib/types";
 import {Agent, cookieOptions, SessionAgent} from "#/utils/session-agent";
 import {deleteRecords} from "#/services/delete";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
-import {hydrateProfileViewBasic} from "#/services/hydration/profile";
+import {hydrateProfileView, hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {unique} from "#/utils/arrays";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {getIronSession} from "iron-session";
 import {createCAUser} from "#/services/user/access";
-import {Record as FollowRecord} from "#/lex-api/types/app/bsky/graph/follow"
-import {
-    Record as BskyProfileRecord,
-    validateRecord as validateBskyProfile
-} from "#/lex-api/types/app/bsky/actor/profile"
+import {AppBskyActorProfile, AppBskyGraphFollow} from "@atproto/api"
+import {ArCabildoabiertoActorDefs} from "#/lex-api/index"
 import {BlobRef} from "@atproto/lexicon";
 import {uploadBase64Blob} from "#/services/blob";
 import {EnDiscusionMetric, EnDiscusionTime, FeedFormatOption} from "#/services/feed/inicio/discusion";
 import {FollowingFeedFilter} from "#/services/feed/feed";
 import {BskyProfileRecordProcessor} from "#/services/sync/event-processing/profile";
 import {FollowRecordProcessor} from "#/services/sync/event-processing/follow";
-import {ViewerState} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import {getDidFromUri} from "#/utils/uri";
 import {getCAFollowersDids, getCAFollowsDids} from "#/services/feed/inicio/following";
-
 
 
 export async function dbHandleToDid(ctx: AppContext, handleOrDid: string): Promise<string | null> {
@@ -114,7 +108,7 @@ export const getUsers: CAHandler<{}, UserAccessStatus[]> = async (ctx, agent, {}
 export const follow: CAHandler<{ followedDid: string }, { followUri: string }> = async (ctx, agent, {followedDid}) => {
     try {
         const res = await agent.bsky.follow(followedDid)
-        const record: FollowRecord = {
+        const record: AppBskyGraphFollow.Record = {
             $type: "app.bsky.graph.follow",
             subject: followedDid,
             createdAt: new Date().toISOString()
@@ -138,146 +132,26 @@ export const unfollow: CAHandler<{ followUri: string }> = async (ctx, agent, {fo
 }
 
 
-async function getCAProfileQuery(ctx: AppContext, did: string){
-    const profiles = await ctx.kysely
-        .selectFrom("User")
-        .select([
-            "inCA",
-            "editorStatus",
-            "userValidationHash",
-            "orgValidation",
-            (eb) =>
-                eb
-                    .selectFrom("Follow")
-                    .innerJoin("Record", "Record.uri", "Follow.uri")
-                    .innerJoin("User", "User.did", "Record.authorId")
-                    .select(eb.fn.countAll<number>().as("count"))
-                    .where("User.inCA", "=", true)
-                    .where("Follow.userFollowedId", "=", did)
-                    .as("followersCount"),
-            (eb) =>
-                eb
-                    .selectFrom("Record")
-                    .where("Record.authorId", "=", did)
-                    .innerJoin("Follow", "Follow.uri", "Record.uri")
-                    .innerJoin("User as UserFollowed", "UserFollowed.did", "Follow.userFollowedId")
-                    .where("UserFollowed.inCA", "=", true)
-                    .select(eb.fn.countAll<number>().as("count"))
-                    .as("followsCount"),
-            (eb) =>
-                eb
-                    .selectFrom("Record")
-                    .innerJoin("Article", "Article.uri", "Record.uri")
-                    .select(eb.fn.countAll<number>().as("count"))
-                    .where("Record.authorId", "=", did)
-                    .where("Record.collection", "=", "ar.cabildoabierto.feed.article")
-                    .as("articlesCount"),
-            (eb) =>
-                eb
-                    .selectFrom("Record")
-                    .innerJoin("TopicVersion", "TopicVersion.uri", "Record.uri")
-                    .select(eb.fn.countAll<number>().as("count"))
-                    .where("Record.authorId", "=", did)
-                    .where("Record.collection", "=", "ar.cabildoabierto.wiki.topicVersion")
-                    .as("editsCount"),
-        ])
-        .where("User.did", "=", did)
-        .execute()
-
-    if (profiles.length == 0) return null
-
-    const profile = profiles[0]
-
-    return {
-        editorStatus: profile.editorStatus,
-        inCA: profile.inCA ?? null,
-        followsCount: profile.followsCount ?? 0,
-        followersCount: profile.followersCount ?? 0,
-        articlesCount: profile.articlesCount ?? 0,
-        editsCount: profile.editsCount ?? 0,
-        validation: getValidationState(profile)
-    }
-}
-
-
-async function getCAProfile(ctx: AppContext, agent: Agent, did: string): Promise<CAProfile | null> {
-    return await getCAProfileQuery(ctx, did)
-}
-
-
-async function getViewerForProfile(ctx: AppContext, agent: Agent, did: string): Promise<ViewerState | null> {
-    if(!agent.hasSession()) return null
-    const status = await ctx.redisCache.mirrorStatus.get(agent.did, true)
-    if(status != "Sync"){
-        return null
-    }
-    const follows = await ctx.kysely
-        .selectFrom("Follow")
-        .innerJoin("Record", "Record.uri", "Follow.uri")
-        .select("Follow.uri")
-        .where("Follow.userFollowedId", "in", [did, agent.did])
-        .where("Record.authorId", "in", [did, agent.did])
-        .execute()
-
-    if(follows.length == 0){
-        return null
-    }
-
-    const following = follows.find(f => getDidFromUri(f.uri) == agent.did)
-    const followedBy = follows.find(f => getDidFromUri(f.uri) == did)
-
-    return {
-        following: following ? following.uri : undefined,
-        followedBy: followedBy ? followedBy.uri : undefined
-    }
-}
-
-
-export const getProfile: CAHandlerNoAuth<{ params: { handleOrDid: string } }, Profile> = async (ctx, agent, {params}) => {
+export const getProfile: CAHandlerNoAuth<{ params: { handleOrDid: string } }, ArCabildoabiertoActorDefs.ProfileViewDetailed> = async (ctx, agent, {params}) => {
     try {
         const t1 = Date.now()
         const did = await handleToDid(ctx, agent, params.handleOrDid)
         if (!did) return {error: "No se encontró el usuario."}
         const t2 = Date.now()
 
-        const [cached, viewer] = await Promise.all([
-            ctx.redisCache.profile.get(did),
-            getViewerForProfile(ctx, agent, did)
-        ])
+        const dataplane = new Dataplane(ctx, agent)
 
+        await dataplane.fetchUsersHydrationData([did])
         const t3 = Date.now()
-        if(cached && viewer != null) {
-            ctx.logger.logTimes(`cache hit en perfil ${did}`, [t1, t2, t3])
-            return {
-                data: {
-                    ca: cached.ca,
-                    bsky: {
-                        ...cached.bsky,
-                        viewer
-                    }
-                }
-            }
+
+        const profile = hydrateProfileView(ctx, did, dataplane)
+
+        ctx.logger.logTimes(`perfil ${did}`, [t1, t2, t3])
+        if(!profile) {
+            return {error: "Error al obtener el perfil"}
+        } else {
+            return {data: profile}
         }
-
-        const [bskyProfile, caProfile] = await Promise.all([
-            agent.bsky.app.bsky.actor.getProfile({actor: params.handleOrDid}),
-            getCAProfile(ctx, agent, did)
-        ])
-
-        const t4 = Date.now()
-
-        const profile: Profile = {
-            bsky: bskyProfile.data,
-            ca: caProfile
-        }
-
-        const t5 = Date.now()
-
-        await ctx.redisCache.profile.set(did, profile)
-
-        ctx.logger.logTimes("perfil", [t1, t2, t3, t4, t5])
-
-        return {data: profile}
     } catch (err) {
         console.log("Error getting profile", err)
         return {error: "No se encontró el usuario."}
@@ -315,6 +189,7 @@ export type AlgorithmConfig = {
 type SessionData = Omit<Session, "handle"> & {handle: string | null}
 
 export const getSessionData = async (ctx: AppContext, did: string): Promise<SessionData | null> => {
+    const t1 = Date.now()
     const [res, mirrorStatus] = await Promise.all([
         ctx.kysely
         .selectFrom("User")
@@ -339,6 +214,9 @@ export const getSessionData = async (ctx: AppContext, did: string): Promise<Sess
         .executeTakeFirst(),
         ctx.redisCache.mirrorStatus.get(did, true)
     ])
+
+    const t2 = Date.now()
+    ctx.logger.logTimes("get session", [t1, t2])
 
     if(!res) return null
 
@@ -387,7 +265,6 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
 
     const data = await getSessionData(ctx, agent.did)
     if (isFullSessionData(data) && data.hasAccess) {
-        ctx.logger.pino.info("sin session data")
         return {data}
     }
 
@@ -488,14 +365,7 @@ async function getFollowxFromCA(ctx: AppContext, did: string, data: Dataplane, k
         await getCAFollowsDids(ctx, did) :
         await getCAFollowersDids(ctx, did)
 
-    await data.fetchUsersHydrationData(dids)
-    const views = dids
-        .map(u => hydrateProfileViewBasic(u, data))
-        .filter(u => u != null)
-
-    const m = new Map(views.map(u => [u.did, u]))
-    data.caUsers = joinMaps(data.caUsers, m)
-    return views.map(u => u.did)
+    return unique(dids)
 }
 
 
@@ -504,7 +374,7 @@ async function getFollowxFromBsky(agent: Agent, did: string, data: Dataplane, ki
         (await agent.bsky.app.bsky.graph.getFollows({actor: did})).data.follows :
         (await agent.bsky.app.bsky.graph.getFollowers({actor: did})).data.followers
 
-    data.bskyUsers = joinMaps(data.bskyUsers,
+    data.bskyBasicUsers = joinMaps(data.bskyBasicUsers,
         new Map(users.map(u => [u.did, {
             ...u,
             $type: "app.bsky.actor.defs#profileViewBasic"
@@ -531,7 +401,7 @@ export const getFollowx = async (ctx: AppContext, agent: Agent, {handleOrDid, ki
 
     await data.fetchUsersHydrationData(userList)
 
-    return {data: userList.map(u => hydrateProfileViewBasic(u, data)).filter(u => u != null)}
+    return {data: userList.map(u => hydrateProfileViewBasic(ctx, u, data)).filter(u => u != null)}
 }
 
 
@@ -564,7 +434,7 @@ export const updateProfile: CAHandler<UpdateProfileProps, {}> = async (ctx, agen
         rkey: "self"
     })
 
-    const val = validateBskyProfile(data.value)
+    const val = AppBskyActorProfile.validateRecord(data.value)
 
     if (val.success) {
         const record = val.value
@@ -572,7 +442,7 @@ export const updateProfile: CAHandler<UpdateProfileProps, {}> = async (ctx, agen
         const avatarBlob: BlobRef | undefined = params.profilePic ? (await uploadBase64Blob(agent, params.profilePic)).ref : record.avatar
         const bannerBlob: BlobRef | undefined = params.banner ? (await uploadBase64Blob(agent, params.banner)).ref : record.banner
 
-        const newRecord: BskyProfileRecord = {
+        const newRecord: AppBskyActorProfile.Record = {
             ...record,
             displayName: params.displayName ?? record.displayName,
             description: params.description ?? record.description,
