@@ -2,6 +2,7 @@ import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import got from 'got';
 import * as cheerio from 'cheerio';
 import {getUri, isArticle, isDataset, isPost} from "#/utils/uri";
+import {getArticleSummary} from "#/services/hydration/hydrate";
 
 const getContent = async (url: string): Promise<Partial<Metadata>> => {
     const {body: html} = await got(url);
@@ -32,6 +33,8 @@ export const fetchURLMetadata: CAHandler<{
 
         const metadata = await getContent(url)
 
+        ctx.logger.pino.info({metadata}, "got metadata")
+
         return {
             data: {
                 title: metadata.title ?? undefined,
@@ -51,6 +54,9 @@ function getUsername(user: { displayName: string | null, handle: string | null }
 }
 
 
+const banner = "https://cabildoabierto.ar/banners/99.jpg"
+
+
 export const getContentMetadata: CAHandlerNoAuth<{
     params: { did: string, collection: string, rkey: string }
 }, Metadata> = async (ctx, agent, {params}) => {
@@ -62,16 +68,23 @@ export const getContentMetadata: CAHandlerNoAuth<{
         const article = await ctx.kysely
             .selectFrom("Article")
             .innerJoin("Record", "Record.uri", "Article.uri")
+            .innerJoin("Content", "Content.uri", "Article.uri")
             .innerJoin("User", "Record.authorId", "User.did")
-            .select(["title", "User.displayName", "User.handle"])
+            .select(["title", "User.displayName", "User.handle", "Content.text", "Content.dbFormat"])
             .where("Record.uri", "=", uri)
             .execute()
+
+        const description = article[0].text ? getArticleSummary(
+            article[0].text,
+            article[0].dbFormat ?? undefined
+        ).summary : `Artículo de ${getUsername(article[0])}.`
+
         if (article.length > 0) {
             return {
                 data: {
                     title: article[0].title,
-                    description: `Artículo de ${getUsername(article[0])} en Cabildo Abierto.`,
-                    thumbnail: "https://cabildoabierto.ar/logo.png"
+                    description: description,
+                    thumbnail: banner
                 }
             }
         }
@@ -89,7 +102,7 @@ export const getContentMetadata: CAHandlerNoAuth<{
                 data: {
                     title: `${getUsername(post[0])}: "${post[0].text}"`,
                     description: post[0].text as string,
-                    thumbnail: "https://cabildoabierto.ar/logo.png"
+                    thumbnail: banner
                 }
             }
         }
@@ -106,8 +119,8 @@ export const getContentMetadata: CAHandlerNoAuth<{
             return {
                 data: {
                     title: dataset[0].title,
-                    description: dataset[0].description ?? "Mirá este conjunto de datos en Cabildo Abierto.",
-                    thumbnail: "https://cabildoabierto.ar/logo.png"
+                    description: dataset[0].description ?? "Conjunto de datos.",
+                    thumbnail: banner
                 }
             }
         }

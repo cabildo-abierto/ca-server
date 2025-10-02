@@ -64,6 +64,8 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
                 .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
                 .leftJoin("Post", "Post.uri", "Record.uri")
                 .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
+                .innerJoin("User", "User.did", "Record.authorId")
+                .where("User.inCA", "=", true)
                 .where("Reference.referencedTopicId", "=", id)
                 .where("Record.collection", "in", collections)
                 .where(eb => eb.or([
@@ -98,6 +100,8 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
                 .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
                 .leftJoin("Post", "Post.uri", "Record.uri")
                 .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
+                .innerJoin("User", "User.did", "Record.authorId")
+                .where("User.inCA", "=", true)
                 .where("Reference.referencedTopicId", "=", id)
                 .where("Record.collection", "in", collections)
                 .where(eb => eb.or([
@@ -133,6 +137,8 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
                 .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
                 .leftJoin("Post", "Post.uri", "Record.uri")
                 .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
+                .innerJoin("User", "User.did", "Record.authorId")
+                .where("User.inCA", "=", true)
                 .where("Reference.referencedTopicId", "=", id)
                 .where("Record.collection", "in", collections)
                 .where(eb => eb.or([
@@ -164,6 +170,8 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
                 .innerJoin("Reference", "Reference.referencingContentId", "Record.uri")
                 .leftJoin("Post", "Post.uri", "Record.uri")
                 .leftJoin("TopicVersion", "TopicVersion.uri", "Post.rootId")
+                .innerJoin("User", "User.did", "Record.authorId")
+                .where("User.inCA", "=", true)
                 .where("Reference.referencedTopicId", "=", id)
                 .where("Record.collection", "in", collections)
                 .where(eb => eb.or([

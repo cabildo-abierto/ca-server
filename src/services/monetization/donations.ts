@@ -101,7 +101,7 @@ export const getFundingStateHandler: CAHandlerNoAuth<{}, number> = async (ctx, a
 }
 
 
-export const createPreference: CAHandler<{ amount: number }, { id: string }> = async (ctx, agent, {amount}) => {
+export const createPreference: CAHandlerNoAuth<{ amount: number }, { id: string }> = async (ctx, agent, {amount}) => {
     const client = new MercadoPagoConfig({accessToken: env.MP_ACCESS_TOKEN!})
     const preference = new Preference(client)
 
@@ -118,6 +118,8 @@ export const createPreference: CAHandler<{ amount: number }, { id: string }> = a
         currencyId: "ARS"
     }]
 
+    const agentDid = agent.hasSession() ? agent.did : "anonymous"
+
     try {
         const result = await preference.create({
             body: {
@@ -129,7 +131,7 @@ export const createPreference: CAHandler<{ amount: number }, { id: string }> = a
                 notification_url: frontendUrl + "/api/pago?source_news=webhooks",
                 items: items,
                 metadata: {
-                    user_id: agent.did,
+                    user_id: agentDid,
                     amount: amount,
                 },
                 payment_methods: {
@@ -148,7 +150,7 @@ export const createPreference: CAHandler<{ amount: number }, { id: string }> = a
                 .values([{
                     id: uuidv4(),
                     created_at: new Date(),
-                    userById: agent.did,
+                    userById: agent.hasSession() ? agentDid : undefined,
                     amount: amount,
                     mpPreferenceId: result.id
                 }])

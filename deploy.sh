@@ -1,62 +1,81 @@
 #!/bin/bash
+set -e
+
 SERVER_USER="root"
 SERVER_IP="216.238.122.145"
-APP_PATH="/var/www/ca-server"
-ENV="${1:-test}"
+SYMLINK_PATH="/var/www/ca-server"
+RELEASES_PATH="/var/www/releases/ca-server"
+RELEASES_TO_KEEP=4
+ENV="${1:-prod}"
+
 
 echo_blue() {
     echo -e "\e[34m$1\e[0m"
 }
 
-echo_blue "deploying env ${ENV}"
+echo_blue "Deploying backend to ${ENV} environment"
 
-echo_blue "creating directory..."
-ssh $SERVER_USER@$SERVER_IP "mkdir -p $APP_PATH"
-
-echo_blue "building locally..."
+echo_blue "Building locally..."
 npm run build
 
-echo_blue "uploading code..."
+RELEASE_DIR_NAME=$(date '+%Y%m%d%H%M%S')
+REMOTE_RELEASE_PATH="${RELEASES_PATH}/${RELEASE_DIR_NAME}"
+
+echo_blue "New release path will be: ${REMOTE_RELEASE_PATH}"
+
+echo_blue "Creating release directory on server..."
+ssh $SERVER_USER@$SERVER_IP "mkdir -p $REMOTE_RELEASE_PATH"
+
+echo_blue "Uploading code..."
 rsync -avz \
   --exclude 'node_modules' \
   --exclude '.git' \
   --exclude '.env' \
-  ./dist ./public ./ecosystem.config.prod.js ./ecosystem.cofing.test.js package*.json \
-  $SERVER_USER@$SERVER_IP:$APP_PATH
+  ./dist ./public ./ecosystem.config.prod.js ./ecosystem.config.test.js ./package*.json \
+  $SERVER_USER@$SERVER_IP:$REMOTE_RELEASE_PATH
 
-if [ "$ENV" = "prod" ]; then
-  echo_blue "uploading prod metadata..."
-  ssh $SERVER_USER@$SERVER_IP "
-    cd $APP_PATH &&
-    cp ./public/client-metadata.prod.json ./public/client-metadata.json
-  "
-  ssh $SERVER_USER@$SERVER_IP "
-    cd $APP_PATH &&
-    cp ./ecosystem.config.prod.js ./ecosystem.config.js
-  "
-else
-  echo_blue "uploading test metadata..."
-  ssh $SERVER_USER@$SERVER_IP "
-    cd $APP_PATH &&
-    cp ./public/client-metadata.test.json ./public/client-metadata.json
-  "
-  ssh $SERVER_USER@$SERVER_IP "
-    cd $APP_PATH &&
-    cp ./ecosystem.config.test.js ./ecosystem.config.js
-  "
-fi
-
-echo_blue "running ci..."
+echo_blue "Preparing release on server..."
 ssh $SERVER_USER@$SERVER_IP "
-  export PATH=/root/.nvm/versions/node/v22.19.0/bin:\$PATH &&
-  cd $APP_PATH &&
+  set -e
+  # Make sure Node/NPM are in the PATH
+  export PATH=/root/.nvm/versions/node/v22.19.0/bin:\$PATH
+
+  # Navigate to the new release directory
+  cd $REMOTE_RELEASE_PATH
+
+  echo '>>> Installing dependencies...'
   npm ci --omit=dev --legacy-peer-deps
+
+  echo '>>> Setting up environment-specific files...'
+  if [ "$ENV" = "prod" ]; then
+    cp ./public/client-metadata.prod.json ./public/client-metadata.json
+    cp ./ecosystem.config.prod.js ./ecosystem.config.js
+  else
+    cp ./public/client-metadata.test.json ./public/client-metadata.json
+    cp ./ecosystem.config.test.js ./ecosystem.config.js
+  fi
+
+  echo '>>> New release is ready!'
 "
 
-echo_blue "restarting pm2..."
+echo_blue "Activating new release..."
+ssh $SERVER_USER@$SERVER_IP "ln -sfn $REMOTE_RELEASE_PATH $SYMLINK_PATH"
+
+echo_blue "Gracefully reloading and saving PM2..."
 ssh $SERVER_USER@$SERVER_IP "
-  export PATH=/root/.nvm/versions/node/v22.19.0/bin:\$PATH &&
-  cd $APP_PATH &&
-  pm2 startOrReload ecosystem.config.js --env production
+  export PATH=/root/.nvm/versions/node/v22.19.0/bin:\$PATH
+  # cd into the symlinked directory to ensure PM2 uses the correct path context
+  cd $SYMLINK_PATH
+  pm2 reload ecosystem.config.js --env production
   pm2 save
 "
+
+echo_blue "Cleaning up old releases..."
+ssh $SERVER_USER@$SERVER_IP "
+  cd $RELEASES_PATH && \
+  ls -t | \
+  tail -n +$(($RELEASES_TO_KEEP + 1)) | \
+  xargs -r rm -rf
+"
+
+echo_blue "✅ Backend deployment successful!"
