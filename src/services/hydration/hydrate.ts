@@ -120,7 +120,7 @@ export function hydrateFullArticleView(ctx: AppContext, uri: string, data: Datap
             quoteCount: e.quotesCount,
             viewer,
             topicsMentioned: topicsMentioned.map(m => ({
-                count: m.count,
+                count: m.count ?? 0,
                 title: getTopicTitle({id: m.id, props: m.props as TopicProp[] | undefined}),
                 id: m.id
             })),
@@ -193,7 +193,10 @@ export function hydrateArticleView(ctx: AppContext, uri: string, data: Dataplane
         format = e.dbFormat ?? null
     } else if (e.textBlobId) {
         text = data.getFetchedBlob({cid: e?.textBlobId, authorId})
+        ctx.logger.pino.warn({uri: e.uri, textBlobId: e?.textBlobId, text: text != null}, "no text found, tried fetching blob")
         format = e.format ?? null
+    } else {
+        ctx.logger.pino.error({uri: e.uri}, "no text and no blob found")
     }
 
     if (!e.title) {

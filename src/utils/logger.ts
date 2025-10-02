@@ -8,12 +8,13 @@ export class Logger {
         this.pino = pino({name})
     }
 
-    logTimes(s: string, times: number[]){
+    logTimes(msg: string, times: number[], object?: Record<string, unknown>){
         const diffs: number[] = []
         for(let i = 1; i < times.length; i++){
             diffs.push(times[i]-times[i-1])
         }
         const sum = diffs.join(" + ")
-        this.pino.info(`${s} ${times[times.length-1]-times[0]} = ${sum}`)
+
+        this.pino.info({...object, elapsed: `${times[times.length-1]-times[0]} = ${sum}`}, msg)
     }
 }

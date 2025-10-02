@@ -15,7 +15,7 @@ type ReadSessionData = {
 }
 
 
-async function createPaymentPromisesForArticles(ctx: AppContext, value: number, readSessions: ReadSessionData[], monthId: string): Promise<PaymentPromiseCreation[]> {
+function getPaymentPromisesForArticles(ctx: AppContext, value: number, readSessions: ReadSessionData[], monthId: string): PaymentPromiseCreation[] {
     const articleReads = readSessions
         .filter(x => x.readContentId && isArticle(getCollectionFromUri(x.readContentId)))
 
@@ -25,12 +25,11 @@ async function createPaymentPromisesForArticles(ctx: AppContext, value: number, 
     const promises: PaymentPromiseCreation[] = []
     if (totalChunksRead > 0) {
         const chunkValue = value / totalChunksRead
-        console.log("articles chunk reads", {totalChunksRead, chunkValue})
 
         const contents = Array.from(chunksRead.entries())
         for (let i = 0; i < contents.length; i++) {
             const [uri, chunks] = contents[i]
-            console.log("creating payment promises for content", uri)
+            ctx.logger.pino.info({uri}, "new payment promise for article")
             const promiseValue = chunks * chunkValue
             promises.push({
                 id: uuidv4(),
@@ -54,12 +53,11 @@ async function createPaymentPromisesForTopicVersions(ctx: AppContext, value: num
     const promises = new Map<string, PaymentPromiseCreation>()
     if (totalChunksRead > 0) {
         const chunkValue = value / totalChunksRead
-        console.log("tv chunk reads", {totalChunksRead, chunkValue})
 
         const contents = Array.from(chunksRead.entries())
         for (let i = 0; i < contents.length; i++) {
             const [uri, chunks] = contents[i]
-            console.log("creating payment promises for content", uri)
+            ctx.logger.pino.info({uri}, "new payment promise for topic")
             const promiseValue = chunks * chunkValue
             const tvPromises = await createPaymentPromisesForTopicVersion(ctx, uri, promiseValue, monthId)
 
@@ -83,28 +81,37 @@ async function createPaymentPromisesForTopicVersions(ctx: AppContext, value: num
 
 
 export async function createPaymentPromises(ctx: AppContext) {
-
-    let months = await ctx.kysely
-        .selectFrom("UserMonth")
-        .innerJoin("User", "User.did", "UserMonth.userId")
-        .select([
-            "id",
-            "User.did",
-            "User.handle",
-            "monthStart",
-            "monthEnd",
-            eb => eb.fn.count<number>(eb => eb
-                .selectFrom("PaymentPromise")
-                .whereRef("PaymentPromise.userMonthId", "=", "UserMonth.id")
-            ).as("paymentPromises")
-        ])
-        .where("wasActive", "=", true)
-        .where("promisesCreated", "=", false)
-        .execute()
+    ctx.logger.pino.info("creating payment promises")
+    let months: {id: string, did: string, handle: string | null, monthStart: Date, monthEnd: Date, paymentPromises: number | null}[] = []
+    try {
+        months = await ctx.kysely
+            .selectFrom("UserMonth")
+            .innerJoin("User", "User.did", "UserMonth.userId")
+            .select([
+                "UserMonth.id",
+                "User.did",
+                "User.handle",
+                "UserMonth.monthStart",
+                "UserMonth.monthEnd",
+                eb => eb
+                    .selectFrom("PaymentPromise")
+                    .whereRef("PaymentPromise.userMonthId", "=", "UserMonth.id")
+                    .select(eb.fn.countAll<number>().as("count"))
+                    .as("paymentPromises")
+            ])
+            .where("wasActive", "=", true)
+            .where("promisesCreated", "=", false)
+            .execute()
+    } catch (error) {
+        ctx.logger.pino.error({error}, "error getting users months")
+        return
+    }
 
     months = months.filter(m => m.paymentPromises == 0)
 
     const value = getMonthlyValue()
+
+    ctx.logger.pino.info({months: months.length, value: value}, "got months for payment promises")
 
     const promises: PaymentPromiseCreation[] = []
     for (let i = 0; i < months.length; i++) {
@@ -114,24 +121,29 @@ export async function createPaymentPromises(ctx: AppContext) {
         }
         ctx.logger.pino.info({month: months[i].monthStart, handle: m.handle}, "creating payment promises for month")
 
-        const readSessions = await ctx.kysely
-            .selectFrom("ReadSession")
-            .select(["readContentId", "readChunks"])
-            .leftJoin("Record", "Record.uri", "readContentId")
-            .where("userId", "=", m.did)
-            .where("ReadSession.created_at", ">", m.monthStart)
-            .where("ReadSession.created_at", "<", m.monthEnd)
-            .where("Record.authorId", "!=", m.did)
-            .execute()
+        let validatedReadSessions: ReadSessionData[] = []
+        try {
+            const readSessions = await ctx.kysely
+                .selectFrom("ReadSession")
+                .select(["readContentId", "readChunks"])
+                .leftJoin("Record", "Record.uri", "readContentId")
+                .where("userId", "=", m.did)
+                .where("ReadSession.created_at", ">", m.monthStart)
+                .where("ReadSession.created_at", "<", m.monthEnd)
+                .where("Record.authorId", "!=", m.did)
+                .execute()
 
-        console.log(`Found ${readSessions.length} read sessions`)
-        const validatedReadSessions = readSessions
-            .map(r => ({
-                ...r,
-                readChunks: r.readChunks as ReadChunksAttr
-            }))
+            validatedReadSessions = readSessions
+                .map(r => ({
+                    ...r,
+                    readChunks: r.readChunks as ReadChunksAttr
+                }))
+        } catch (error) {
+            ctx.logger.pino.error({error, m}, "error getting read sessions")
+            return
+        }
 
-        const articlePromises = await createPaymentPromisesForArticles(
+        const articlePromises = getPaymentPromisesForArticles(
             ctx,
             value * 0.7 * 0.5,
             validatedReadSessions,
@@ -139,16 +151,19 @@ export async function createPaymentPromises(ctx: AppContext) {
         )
         promises.push(...articlePromises)
 
-        const topicVersionPromises = await createPaymentPromisesForTopicVersions(
-            ctx,
-            value * 0.7 * 0.5,
-            validatedReadSessions,
-            m.id
-        )
-        promises.push(...topicVersionPromises)
+        try {
+            const topicVersionPromises = await createPaymentPromisesForTopicVersions(
+                ctx,
+                value * 0.7 * 0.5,
+                validatedReadSessions,
+                m.id
+            )
+            promises.push(...topicVersionPromises)
+        } catch (error) {
+            ctx.logger.pino.error({error, m}, "error creating topic version promises")
+            return
+        }
     }
-
-    ctx.logger.pino.info(`Inserting ${promises.length} new payment promises.`)
 
     promises.forEach((p, index) => {
         if (promises.slice(0, index).some(p2 => p2.contentId == p.contentId && p2.userMonthId == p.userMonthId)) {
@@ -156,6 +171,8 @@ export async function createPaymentPromises(ctx: AppContext) {
             ctx.logger.pino.warn(p, `repeated promises`)
         }
     })
+
+    ctx.logger.pino.info({count: promises.length}, `inserting new payment promises`)
 
     if(promises.length > 0){
         await ctx.kysely
@@ -179,11 +196,13 @@ async function createPaymentPromisesForTopicVersion(ctx: AppContext, uri: string
     const {did, rkey} = splitUri(uri)
     const id = await getTopicIdFromTopicVersionUri(ctx, did, rkey)
     if (!id) {
+        ctx.logger.pino.error({uri}, "topic not found for uri")
         throw Error(`No se encontró el tema asociado a ${uri}`)
     }
     const history = await getTopicHistory(ctx, id)
     const idx = history.versions.findIndex(v => v.uri == uri)
     if (idx == -1) {
+        ctx.logger.pino.error({uri, id}, "topic version not found")
         throw Error(`No se encontró la versión en el tema ${uri} ${id}`)
     }
     let monetizedCharsTotal = 0
@@ -204,6 +223,7 @@ async function createPaymentPromisesForTopicVersion(ctx: AppContext, uri: string
     for (let i = 0; i <= idx; i++) {
         const v = history.versions[i]
         if (v.addedChars == undefined) {
+            ctx.logger.pino.error({uri}, "diff not computed")
             throw Error(`Diff sin calcular para la versión ${uri}`)
         }
         let weight = 0
@@ -217,7 +237,7 @@ async function createPaymentPromisesForTopicVersion(ctx: AppContext, uri: string
         )) {
             weight += 1 / (idx + 1) * (monetizedCharsTotal > 0 ? 0.1 : 1.0)
         }
-        console.log("creating payment promise", {value, weight, amount: value * weight})
+        ctx.logger.pino.info({uri, value, weight, amount: value * weight}, "payment promise for topic")
 
         promises.push({
             id: uuidv4(),

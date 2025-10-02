@@ -59,7 +59,7 @@ export const createValidationRequest: CAHandler<ValidationRequestProps, {}> = as
             }])
             .execute()
     } catch (error) {
-        console.log("error creating validation request", error)
+        ctx.logger.pino.error({error}, "error creating validation request")
         return {error: "Ocurrió un error al crear la solicitud. Volvé a intentar."}
     }
 
@@ -157,7 +157,7 @@ export const getPendingValidationRequests: CAHandler<{}, {
     ].filter(x => x != null)
 
     await Promise.all([
-        dataplane.fetchUsersHydrationData(requests.map(r => r.userId)),
+        dataplane.fetchProfileViewHydrationData(requests.map(r => r.userId)),
         dataplane.fetchFilesFromStorage(files, "validation-documents")
     ])
 

@@ -45,8 +45,8 @@ import {prettyPrintJSON} from "#/utils/strings";
 import {getValidationState} from "../user/users";
 import {AppBskyActorDefs} from "@atproto/api"
 import {AppBskyFeedPost, ArCabildoabiertoActorDefs} from "#/lex-api/index"
-import { CAProfile } from "#/lib/types";
-import {hydrateProfileView} from "#/services/hydration/profile";
+import {CAProfileDetailed, CAProfile} from "#/lib/types";
+import {hydrateProfileViewDetailed} from "#/services/hydration/profile";
 
 
 export type FeedElementQueryResult = {
@@ -86,7 +86,7 @@ export type DatasetQueryResult = {
 
 
 export type TopicMentionedProps = {
-    count: number
+    count: number | null
     id: string
     props: unknown
 }
@@ -102,12 +102,9 @@ export function getBlobKey(blob: BlobRef) {
 }
 
 
-export function blobRefsFromContents(contents: {
-    content?: { textBlobId?: string | null } | null,
-    uri: string
-}[]) {
+export function blobRefsFromContents(contents: FeedElementQueryResult[]) {
     const blobRefs: { cid: string, authorId: string }[] = contents
-        .map(a => (a.content?.textBlobId != null ? {cid: a.content.textBlobId, authorId: getDidFromUri(a.uri)} : null))
+        .map(a => (a.textBlobId != null ? {cid: a.textBlobId, authorId: getDidFromUri(a.uri)} : null))
         .filter(x => x != null)
 
     return blobRefs
@@ -134,6 +131,8 @@ export class Dataplane {
 
     bskyBasicUsers: Map<string, $Typed<ProfileViewBasic>> = new Map()
     bskyDetailedUsers: Map<string, $Typed<ProfileViewDetailed>> = new Map()
+
+    caUsersDetailed: Map<string, CAProfileDetailed> = new Map()
     caUsers: Map<string, CAProfile> = new Map()
     profiles: Map<string, ArCabildoabiertoActorDefs.ProfileViewDetailed> = new Map()
     profileViewers: Map<string, AppBskyActorDefs.ViewerState> = new Map()
@@ -146,16 +145,7 @@ export class Dataplane {
         )
     }
 
-    async fetchCAContentsAndBlobs(uris: string[]) {
-        const t1 = Date.now()
-        await this.fetchCAContents(uris)
-        const t2 = Date.now()
-
-        const contents = Array.from(this.caContents?.values() ?? [])
-        const blobRefs = blobRefsFromContents(contents
-            .filter(c => c.text == null)
-        )
-
+    getDatasetsToFetch(contents: FeedElementQueryResult[]) {
         const datasets = contents.reduce((acc, cur) => {
             return [...acc, ...(cur.datasetsUsed.map(d => d.uri) ?? [])]
         }, [] as string[])
@@ -188,6 +178,22 @@ export class Dataplane {
             }
             return [...acc, ...filtersInContent]
         }, [] as $Typed<ColumnFilter>[][])
+
+        return {datasets, filters}
+    }
+
+    async fetchCAContentsAndBlobs(uris: string[]) {
+        const t1 = Date.now()
+        await this.fetchCAContents(uris)
+        const t2 = Date.now()
+
+        const contents = Array.from(this.caContents?.values() ?? [])
+
+        const blobRefs = blobRefsFromContents(contents
+            .filter(c => c.text == null)
+        )
+
+        const {datasets, filters} = this.getDatasetsToFetch(contents)
 
         await Promise.all([
             this.fetchDatasetsHydrationData(datasets),
@@ -248,7 +254,6 @@ export class Dataplane {
 
 
         contents.forEach(c => {
-            this.ctx.logger.pino.info({uri: c.uri, created_at: c.created_at.toISOString()}, "got ca content")
             if (c.cid) {
                 this.caContents.set(c.uri, {
                     ...c,
@@ -264,6 +269,8 @@ export class Dataplane {
     }
 
     async fetchTextBlobs(blobs: BlobRef[]) {
+        this.ctx.logger.pino.info({blobs}, "fetching text blobs")
+        if(blobs.length == 0) return
         const batchSize = 100
         let texts: (string | null)[] = []
         for (let i = 0; i < blobs.length; i += batchSize) {
@@ -288,7 +295,7 @@ export class Dataplane {
             this.fetchCAContentsAndBlobs(uris),
             this.fetchEngagement(uris),
             this.fetchTopicsBasicByUris(topicVersionUris(uris)),
-            this.fetchUsersHydrationData(dids)
+            this.fetchProfileViewBasicHydrationData(dids)
         ])
         const t2 = Date.now()
         this.ctx.logger.logTimes("fetch posts and article views", [t1, t2])
@@ -488,8 +495,7 @@ export class Dataplane {
             const t2 = Date.now()
             this.ctx.logger.logTimes("fetch bsky posts", [t1, t2])
         } catch (err) {
-            console.log("Error fetching posts", err)
-            console.log("uris", uris)
+            this.ctx.logger.pino.error({error: err, uris}, "error fetching posts from bsky")
             return
         }
 
@@ -577,7 +583,7 @@ export class Dataplane {
 
         await Promise.all([
             this.fetchPostAndArticleViewsHydrationData(uris),
-            this.fetchUsersHydrationData(dids),
+            this.fetchProfileViewBasicHydrationData(dids),
             isArticle(c) ? this.fetchTopicsMentioned(skeleton.post) : null,
             isDataset(c) ? this.fetchDatasetsHydrationData([skeleton.post]) : null,
             isDataset(c) ? this.fetchDatasetContents([skeleton.post]) : null
@@ -647,7 +653,7 @@ export class Dataplane {
 
         const [datasets] = await Promise.all([
             datasetsQuery,
-            this.fetchUsersHydrationData(dids)
+            this.fetchProfileViewBasicHydrationData(dids)
         ])
 
         for (const d of datasets) {
@@ -710,24 +716,101 @@ export class Dataplane {
 
     async fetchTopicsMentioned(uri: string) {
 
-        const topics: TopicMentionedProps[] = await this.ctx.kysely
+        const topics: TopicMentionedProps[] = (await this.ctx.kysely
             .selectFrom("Reference")
             .innerJoin("Topic", "Reference.referencedTopicId", "Topic.id")
             .innerJoin("TopicVersion", "Topic.currentVersionId", "TopicVersion.uri")
             .select([
-                "count",
+                "relevance as count",
                 "Topic.id",
                 "TopicVersion.props"
             ])
             .where("Reference.referencingContentId", "=", uri)
-            .execute()
+            .execute())
 
         if (!this.topicsMentioned) this.topicsMentioned = new Map()
         this.topicsMentioned.set(uri, topics)
     }
 
-    async fetchUsersHydrationDataFromCA(dids: string[]) {
-        dids = unique(dids.filter(d => !this.caUsers.has(d)))
+
+    async fetchProfileViewBasicHydrationData(dids: string[]) {
+        await this.fetchProfileViewHydrationData(dids) // la única diferencia es la descripción
+    }
+
+
+    async fetchProfileViewHydrationData(dids: string[]) {
+        dids = dids.filter(d => {
+            if(this.profiles.has(d)) return false
+            if(this.caUsers.has(d)) return false
+            return !(this.caUsersDetailed.has(d) && (this.bskyBasicUsers.has(d) || this.bskyDetailedUsers.has(d)))
+        })
+
+        if(dids.length == 0) return
+
+        const agentDid = this.agent.hasSession() ? this.agent.did : null
+
+        // TO DO (!): Esto asume que todos los usuarios de CA están sincronizados. Hay que asegurarlo.
+        const users = await this.ctx.kysely
+            .selectFrom("User")
+            .where("User.did", "in", dids)
+            .select([
+                "did",
+                "CAProfileUri",
+                "handle",
+                "displayName",
+                "avatar",
+                "created_at",
+                "orgValidation",
+                "userValidationHash",
+                "editorStatus",
+                "description",
+                eb => eb
+                    .selectFrom("Follow")
+                    .where("Follow.userFollowedId", "=", agentDid ?? "no did")
+                    .innerJoin("Record", "Record.uri", "Follow.uri")
+                    .whereRef("Record.authorId", "=", "User.did")
+                    .select("Follow.uri")
+                    .limit(1)
+                    .as("followedBy"),
+                eb => eb
+                    .selectFrom("Follow")
+                    .whereRef("Follow.userFollowedId", "=", "User.did")
+                    .innerJoin("Record", "Record.uri", "Follow.uri")
+                    .where("Record.authorId", "=", agentDid ?? "no did")
+                    .select("Follow.uri")
+                    .limit(1)
+                    .as("following")
+            ])
+            .where("inCA", "=", true)
+            .execute()
+
+        users.forEach(u => {
+            if(u.handle) {
+                this.caUsers.set(u.did, {
+                    did: u.did,
+                    caProfile: u.CAProfileUri,
+                    handle: u.handle,
+                    avatar: u.avatar,
+                    displayName: u.displayName,
+                    createdAt: u.created_at,
+                    verification: getValidationState(u),
+                    editorStatus: u.editorStatus,
+                    description: u.description,
+                    viewer: {
+                        following: u.following,
+                        followedBy: u.followedBy
+                    }
+                })
+            }
+        })
+
+        const bskyUsers = dids.filter(d => !this.caUsers.has(d))
+        await this.fetchProfileViewDetailedHydrationDataFromBsky(bskyUsers)
+    }
+
+
+    async fetchProfileViewDetailedHydrationDataFromCA(dids: string[]) {
+        dids = unique(dids.filter(d => !this.caUsersDetailed.has(d)))
         if (dids.length == 0) return
 
         const t1 = Date.now()
@@ -744,9 +827,9 @@ export class Dataplane {
                     eb
                         .selectFrom("Follow")
                         .innerJoin("Record", "Record.uri", "Follow.uri")
-                        .innerJoin("User", "User.did", "Record.authorId")
+                        .innerJoin("User as Follower", "Follower.did", "Record.authorId")
                         .select(eb.fn.countAll<number>().as("count"))
-                        .where("User.inCA", "=", true)
+                        .where("Follower.inCA", "=", true)
                         .whereRef("Follow.userFollowedId", "=", "User.did")
                         .as("followersCount"),
                 (eb) =>
@@ -780,7 +863,7 @@ export class Dataplane {
 
         if (profiles.length == 0) return null
 
-        const formattedProfiles: CAProfile[] = profiles.map(profile => {
+        const formattedProfiles: CAProfileDetailed[] = profiles.map(profile => {
             if(profile.CAProfileUri){
                 return {
                     did: profile.did,
@@ -797,14 +880,14 @@ export class Dataplane {
         }).filter(x => x != null)
 
         formattedProfiles.forEach(p => {
-            this.caUsers.set(p.did, p)
+            this.caUsersDetailed.set(p.did, p)
         })
 
         const t2 = Date.now()
         this.ctx.logger.logTimes(`fetch users data from ca (N = ${dids.length})`, [t1, t2])
     }
 
-    async fetchUsersDetailedHydrationDataFromBsky(dids: string[]) {
+    async fetchProfileViewDetailedHydrationDataFromBsky(dids: string[]) {
         const agent = this.agent
 
         dids = unique(dids.filter(d => !this.bskyDetailedUsers.has(d)))
@@ -873,7 +956,7 @@ export class Dataplane {
         })
     }
 
-    async fetchUsersHydrationData(dids: string[]) {
+    async fetchProfileViewDetailedHydrationData(dids: string[]) {
         if(dids.length == 0) return
 
         const [profiles] = await Promise.all([
@@ -893,12 +976,12 @@ export class Dataplane {
         if(missedDids.length == 0) return
 
         await Promise.all([
-            this.fetchUsersHydrationDataFromCA(missedDids),
-            this.fetchUsersDetailedHydrationDataFromBsky(missedDids)
+            this.fetchProfileViewDetailedHydrationDataFromCA(missedDids),
+            this.fetchProfileViewDetailedHydrationDataFromBsky(missedDids)
         ])
 
         const newProfiles: ArCabildoabiertoActorDefs.ProfileViewDetailed[] = missedDids
-            .map(d => hydrateProfileView(this.ctx, d, this))
+            .map(d => hydrateProfileViewDetailed(this.ctx, d, this))
             .filter(x => x != null)
 
         newProfiles.forEach(p => {
@@ -952,7 +1035,7 @@ export class Dataplane {
                 .orderBy("created_at", "desc")
                 .limit(20)
                 .execute(),
-            this.fetchUsersHydrationData(reqAuthors)
+            this.fetchProfileViewHydrationData(reqAuthors)
         ]))[0]
 
         caNotificationsData.forEach(n => {

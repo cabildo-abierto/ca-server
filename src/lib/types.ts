@@ -10,15 +10,32 @@ export type ATProtoStrongRef = {
 
 export type ValidationState = "org" | "persona" | null
 
-export type CAProfile = {
+export type CAProfileDetailed = {
     did: string
-    caProfile: string
+    caProfile: string | null
     followersCount: number
     followsCount: number
     articlesCount: number
     editsCount: number
     editorStatus: EditorStatus
     verification: ValidationState
+}
+
+
+export type CAProfile = {
+    did: string
+    avatar: string | null
+    handle: string
+    displayName: string | null
+    createdAt: Date
+    caProfile: string | null
+    editorStatus: EditorStatus
+    verification: ValidationState
+    description: string | null
+    viewer: {
+        following: string | null,
+        followedBy: string | null
+    }
 }
 
 

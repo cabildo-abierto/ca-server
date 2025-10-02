@@ -222,7 +222,7 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB> | App
     try {
         await trx
             .insertInto("Topic")
-            .values(updates)
+            .values(updates.map(u => ({...u, synonyms: []})))
             .onConflict((oc) =>
                 oc.column("id").doUpdateSet({
                     currentVersionId: (eb) => eb.ref('excluded.currentVersionId'),

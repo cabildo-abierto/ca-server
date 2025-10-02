@@ -4,7 +4,7 @@ import {Agent, cookieOptions, SessionAgent} from "#/utils/session-agent";
 import {deleteRecords} from "#/services/delete";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
-import {hydrateProfileView, hydrateProfileViewBasic} from "#/services/hydration/profile";
+import {hydrateProfileViewDetailed, hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {unique} from "#/utils/arrays";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {getIronSession} from "iron-session";
@@ -99,7 +99,7 @@ export const getUsers: CAHandler<{}, UserAccessStatus[]> = async (ctx, agent, {}
 
         return {data: users.map(queryToStatus)}
     } catch (err) {
-        console.log("error getting users", err)
+        ctx.logger.pino.error({error: err}, "error getting users")
         return {error: "Error al obtener a los usuarios."}
     }
 }
@@ -141,10 +141,10 @@ export const getProfile: CAHandlerNoAuth<{ params: { handleOrDid: string } }, Ar
 
         const dataplane = new Dataplane(ctx, agent)
 
-        await dataplane.fetchUsersHydrationData([did])
+        await dataplane.fetchProfileViewDetailedHydrationData([did])
         const t3 = Date.now()
 
-        const profile = hydrateProfileView(ctx, did, dataplane)
+        const profile = hydrateProfileViewDetailed(ctx, did, dataplane)
 
         ctx.logger.logTimes(`perfil ${did}`, [t1, t2, t3])
         if(!profile) {
@@ -261,6 +261,12 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
     if (!agent.hasSession()) {
         ctx.logger.pino.info("sin sesión")
         return {error: "No session."}
+    }
+
+    const status = await ctx.redisCache.mirrorStatus.get(agent.did, true)
+    if(status == "Dirty"){
+        await ctx.redisCache.mirrorStatus.set(agent.did, "InProcess", true)
+        await ctx.worker?.addJob("sync-user", {handleOrDid: agent.did}, 5)
     }
 
     const data = await getSessionData(ctx, agent.did)
@@ -399,7 +405,7 @@ export const getFollowx = async (ctx: AppContext, agent: Agent, {handleOrDid, ki
 
     const userList = unique([...caUsers, ...bskyUsers])
 
-    await data.fetchUsersHydrationData(userList)
+    await data.fetchProfileViewHydrationData(userList)
 
     return {data: userList.map(u => hydrateProfileViewBasic(ctx, u, data)).filter(u => u != null)}
 }

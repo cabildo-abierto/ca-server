@@ -6,7 +6,7 @@ import {processRecordsBatch} from "#/services/sync/event-processing/record";
 import {processContentsBatch} from "#/services/sync/event-processing/content";
 import {ExpressionBuilder, OnConflictDatabase, OnConflictTables, sql} from "kysely";
 import {DB} from "../../../../prisma/generated/types";
-import {NotificationBatchData} from "#/services/notifications/notifications";
+import {NotificationJobData} from "#/services/notifications/notifications";
 import {getCidFromBlobRef} from "#/services/sync/utils";
 import * as TopicVersion from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {
@@ -51,7 +51,7 @@ export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Re
             try {
                 await trx
                     .insertInto("Topic")
-                    .values(topics)
+                    .values(topics.map(t => ({...t, synonyms: []})))
                     .onConflict((oc) => oc.column("id").doUpdateSet({
                         lastEdit: sql`GREATEST
                     ("Topic"."lastEdit", excluded."lastEdit")`
@@ -88,18 +88,20 @@ export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Re
         })
 
         if (inserted) {
-            const data: NotificationBatchData = {
-                uris: inserted.map(i => i.uri),
-                topics: inserted.map(i => i.topicId),
+            const data: NotificationJobData[] = inserted.map((i) => ({
+                uri: i.uri,
+                topics: i.topicId,
                 type: "TopicEdit"
-            }
+            }))
             this.ctx.worker?.addJob("batch-create-notifications", data)
         }
 
         await addUpdateContributionsJobForTopics(this.ctx, topics.map(t => t.id))
 
         const authors = unique(records.map(r => getDidFromUri(r.ref.uri)))
-        await this.ctx.worker?.addJob("update-author-status", {dids: authors}, 11)
+        await this.ctx.worker?.addJob("update-author-status", authors, 11)
+        await this.ctx.worker?.addJob("update-contents-topic-mentions", records.map(r => r.ref.uri), 11)
+        await this.ctx.worker?.addJob("update-topic-mentions", topics.map(t=> t.id), 11)
     }
 }
 
@@ -130,7 +132,7 @@ function getUniqueTopicUpdates(records: { ref: ATProtoStrongRef, record: TopicVe
 export async function addUpdateContributionsJobForTopics(ctx: AppContext, ids: string[]) {
     await ctx.worker?.addJob(
         "update-topic-contributions",
-        {topicIds: ids}
+        ids
     )
 }
 
@@ -184,6 +186,8 @@ export async function processDeleteTopicVersionsBatch(ctx: AppContext, uris: str
 
             console.log("updating topic current versions for", topicIds.map(t => t.id))
             await updateTopicsCurrentVersionBatch(trx, topicIds.map(t => t.id))
+            await ctx.worker?.addJob("update-contents-topic-mentions", uris)
+            await ctx.worker?.addJob("update-topic-mentions", topicIds.map(t => t.id))
         } catch (err) {
             console.log(err)
             console.log("Error deleting topic versions")

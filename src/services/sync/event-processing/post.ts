@@ -131,30 +131,31 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
         if (insertedPosts) {
             await Promise.all([
                 this.createNotifications(insertedPosts),
-                this.ctx.worker?.addJob("update-contents-topic-mentions", {uris: insertedPosts.map(r => r.uri)}, 11)
+                this.ctx.worker?.addJob("update-contents-topic-mentions", insertedPosts.map(r => r.uri), 11)
             ])
         }
     }
 
     async createNotifications(posts: {replyToId: string | null, uri: string}[]) {
+        const notifications: NotificationJobData[] = []
         for(const p of posts) {
             if (p.replyToId) {
                 const replyToDid = getDidFromUri(p.replyToId)
                 if (replyToDid != getDidFromUri(p.uri)) {
                     const c = getCollectionFromUri(p.replyToId)
                     if (isArticle(c) || isTopicVersion(c)) {
-                        const data: NotificationJobData = {
+                        notifications.push({
                             userNotifiedId: getDidFromUri(p.replyToId),
                             type: "Reply",
                             causedByRecordId: p.uri,
-                            createdAt: new Date().toISOString(),
+                            created_at: new Date(),
                             reasonSubject: p.replyToId,
-                        }
-                        this.ctx.worker?.addJob("create-notification", data, 10)
+                        })
                     }
                 }
             }
         }
+        this.ctx.worker?.addJob("batch-create-notifications", notifications, 10)
     }
 }
 
@@ -192,5 +193,6 @@ export class PostDeleteProcessor extends DeleteProcessor {
                 .where("Record.uri", "in", uris)
                 .execute()
         })
+        await this.ctx.worker?.addJob("update-contents-topic-mentions", uris)
     }
 }

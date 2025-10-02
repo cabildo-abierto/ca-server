@@ -58,7 +58,7 @@ export const getLikes: GetInteractionsType = async (ctx, agent, {params, query})
     const uri = getUri(did, collection, rkey)
     const dataplane = new Dataplane(ctx, agent)
     const {dids, cursor} = await getLikesSkeleton(ctx, agent, uri, dataplane, parseInt(query.limit ?? "25"), query.cursor)
-    await dataplane.fetchUsersHydrationData(dids)
+    await dataplane.fetchProfileViewHydrationData(dids)
 
     const data = {profiles: dids.map(d => hydrateProfileViewBasic(ctx, d, dataplane)).filter(x => x != null),
                   cursor : cursor
@@ -71,7 +71,7 @@ export const getReposts: GetInteractionsType = async (ctx, agent, {params, query
     const uri = getUri(did, collection, rkey)
     const dataplane = new Dataplane(ctx, agent)
     const {dids, cursor} = await getRepostsSkeleton(ctx, agent, uri, dataplane, parseInt(query.limit ?? "25"), query.cursor)
-    await dataplane.fetchUsersHydrationData(dids)
+    await dataplane.fetchProfileViewHydrationData(dids)
 
     const data = {profiles: dids.map(d => hydrateProfileViewBasic(ctx, d, dataplane)).filter(x => x != null),
         cursor : cursor

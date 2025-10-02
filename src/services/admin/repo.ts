@@ -16,7 +16,7 @@ export const getRepoCounts: CAHandler<{params: {handleOrDid: string}}, UserRepoC
         return {error: "No se encontró el usuario"}
     }
 
-    const doc = await getServiceEndpointForDid(did)
+    const doc = await getServiceEndpointForDid(ctx, did)
     if(typeof doc != "string"){
         return {error: "No se encontró el repositorio."}
     }

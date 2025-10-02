@@ -9,10 +9,8 @@ import {Agent} from "#/utils/session-agent";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {$Typed} from "@atproto/api";
-import {getTopicSynonyms, getTopicTitle} from "#/services/wiki/utils";
-import {getSynonymsToTopicsMap, getTopicsReferencedInText} from "#/services/wiki/references";
+import {getTopicSynonyms} from "#/services/wiki/utils";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
-import {gett} from "#/utils/arrays";
 import {getTopicHistory} from "#/services/wiki/history";
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {ArticleEmbed, ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article"
@@ -21,7 +19,7 @@ import {isMain as isImagesEmbed, View as ImagesEmbedView} from "#/lex-api/types/
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read"
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 import {cleanText} from "#/utils/strings";
-import {hydrateProfileViewBasic} from "#/services/hydration/profile";
+import {getTopicsReferencedInText} from "#/services/wiki/references/references";
 
 export type TimePeriod = "day" | "week" | "month" | "all"
 
@@ -376,47 +374,35 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
     error?: string
 }> => {
     const authorId = getDidFromUri(uri)
-    const dataplane = new Dataplane(ctx)
 
-    const [topic] = await Promise.all([
-        ctx.kysely
-            .selectFrom("TopicVersion")
-            .innerJoin("Record", "TopicVersion.uri", "Record.uri")
-            .innerJoin("Content", "TopicVersion.uri", "Content.uri")
-            .innerJoin("Topic", "Topic.id", "TopicVersion.topicId")
-            .select([
-                "Record.uri",
-                "Record.cid",
-                "Record.created_at",
-                "Record.record",
-                "TopicVersion.props",
-                "Content.text",
-                "Content.format",
-                "Content.dbFormat",
-                "Content.textBlobId",
-                "Topic.id",
-                "Topic.protection",
-                "Topic.popularityScore",
-                "Topic.lastEdit",
-                "Topic.currentVersionId"
-            ])
-            .where("TopicVersion.uri", "=", uri)
-            .where("Record.record", "is not", null)
-            .where("Record.cid", "is not", null)
-            .executeTakeFirst(),
-        dataplane.fetchUsersHydrationData([authorId])
-    ])
+    const topic = await ctx.kysely
+        .selectFrom("TopicVersion")
+        .innerJoin("Record", "TopicVersion.uri", "Record.uri")
+        .innerJoin("Content", "TopicVersion.uri", "Content.uri")
+        .innerJoin("Topic", "Topic.id", "TopicVersion.topicId")
+        .select([
+            "Record.uri",
+            "Record.cid",
+            "Record.created_at",
+            "Record.record",
+            "TopicVersion.props",
+            "Content.text",
+            "Content.format",
+            "Content.dbFormat",
+            "Content.textBlobId",
+            "Topic.id",
+            "Topic.protection",
+            "Topic.popularityScore",
+            "Topic.lastEdit",
+            "Topic.currentVersionId"
+        ])
+        .where("TopicVersion.uri", "=", uri)
+        .where("Record.record", "is not", null)
+        .where("Record.cid", "is not", null)
+        .executeTakeFirst()
 
     if (!topic || !topic.cid) {
         return {error: "No se encontró la versión."}
-    }
-
-    // TO DO: Hace falta el autor?
-    const author = hydrateProfileViewBasic(ctx, authorId, dataplane)
-
-    if(!author) {
-        ctx.logger.pino.warn({did: authorId}, "user not found")
-        return {error: "No se encontró el autor"}
     }
 
     let text: string | null = null
@@ -448,7 +434,6 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
         id,
         uri: topic.uri,
         cid: topic.cid,
-        author,
         text: transformedText,
         format: transformedFormat,
         props,
@@ -471,41 +456,14 @@ export const getTopicVersionHandler: CAHandlerNoAuth<{
 }
 
 
-export async function getTopicsTitles(ctx: AppContext, ids: string[]) {
-    if(ids.length == 0) return new Map<string, string>()
-
-    const res = await ctx.kysely
-        .selectFrom("Topic")
-        .innerJoin("TopicVersion", "TopicVersion.uri", "Topic.currentVersionId")
-        .select([
-            "id",
-            "TopicVersion.props"
-        ])
-        .where("Topic.id", "in", ids)
-        .execute()
-
-    return new Map<string, string>(res.map(r => [r.id, getTopicTitle({
-        id: r.id,
-        props: r.props as TopicProp[]
-    })]))
-}
-
-
+// TO DO: Usar el título cuando hagamos que las referencias también lo usen
 export const getTopicsMentioned: CAHandlerNoAuth<{title: string, text: string}, TopicMention[]> = async (ctx, agent, {title, text}) => {
     const t1 = Date.now()
-    const m = await getSynonymsToTopicsMap(ctx)
+    const topicMentions = await getTopicsReferencedInText(ctx, text)
     const t2 = Date.now()
-    const refs = getTopicsReferencedInText(text + " " + title, m)
-    const t3 = Date.now()
-    const titles = await getTopicsTitles(ctx, refs.map(r => r.topicId))
-    const t4 = Date.now()
-    const data = refs
-        .map(r => ({id: r.topicId, count: r.count, title: gett(titles, r.topicId)}))
-        .sort((a, b) => (b.count - a.count))
-    const t5 = Date.now()
-    ctx.logger.logTimes("topics mentioned", [t1, t2, t3, t4, t5])
+    ctx.logger.logTimes("topics mentioned", [t1, t2])
     return {
-        data
+        data: topicMentions
     }
 }
 

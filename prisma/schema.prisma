@@ -61,27 +61,29 @@ model CategoryLink {
 model Content {
   text                    String?
   numWords                Int?
-  uri                     String           @id
+  uri                     String                   @id
   format                  String?
   textBlobId              String?
   lastReferencesUpdate    DateTime?
   selfLabels              String[]
   embeds                  Json[]
   dbFormat                String?
-  created_at              DateTime         @default(now())
+  created_at              DateTime                 @default(now())
   interactionsScore       Int?
   likesScore              Int?
   relativePopularityScore Float?
   Article                 Article?
-  Blob                    Blob?            @relation(fields: [textBlobId], references: [cid])
-  Record                  Record           @relation(fields: [uri], references: [uri])
+  Blob                    Blob?                    @relation(fields: [textBlobId], references: [cid])
+  Record                  Record                   @relation(fields: [uri], references: [uri])
   PaymentPromise          PaymentPromise[]
   Post                    Post?
   ReadSession             ReadSession[]
   Reference               Reference[]
   TopicVersion            TopicVersion?
   Dataset                 Dataset[]
+  text_tsv                Unsupported("tsvector")?
 
+  @@index([text_tsv], map: "content_text_fts_idx", type: Gin)
   @@index([created_at(sort: Desc)])
   @@index([interactionsScore(sort: Desc), created_at(sort: Desc)])
   @@index([likesScore(sort: Desc), created_at(sort: Desc)])
@@ -310,31 +312,37 @@ model Reference {
   type                 ReferenceType
   referencedTopicId    String
   referencingContentId String
-  count                Int           @default(1)
+  count                Int?
+  relevance            Float?
   Topic                Topic         @relation(fields: [referencedTopicId], references: [id])
   Content              Content       @relation(fields: [referencingContentId], references: [uri])
+
+  interactions TopicInteraction[]
+
+  touched DateTime
 
   @@unique([referencingContentId, referencedTopicId])
   @@index([referencedTopicId])
   @@index([referencingContentId])
+  @@index([touched])
 }
 
 model Topic {
-  id                                                String             @id
-  protection                                        EditorStatus       @default(Beginner)
-  currentVersionId                                  String?            @unique
-  popularityScore                                   Int?               @default(1)
+  id                                                String            @id
+  protection                                        EditorStatus      @default(Beginner)
+  currentVersionId                                  String?           @unique
+  popularityScore                                   Int?              @default(1)
   lastEdit                                          DateTime?
-  popularityScoreLastDay                            Int                @default(0)
-  popularityScoreLastMonth                          Int                @default(0)
-  popularityScoreLastWeek                           Int                @default(0)
+  popularityScoreLastDay                            Int               @default(0)
+  popularityScoreLastMonth                          Int               @default(0)
+  popularityScoreLastWeek                           Int               @default(0)
   lastContentChange                                 DateTime?
   ReadSession                                       ReadSession[]
   Reference                                         Reference[]
-  TopicVersion_Topic_currentVersionIdToTopicVersion TopicVersion?      @relation("Topic_currentVersionIdToTopicVersion", fields: [currentVersionId], references: [uri])
-  TopicInteraction                                  TopicInteraction[]
+  TopicVersion_Topic_currentVersionIdToTopicVersion TopicVersion?     @relation("Topic_currentVersionIdToTopicVersion", fields: [currentVersionId], references: [uri])
   TopicToCategory                                   TopicToCategory[]
-  TopicVersion_TopicVersion_topicIdToTopic          TopicVersion[]     @relation("TopicVersion_topicIdToTopic")
+  TopicVersion_TopicVersion_topicIdToTopic          TopicVersion[]    @relation("TopicVersion_topicIdToTopic")
+  synonyms                                          String[]
 
   @@index([lastEdit(sort: Desc)])
   @@index([popularityScoreLastDay(sort: Desc)])
@@ -350,13 +358,19 @@ model TopicCategory {
 }
 
 model TopicInteraction {
-  recordId String
-  topicId  String
-  touched  DateTime @default(now())
-  Record   Record   @relation(fields: [recordId], references: [uri])
-  Topic    Topic    @relation(fields: [topicId], references: [id])
+  id String @id
 
-  @@unique([recordId, topicId])
+  recordId String
+  Record   Record @relation(fields: [recordId], references: [uri])
+
+  referenceId String
+  Reference   Reference @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+
+  touched DateTime
+
+  @@unique([recordId, referenceId])
+  @@index([referenceId])
+  @@index([recordId])
 }
 
 model TopicToCategory {
@@ -480,6 +494,11 @@ model VoteReject {
   labels   String[]
   message  String?
   Reaction Reaction @relation(fields: [uri], references: [uri])
+}
+
+model Timestamps {
+  id   String   @id
+  date DateTime
 }
 
 enum EditorStatus {

@@ -66,7 +66,7 @@ async function getRegisteredUsers(ctx: AppContext, agent: SessionAgent): Promise
         .execute()
 
     const dataplane = new Dataplane(ctx, agent)
-    await dataplane.fetchUsersHydrationData(users.map(u => u.did))
+    await dataplane.fetchProfileViewBasicHydrationData(users.map(u => u.did))
 
     const profiles: ProfileViewBasicCA[] = users.map(u => hydrateProfileViewBasic(ctx, u.did, dataplane)).filter(u => u != null)
     return sortByKey(profiles.map(p => {

@@ -526,8 +526,6 @@ export async function getCachedFollowingFeedSkeleton(
         disableCache ? limit : 100
     )
 
-    console.log("got res with size", res.length, "for", cursor, topCached)
-
     if(!disableCache) {
         if(res.length == 0) {
             return cachedToRes(cached)

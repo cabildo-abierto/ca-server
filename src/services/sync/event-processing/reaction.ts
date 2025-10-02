@@ -8,7 +8,7 @@ import {v4 as uuidv4} from 'uuid'
 import {isTopicVote} from "#/services/wiki/votes";
 import {isRecord as isVoteReject} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject"
 import {unique} from "#/utils/arrays";
-import {NotificationBatchData} from "#/services/notifications/notifications";
+import {NotificationJobData} from "#/services/notifications/notifications";
 import {isReactionCollection} from "#/utils/type-utils";
 import {
     addUpdateContributionsJobForTopics
@@ -117,12 +117,12 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
         })
 
         if (res) {
-            const data: NotificationBatchData = {
+            const data: NotificationJobData[] = res.topicVotes.map(t => ({
                 type: "TopicVersionVote",
-                uris: res.topicVotes.map(t => t.reactionUri),
-                subjectUris: res.topicVotes.map(t => t.uri),
-                topics: res.topicVotes.map(t => t.topicId),
-            }
+                uri: t.reactionUri,
+                subjectId: t.uri,
+                topic: t.topicId
+            }))
             this.ctx.worker?.addJob("batch-create-notifications", data)
             await addUpdateContributionsJobForTopics(this.ctx, res.topicIdsList)
         }
@@ -138,7 +138,7 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
         if(likeAndRepostsSubjects.length > 0) {
             await this.ctx.worker?.addJob(
                 "update-interactions-score",
-                {uris: likeAndRepostsSubjects}
+                likeAndRepostsSubjects
             )
         }
     }

@@ -1,10 +1,13 @@
 import {AppContext} from "#/setup";
-import {getContentsText, TextAndFormat} from "#/services/wiki/references";
+import {TextAndFormat} from "#/services/wiki/references/references";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import {decompress} from "#/utils/compression";
 import {getAllText} from "#/services/wiki/diff";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+import {BlobRef} from "#/services/hydration/hydrate";
+import {getCollectionFromUri, getDidFromUri, isPost} from "#/utils/uri";
+import {fetchTextBlobs} from "#/services/blob";
 
 
 export function getNumWords(text: string, format: string) {
@@ -199,4 +202,79 @@ export async function resetContentsFormat(ctx: AppContext) {
         if(contents.length < batchSize) break
     }
 
+}
+
+export type ContentProps = {
+    uri: string
+    CAIndexedAt: Date
+    text: string | null
+    textBlobId?: string | null
+    format: string | null
+    dbFormat: string | null
+    title: string | null
+}
+
+
+type MaybeContent = {
+    text?: string | null
+    textBlobId?: string | null
+    format?: string | null
+    dbFormat?: string | null
+    uri: string
+}
+
+
+function isCompressed(format: string | null) {
+    if (!format) return true
+    return ["lexical-compressed", "markdown-compressed"].includes(format)
+}
+
+
+function formatToDecompressed(format: string) {
+    return format.replace("compressed", "").replace("-", "")
+}
+
+
+export async function getContentsText(ctx: AppContext, contents: MaybeContent[], retries: number = 10, decompressed: boolean = true): Promise<(TextAndFormat | null)[]> {
+    const texts: (TextAndFormat | null)[] = contents.map(_ => null)
+
+    const blobRefs: { i: number, blob: BlobRef }[] = []
+    for (let i = 0; i < contents.length; i++) {
+        const c = contents[i]
+        if (c.text != null) {
+            texts[i] = {text: c.text, format: c.dbFormat ?? null}
+        } else if (c.textBlobId) {
+            blobRefs.push({i, blob: {cid: c.textBlobId, authorId: getDidFromUri(c.uri)}})
+        }
+    }
+
+    const blobTexts = await fetchTextBlobs(ctx, blobRefs.map(x => x.blob), retries)
+
+    for (let i = 0; i < blobRefs.length; i++) {
+        const text = blobTexts[i]
+        const format = contents[blobRefs[i].i].format
+        texts[blobRefs[i].i] = text != null ? {
+            text,
+            format: format ?? null
+        } : null
+    }
+
+    if (decompressed) {
+        for (let i = 0; i < texts.length; i++) {
+            const text = texts[i]
+            if (text != null && text.text.length > 0 && !isPost(getCollectionFromUri(contents[i].uri)) && isCompressed(text.format ?? null)) {
+                try {
+                    texts[i] = {
+                        text: decompress(text.text),
+                        format: formatToDecompressed(text.format ?? "lexical-compressed")
+                    }
+                } catch {
+                    ctx.logger.pino.error({uri: contents[i].uri}, `error decompressing text`)
+                    texts[i] = null
+                }
+            }
+        }
+    }
+
+    return texts
 }

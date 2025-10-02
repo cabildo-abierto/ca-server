@@ -21,14 +21,12 @@ export function htmlToMarkdown(html: string){
     });
 
     const TurndownService = require('turndown');
-    console.log("HTML:", html)
     const turndownService = new TurndownService();
     turndownService.addRule('ignoreHr', {
         filter: 'hr',
         replacement: () => ''
     });
     const md = turndownService.turndown(document.body.innerHTML)
-    console.log("MD:", md)
     return md
 }
 

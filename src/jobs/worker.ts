@@ -4,14 +4,14 @@ import {AppContext} from "#/setup";
 import {syncAllUsers, syncUserJobHandler, updateRecordsCreatedAt} from "#/services/sync/sync-user";
 import {updateAuthorStatus} from "#/services/user/users";
 import {
-    cleanNotCAReferences,
-    restartReferenceLastUpdate, updateContentsTopicMentions,
+    recreateAllReferences,
+    updatePopularitiesOnContentsChange,
     updateReferences,
-    updateTopicMentions
-} from "#/services/wiki/references";
+    updatePopularitiesOnTopicsChange,
+    updatePopularitiesOnNewReactions, recomputeTopicInteractionsAndPopularities
+} from "#/services/wiki/references/references";
 import {updateEngagementCounts} from "#/services/feed/getUserEngagement";
 import {deleteCollection} from "#/services/delete";
-import {updateTopicPopularityScores} from "#/services/wiki/popularity";
 import {updateTopicsCategories} from "#/services/wiki/categories";
 import {
     updateAllTopicContributions,
@@ -21,28 +21,30 @@ import {
 import {createUserMonths} from "#/services/monetization/user-months";
 import {Queue} from "bullmq";
 import Redis from "ioredis";
-import {createNotificationJob, createNotificationsBatchJob} from "#/services/notifications/notifications";
+import {createNotificationsJob} from "#/services/notifications/notifications";
 import {CAHandler} from "#/utils/handler";
 import {assignInviteCodesToUsers} from "#/services/user/access";
 import {resetContentsFormat, updateContentsNumWords, updateContentsText} from "#/services/wiki/content";
-import {updateThreads} from "#/services/wiki/threads";
-import {restartLastContentInteractionsUpdate} from "#/services/wiki/interactions";
 import {updatePostLangs} from "#/services/admin/posts";
 import {createPaymentPromises} from "#/services/monetization/promise-creation";
 import {updateFollowSuggestions} from "#/services/user/follow-suggestions";
 import {updateInteractionsScore} from "#/services/feed/feed-scores";
 import {updateAllTopicsCurrentVersions} from "#/services/wiki/current-version";
-import { Logger } from "#/utils/logger";
+import {Logger} from "#/utils/logger";
 import {env} from "#/lib/env";
 import {reprocessCollection} from "#/services/sync/reprocess";
+import {runTestJob} from "#/services/admin/status";
+import {clearAllRedis} from "#/services/redis/cache";
 
 const mins = 60 * 1000
+const seconds = 1000
 
 type CAJobHandler<T> = (data: T) => Promise<void>
 
 type CAJobDefinition<T> = {
     name: string
     handler: CAJobHandler<T>
+    batchable: boolean
 }
 
 
@@ -65,12 +67,16 @@ export class CAWorker {
             connection: ioredis
         })
 
-        if(worker){
-            this.logger.pino.info({queueName, queuePrefix})
+        if (worker) {
+            this.logger.pino.info({queueName, queuePrefix}, "starting worker")
             this.worker = new Worker(queueName, async (job) => {
                     for (let i = 0; i < this.jobs.length; i++) {
                         if (job.name.startsWith(this.jobs[i].name)) {
-                            await this.jobs[i].handler(job.data)
+                            try {
+                                await this.jobs[i].handler(job.data)
+                            } catch (error) {
+                                this.logger.pino.error({job: job.name, error}, "error running job")
+                            }
                             return
                         }
                     }
@@ -85,7 +91,7 @@ export class CAWorker {
                 this.logger.pino.error({name: job?.name, error: err}, `job failed`);
             })
             this.worker.on('error', (err) => {
-                this.logger.pino.error({error: err} ,'worker error');
+                this.logger.pino.error({error: err}, 'worker error');
             })
             this.worker.on('active', (job) => {
                 this.logger.pino.info({name: job.name}, `job started`)
@@ -100,63 +106,161 @@ export class CAWorker {
         return env.RUN_CRONS
     }
 
-    registerJob(jobName: string, handler: (data: any) => Promise<void>) {
-        this.jobs.push({name: jobName, handler})
+    registerJob(jobName: string, handler: (data: any) => Promise<void>, batchable: boolean = false) {
+        this.jobs.push({name: jobName, handler, batchable})
     }
 
     async setup(ctx: AppContext) {
-        this.registerJob( "update-categories-graph", () => updateCategoriesGraph(ctx))
-        this.registerJob( "sync-user", async (data: any) => await syncUserJobHandler(ctx, data))
+        this.registerJob("update-categories-graph", () => updateCategoriesGraph(ctx))
+        this.registerJob("sync-user", async (data: any) => await syncUserJobHandler(ctx, data))
         this.registerJob("update-references", () => updateReferences(ctx))
-        this.registerJob( "update-engagement-counts", () => updateEngagementCounts(ctx))
-        this.registerJob( "delete-collection", async (data) => {
+        this.registerJob("update-engagement-counts", () => updateEngagementCounts(ctx))
+        this.registerJob("delete-collection", async (data) => {
             await deleteCollection(ctx, (data as { collection: string }).collection)
         })
-        this.registerJob("update-topics-popularity", () => updateTopicPopularityScores(ctx))
-        this.registerJob("sync-all-users", (data) => syncAllUsers(ctx, (data as { mustUpdateCollections: string[] }).mustUpdateCollections))
-        this.registerJob("delete-collection", (data) => deleteCollection(ctx, (data as { collection: string }).collection))
-        this.registerJob("update-topics-categories", () => updateTopicsCategories(ctx))
-        this.registerJob("update-topic-contributions", (data) => updateTopicContributions(ctx, data.topicIds as string[]))
-        this.registerJob("update-all-topic-contributions", (data) => updateAllTopicContributions(ctx))
-        this.registerJob("required-update-topic-contributions", (data) => updateTopicContributionsRequired(ctx))
-        this.registerJob("create-user-months", () => createUserMonths(ctx))
-        this.registerJob("create-notification", (data) => createNotificationJob(ctx, data))
-        this.registerJob("batch-create-notifications", (data) => createNotificationsBatchJob(ctx, data))
-        this.registerJob("batch-jobs", () => this.batchJobs())
-        this.registerJob("test-job", async () => {this.logger.pino.info("test job run")})
-        this.registerJob("restart-references-last-update", () => restartReferenceLastUpdate(ctx))
-        this.registerJob("restart-interactions-last-update", () => restartLastContentInteractionsUpdate(ctx))
-        this.registerJob("clean-not-ca-references", () => cleanNotCAReferences(ctx))
-        this.registerJob("assign-invite-codes", () => assignInviteCodesToUsers(ctx))
-        this.registerJob("update-topic-mentions", (data) => updateTopicMentions(ctx, data.id as string))
-        this.registerJob("update-contents-topic-mentions", (data) => updateContentsTopicMentions(ctx, data.uris as string[]))
-        this.registerJob("update-contents-text", () => updateContentsText(ctx))
-        this.registerJob("update-num-words", () => updateContentsNumWords(ctx))
-        this.registerJob("reset-contents-format", () => resetContentsFormat(ctx))
-        this.registerJob("update-threads", () => updateThreads(ctx))
-        this.registerJob("update-post-langs", () => updatePostLangs(ctx))
-        this.registerJob("update-author-status-all", () => updateAuthorStatus(ctx))
-        this.registerJob("update-author-status", (data) => updateAuthorStatus(ctx, data.dids))
-        this.registerJob("create-payment-promises", () => createPaymentPromises(ctx))
-        this.registerJob("update-topics-current-versions", () => updateAllTopicsCurrentVersions(ctx))
-        this.registerJob("update-follow-suggestions", () => updateFollowSuggestions(ctx))
-        this.registerJob("update-records-created-at", () => updateRecordsCreatedAt(ctx))
-        this.registerJob("update-interactions-score", (data) => updateInteractionsScore(ctx, data.uris))
-        this.registerJob("update-all-interactions-score", () => updateInteractionsScore(ctx))
-        this.registerJob("reprocess-collection", (data) => reprocessCollection(ctx, (data as { collection: string }).collection))
+        this.registerJob("sync-all-users", (data) => syncAllUsers(ctx, (data as {
+            mustUpdateCollections: string[]
+        }).mustUpdateCollections))
+        this.registerJob("delete-collection", (data) => deleteCollection(ctx, (data as {
+            collection: string
+        }).collection))
+        this.registerJob(
+            "update-topics-categories",
+            () => updateTopicsCategories(ctx)
+        )
+        this.registerJob(
+            "update-topic-contributions",
+            (data) => updateTopicContributions(ctx, data as string[]),
+            true
+        )
+        this.registerJob(
+            "update-all-topic-contributions",
+            () => updateAllTopicContributions(ctx)
+        )
+        this.registerJob(
+            "required-update-topic-contributions",
+            () => updateTopicContributionsRequired(ctx)
+        )
+        this.registerJob(
+            "create-user-months",
+            () => createUserMonths(ctx)
+        )
+        this.registerJob(
+            "batch-create-notifications",
+            (data) => createNotificationsJob(ctx, data),
+            true
+        )
+        this.registerJob(
+            "batch-jobs",
+            () => this.batchJobs()
+        )
+        this.registerJob(
+            "test-job",
+            () => runTestJob(ctx)
+        )
+        this.registerJob(
+            "assign-invite-codes",
+            () => assignInviteCodesToUsers(ctx)
+        )
+        this.registerJob(
+            "update-contents-text",
+            () => updateContentsText(ctx)
+        )
+        this.registerJob(
+            "update-num-words",
+            () => updateContentsNumWords(ctx)
+        )
+        this.registerJob(
+            "reset-contents-format",
+            () => resetContentsFormat(ctx)
+        )
+        this.registerJob(
+            "update-post-langs",
+            () => updatePostLangs(ctx)
+        )
+        this.registerJob(
+            "update-author-status-all",
+            () => updateAuthorStatus(ctx)
+        )
+        this.registerJob(
+            "update-author-status",
+            (data) => updateAuthorStatus(ctx, data),
+            true
+        )
+        this.registerJob(
+            "create-payment-promises",
+            () => createPaymentPromises(ctx)
+        )
+        this.registerJob(
+            "update-topics-current-versions",
+            () => updateAllTopicsCurrentVersions(ctx)
+        )
+        this.registerJob(
+            "update-follow-suggestions",
+            () => updateFollowSuggestions(ctx)
+        )
+        this.registerJob(
+            "update-records-created-at",
+            () => updateRecordsCreatedAt(ctx)
+        )
+        this.registerJob(
+            "update-interactions-score",
+            (data) => updateInteractionsScore(ctx, data),
+            true
+        )
+        this.registerJob(
+            "update-all-interactions-score",
+            () => updateInteractionsScore(ctx)
+        )
+        this.registerJob(
+            "reprocess-collection",
+            (data) => reprocessCollection(ctx, (data as {
+                collection: string
+            }).collection)
+        )
+        this.registerJob(
+            "update-topic-mentions",
+            (data) => updatePopularitiesOnTopicsChange(ctx, data),
+            true
+        )
+        this.registerJob(
+            "update-contents-topic-mentions",
+            (data) => updatePopularitiesOnContentsChange(ctx, data as string[]),
+            true
+        )
+        this.registerJob(
+            "update-topic-popularities-on-reactions",
+            data => updatePopularitiesOnNewReactions(ctx, data as string[]),
+            true
+        )
+        this.registerJob(
+            "recreate-all-references",
+            () => recreateAllReferences(ctx)
+        )
+        this.registerJob(
+            "recompute-all-topic-interactions-and-popularities",
+            () => recomputeTopicInteractionsAndPopularities(ctx)
+        )
+        this.registerJob(
+            "clear-all-redis",
+            () => clearAllRedis(ctx)
+        )
+
         this.logger.pino.info("worker jobs registered")
 
         await this.removeAllRepeatingJobs()
         this.logger.pino.info("repeating jobs cleared")
 
-        if(this.runCrons()){
-            await this.addRepeatingJob("update-topics-popularity", 30 * mins, 60 * mins)
+        if (this.runCrons()) {
             await this.addRepeatingJob("update-topics-categories", 30 * mins, 60 * mins + 5)
             await this.addRepeatingJob("update-categories-graph", 30 * mins, 60 * mins + 7)
             await this.addRepeatingJob("create-user-months", 30 * mins, 60 * mins + 15)
-            await this.addRepeatingJob("batch-jobs", mins / 2, 0)
+            await this.addRepeatingJob("batch-jobs", mins / 2, 0, 1)
             await this.addRepeatingJob("update-follow-suggestions", 30 * mins, 30 * mins + 18)
+            await this.addRepeatingJob("test-job", 20 * seconds, 20 * seconds, 14)
         } else {
+            await this.addRepeatingJob("batch-jobs", mins / 2, 0, 1)
+            await this.addRepeatingJob("test-job", 20 * seconds, 20 * seconds, 14)
             this.logger.pino.info("not running cron jobs")
         }
 
@@ -183,14 +287,14 @@ export class CAWorker {
     async removeAllRepeatingJobs() {
         const jobs = await this.queue.getJobSchedulers()
         for (const job of jobs) {
-            if(job.key){
+            if (job.key) {
                 this.logger.pino.info({name: job.name}, "repeat job removed")
                 await this.queue.removeJobScheduler(job.key)
             }
         }
     }
 
-    async addRepeatingJob(name: string, every: number, delay: number) {
+    async addRepeatingJob(name: string, every: number, delay: number, priority: number = 10) {
         await this.queue.add(
             name,
             {},
@@ -198,7 +302,7 @@ export class CAWorker {
                 repeat: {
                     every: every
                 },
-                priority: 1,
+                priority: priority,
                 jobId: `${name}-repeating`,
                 delay: delay,
                 removeOnComplete: true,
@@ -208,7 +312,6 @@ export class CAWorker {
         this.logger.pino.info({name}, "repeat job added")
     }
 
-
     async batchJobs() {
         const t1 = Date.now()
 
@@ -217,8 +320,11 @@ export class CAWorker {
         const batchSize = 500
 
         try {
-            await this.batchContributionsJobs(allJobs, batchSize)
-            await this.batchInteractionsScoreJobs(allJobs, batchSize)
+            for (const job of this.jobs) {
+                if (job.batchable) {
+                    await this.batchJobsWithName(job.name, allJobs, batchSize)
+                }
+            }
 
             this.logger.logTimes("jobs batched", [t1, Date.now()])
         } catch (err) {
@@ -227,20 +333,22 @@ export class CAWorker {
     }
 
 
-    async batchInteractionsScoreJobs(allJobs: any[], batchSize: number) {
-        const scoresJobs = allJobs.filter(job =>
-            job && job.name == 'update-interactions-score'
+    // asume que la data del job es un array
+    async batchJobsWithName(name: string, allJobs: any[], batchSize: number) {
+        const jobs = allJobs.filter(job =>
+            job && job.name == name
         );
 
-        const jobsRequireBatching = scoresJobs.filter(job => job.data.length < batchSize)
+        const jobsRequireBatching = jobs
+            .filter(job => Array.isArray(job.data) && job.data.length < batchSize)
 
         if (jobsRequireBatching.length <= 1) {
             return
         }
 
-        const uris = jobsRequireBatching.flatMap(job => job.data as string[])
+        const jobData = jobsRequireBatching.flatMap(job => job.data)
 
-        this.logger.pino.info({count: jobsRequireBatching.length, name: "update-interactions-score"}, `removing jobs`)
+        this.logger.pino.info({count: jobsRequireBatching.length, name}, `removing jobs`)
         await Promise.all(jobsRequireBatching.map(async job => {
             try {
                 await job.remove()
@@ -249,48 +357,25 @@ export class CAWorker {
             }
         }))
 
-        for (let i = 0; i < uris.length; i += batchSize) {
-            const batchIds = uris.slice(i, i + batchSize)
-            await this.addJob('update-interactions-score', {uris: batchIds})
-        }
-    }
-
-
-    async batchContributionsJobs(allJobs: any[], batchSize: number) {
-        const contributionJobs = allJobs.filter(job =>
-            job && job.name == 'update-topic-contributions'
-        )
-
-        const jobsRequireBatching = contributionJobs
-            .filter(job => job.data.length < batchSize)
-
-        if (jobsRequireBatching.length <= 1) {
-            return
-        }
-
-        const topicIds = jobsRequireBatching.flatMap(job => job.data as string[])
-
-        this.logger.pino.info({count: jobsRequireBatching.length, name: "update-topic-contributions"}, `removing jobs`)
-        await Promise.all(jobsRequireBatching.map(async job => {
-            try {
-                await job.remove()
-            } catch (err) {
-                this.logger.pino.error({error: err, name: job.name}, "error removing job")
-            }
-        }));
-
-        for (let i = 0; i < topicIds.length; i += batchSize) {
-            const batchIds = topicIds.slice(i, i + batchSize)
-            await this.addJob('update-topic-contributions', {topicIds: batchIds})
+        for (let i = 0; i < jobData.length; i += batchSize) {
+            const batchData = jobData.slice(i, i + batchSize)
+            await this.addJob(name, batchData)
         }
     }
 }
 
 
-export const startJob: CAHandler<any, {}> = async (ctx, app, data) => {
+export const startJob: CAHandler<{jobData: any, params: {id: string}}, {}> = async (ctx, app, data) => {
     const {id} = data.params
 
-    await ctx.worker?.addJob(id, data)
+    await ctx.worker?.addJob(id, data.jobData)
 
     return {data: {}}
+}
+
+
+export const getRegisteredJobs: CAHandler<{}, string[]> = async (ctx, agent, params) => {
+    return {
+        data: ctx.worker?.jobs?.map(j => j.name)
+    }
 }

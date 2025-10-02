@@ -211,7 +211,13 @@ export type Reference = {
     type: ReferenceType;
     referencedTopicId: string;
     referencingContentId: string;
-    count: Generated<number>;
+    count: number | null;
+    relevance: number | null;
+    touched: Timestamp;
+};
+export type Timestamps = {
+    id: string;
+    date: Timestamp;
 };
 export type Topic = {
     id: string;
@@ -223,14 +229,16 @@ export type Topic = {
     popularityScoreLastMonth: Generated<number>;
     popularityScoreLastWeek: Generated<number>;
     lastContentChange: Timestamp | null;
+    synonyms: string[];
 };
 export type TopicCategory = {
     id: string;
 };
 export type TopicInteraction = {
+    id: string;
     recordId: string;
-    topicId: string;
-    touched: Generated<Timestamp>;
+    referenceId: string;
+    touched: Timestamp;
 };
 export type TopicToCategory = {
     topicId: string;
@@ -333,6 +341,7 @@ export type DB = {
     ReadSession: ReadSession;
     Record: Record;
     Reference: Reference;
+    Timestamps: Timestamps;
     Topic: Topic;
     TopicCategory: TopicCategory;
     TopicInteraction: TopicInteraction;

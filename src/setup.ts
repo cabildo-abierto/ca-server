@@ -13,6 +13,7 @@ import {RedisCache} from "#/services/redis/cache";
 import {Logger} from "#/utils/logger";
 import { env } from './lib/env';
 import { S3Storage } from './services/storage/storage';
+import {getCAUsersDids} from "#/services/user/users";
 
 
 export type AppContext = {
@@ -58,11 +59,14 @@ export async function setupAppContext(roles: Role[]) {
     const oauthClient = await createClient(ioredis)
     logger.pino.info("oauth client created")
 
-    let worker: CAWorker = new CAWorker(
-        ioredis,
-        roles.includes("worker"),
-        logger
-    )
+    let worker: CAWorker | undefined
+    if(roles.length > 0){
+        worker = new CAWorker(
+            ioredis,
+            roles.includes("worker"),
+            logger
+        )
+    }
 
     const baseIdResolver = createIdResolver()
     const resolver = createBidirectionalResolver(baseIdResolver, ioredis)
@@ -90,7 +94,17 @@ export async function setupAppContext(roles: Role[]) {
 
     if(worker){
         await worker.setup(ctx)
-        logger.pino.info("worker steup")
+
+        if(env.RUN_CRONS){
+            ctx.logger.pino.info("adding sync ca users jobs")
+            const caUsers = await getCAUsersDids(ctx)
+            for(const u of caUsers){
+                await worker.addJob("sync-user", {handleOrDid: u}, 21)
+            }
+        }
+
+
+        logger.pino.info("worker setup")
     }
 
     return {ctx, logger}

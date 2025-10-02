@@ -9,17 +9,21 @@ const getSearchContentsSkeleton: (q: string) => GetSkeletonProps = (q) => async 
         .selectFrom("Content")
         .innerJoin("Record", "Record.uri", "Content.uri")
         .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"])
+        .where(
+            sql<boolean>`"Content"."text_tsv" @@ plainto_tsquery('simple', immutable_unaccent(${q}))`
+        )
+        .innerJoin("User", "User.did", "Record.authorId")
+        .where("User.inCA", "=", true)
         .select("Content.uri")
         .limit(25)
-        .where(sql`to_tsvector('simple', immutable_unaccent("text"))`,"@@" , sql`plainto_tsquery('simple', immutable_unaccent(${q}))`)
-        .orderBy(sql`ts_rank(to_tsvector('simple', immutable_unaccent("text")), plainto_tsquery('simple', immutable_unaccent(${q}))) DESC`)
-        .execute()
+        .orderBy("Record.created_at", "desc")
+        .execute();
 
     return {
-        skeleton: uris.map(u => ({post: u.uri})),
+        skeleton: uris.map(u => ({ post: u.uri })),
         cursor: undefined
-    }
-}
+    };
+};
 
 
 export const searchContents: CAHandlerNoAuth<{params: {q: string}}, GetFeedOutput> = async (ctx, agent, {params}) => {

@@ -1,5 +1,5 @@
 {
-  "name": "atproto-example-app",
+  "name": "ca-server",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -11,6 +11,7 @@
     "worker-mirror": "tsx watch --clear-screen=false src/worker-mirror.ts | pino-pretty",
     "mirror": "tsx watch --clear-screen=false src/mirror.ts | pino-pretty",
     "dev": "tsx watch --clear-screen=false src/index.ts | pino-pretty",
+    "script": "tsx watch --clear-screen=false src/script.ts | pino-pretty",
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "build:strict": "tsc --noEmit && tsup",

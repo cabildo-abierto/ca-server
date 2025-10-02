@@ -317,7 +317,6 @@ export const assignInviteCodesToUsers = async (ctx: AppContext) => {
                 })
             }
         })
-        console.log(values)
         if(values.length > 0){
             await db
                 .insertInto("InviteCode")

@@ -53,7 +53,7 @@
       },
       "topicView": {
         "type": "object",
-        "required": ["text", "id", "createdAt", "lastEdit", "uri", "cid", "author"],
+        "required": ["text", "id", "createdAt", "lastEdit", "uri", "cid"],
         "properties": {
           "id": {
             "type": "string",
@@ -97,10 +97,6 @@
           "createdAt": {
             "type": "string",
             "format": "datetime"
-          },
-          "author": {
-            "type": "ref",
-            "ref": "ar.cabildoabierto.actor.defs#profileViewBasic"
           },
           "embeds": {
             "type": "array",

@@ -8,6 +8,7 @@ import {AppBskyGraphFollow} from "@atproto/api"
 import {processEventsBatch} from "#/services/sync/event-processing/event-processor";
 import {LRUCache} from 'lru-cache'
 import {env} from "#/lib/env";
+import {updateTimestamp} from "#/services/admin/status";
 
 function formatEventsPerSecond(events: number, elapsed: number) {
     return (events / (elapsed / 1000)).toFixed(2)
@@ -59,16 +60,25 @@ export class MirrorMachine {
         this.tooLargeUsers = new Set()
     }
 
-    logEventsPerSecond(){
-        const elapsed = Date.now() - this.lastLog.getTime()
+    async logEventsPerSecond(){
+        const date = new Date()
+        const elapsed = date.getTime() - this.lastLog.getTime()
         if(elapsed > 20*1000){
             this.ctx.logger.pino.info({
+                now: date,
                 all: formatEventsPerSecond(this.eventCounter, elapsed),
                 relevant: formatEventsPerSecond(this.relevantEventCounter, elapsed)
             }, "events per second")
+
+            const hadEvents = this.relevantEventCounter > 0
             this.eventCounter = 0
             this.relevantEventCounter = 0
-            this.lastLog = new Date()
+            this.lastLog = date
+
+            if(hadEvents){
+                this.ctx.logger.pino.info("updating last mirror event timestamp")
+                await updateTimestamp(this.ctx, `last-mirror-event-${this.ctx.mirrorId}`, date)
+            }
         }
     }
 
@@ -109,7 +119,7 @@ export class MirrorMachine {
 
         const c = e as CommitEvent
 
-        this.logEventsPerSecond()
+        await this.logEventsPerSecond()
         this.eventCounter ++
 
         if(isCAProfile(c.commit.collection) && c.commit.rkey == "self"){
@@ -158,7 +168,6 @@ export class MirrorMachine {
     }
 
     async processEvent(ctx: AppContext, e: JetstreamEvent, inCA: boolean) {
-        this.relevantEventCounter++
         const mirrorStatus = await ctx.redisCache.mirrorStatus.get(e.did, inCA)
 
         if(e.kind == "commit"){
@@ -187,7 +196,7 @@ export class MirrorMachine {
                 handleOrDid: e.did,
                 collectionsMustUpdate: inCA ? undefined : ["app.bsky.graph.follow"]
             },
-                inCA ? 5 : 10
+                inCA ? 5 : 15
             )
         } else if(mirrorStatus == "InProcess"){
             await addPendingEvent(ctx, e.did, e)
@@ -202,5 +211,6 @@ export class MirrorMachine {
         } else if(mirrorStatus == "Failed - Too Large"){
             this.tooLargeUsers.add(e.did)
         }
+        this.relevantEventCounter++
     }
 }

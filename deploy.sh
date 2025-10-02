@@ -13,8 +13,6 @@ echo_blue "deploying env ${ENV}"
 echo_blue "creating directory..."
 ssh $SERVER_USER@$SERVER_IP "mkdir -p $APP_PATH"
 
-export NEXT_PUBLIC_BACKEND_URL="https://api.cabildoabierto.ar"
-
 echo_blue "building locally..."
 npm run build
 
@@ -59,5 +57,6 @@ echo_blue "restarting pm2..."
 ssh $SERVER_USER@$SERVER_IP "
   export PATH=/root/.nvm/versions/node/v22.19.0/bin:\$PATH &&
   cd $APP_PATH &&
-  pm2 restart ecosystem.config.js --env production
+  pm2 startOrReload ecosystem.config.js --env production
+  pm2 save
 "

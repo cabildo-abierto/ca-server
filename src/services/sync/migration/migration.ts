@@ -53,18 +53,18 @@ export const migrateToCA: CAHandler<MigrateToCAProps, {credentials: Credentials}
         identifier: newHandle,
         password: newPassword,
     })
-    console.log("Account created!")
+    ctx.logger.pino.info("Account created!")
 
     // Migrate Data
     // ------------------
 
-    console.log("Migrating records...")
+    ctx.logger.pino.info("Migrating records...")
     const repoRes = await agent.bsky.com.atproto.sync.getRepo({ did: accountDid })
     await newAgent.com.atproto.repo.importRepo(repoRes.data, {
         encoding: 'application/vnd.ipld.car',
     })
 
-    console.log("Migrating blobs...")
+    ctx.logger.pino.info("Migrating blobs...")
     let blobCursor: string | undefined = undefined
     do {
         const listedBlobs = await agent.bsky.com.atproto.sync.listBlobs({
@@ -83,7 +83,7 @@ export const migrateToCA: CAHandler<MigrateToCAProps, {credentials: Credentials}
         blobCursor = listedBlobs.data.cursor
     } while (blobCursor)
 
-    console.log("Migrating preferences...")
+    ctx.logger.pino.info("Migrating preferences...")
     const prefs = await agent.bsky.app.bsky.actor.getPreferences()
     await newAgent.app.bsky.actor.putPreferences(prefs.data)
 
@@ -91,7 +91,7 @@ export const migrateToCA: CAHandler<MigrateToCAProps, {credentials: Credentials}
     // Migrate Identity
     // ------------------
 
-    console.log("Migrating identity...")
+    ctx.logger.pino.info("Migrating identity...")
     const ui8 = require('uint8arrays')
     const recoveryKey = await Secp256k1Keypair.create({ exportable: true })
     const privateKeyBytes = await recoveryKey.export()
@@ -105,7 +105,7 @@ export const migrateToCA: CAHandler<MigrateToCAProps, {credentials: Credentials}
         throw new Error('No rotation key provided')
     }
 
-    console.log(
+    ctx.logger.pino.info(
         `❗ Tu clave de recuperación es: ${privateKey}. Por favor, guardala en un lugar seguro. ❗`,
     )
 

@@ -15,7 +15,7 @@ export const updateTopicContributionsHandler: CAHandler<{
     params: { id: string }
 }, {}> = async (ctx, agent, {params}) => {
     const {id} = params
-    await ctx.worker?.addJob(`update-topic-contributions`, {topicIds: [id]})
+    await ctx.worker?.addJob(`update-topic-contributions`, [id])
     return {data: {}}
 }
 

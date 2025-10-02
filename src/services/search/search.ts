@@ -2,7 +2,6 @@ import {CAHandlerNoAuth} from "#/utils/handler";
 import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {unique} from "#/utils/arrays";
 import {cleanText} from "#/utils/strings";
 import {TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {AppContext} from "#/setup";
@@ -14,7 +13,7 @@ import {$Typed} from "@atproto/api";
 import {sql} from "kysely";
 
 
-export async function searchUsersInCA(ctx: AppContext, query: string, dataplane: Dataplane): Promise<string[]> {
+export async function searchUsersInCA(ctx: AppContext, query: string, dataplane: Dataplane, limit: number): Promise<string[]> {
     const MIN_SIMILARITY_THRESHOLD = 0.1
 
     let users = await ctx.kysely
@@ -33,15 +32,15 @@ export async function searchUsersInCA(ctx: AppContext, query: string, dataplane:
             eb(sql<number>`similarity(${eb.ref('User.handle')}::text, ${eb.val(query)}::text)`, ">=", MIN_SIMILARITY_THRESHOLD)
         ]))
         .orderBy("match_score desc")
-        .limit(25)
+        .limit(limit)
         .execute()
 
     return users.map(a => a.did)
 }
 
 
-export async function searchUsersInBsky(agent: Agent, query: string, dataplane: Dataplane): Promise<string[]> {
-    const {data} = await agent.bsky.app.bsky.actor.searchActorsTypeahead({q: query})
+export async function searchUsersInBsky(agent: Agent, query: string, dataplane: Dataplane, limit: number): Promise<string[]> {
+    const {data} = await agent.bsky.app.bsky.actor.searchActorsTypeahead({q: query, limit})
 
     dataplane.bskyBasicUsers = joinMaps(
         dataplane.bskyBasicUsers,
@@ -55,30 +54,37 @@ export async function searchUsersInBsky(agent: Agent, query: string, dataplane: 
 
 
 export const searchUsers: CAHandlerNoAuth<{
-    params: { query: string }
-}, CAProfileViewBasic[]> = async (ctx, agent, {params}) => {
-    const {query} = params
+    params: { query: string }, query?: {limit?: number}
+}, CAProfileViewBasic[]> = async (ctx, agent, {params, query}) => {
+    const {query: searchQuery} = params
+    const limit = query?.limit ?? 25
 
     const dataplane = new Dataplane(ctx, agent)
 
     const t1 = Date.now()
     let [caSearchResults, bskySearchResults] = await Promise.all([
-        searchUsersInCA(ctx, query, dataplane),
-        searchUsersInBsky(agent, query, dataplane)
+        searchUsersInCA(ctx, searchQuery, dataplane, limit),
+        searchUsersInBsky(agent, searchQuery, dataplane, limit)
     ])
     const t2 = Date.now()
 
-    const userList = unique([
-        ...caSearchResults,
-        ...bskySearchResults
-    ]).slice(0, 25)
+    let usersList: string[] = []
+    for(let i = 0; i < limit; i++){
+        if(caSearchResults.length > i){
+            if(!usersList.includes(caSearchResults[i])) usersList.push(caSearchResults[i])
+        }
+        if(bskySearchResults.length > i) {
+            if(!usersList.includes(bskySearchResults[i])) usersList.push(bskySearchResults[i])
+        }
+    }
+    usersList = usersList.slice(0, limit)
 
-    await dataplane.fetchUsersHydrationData(userList)
+    await dataplane.fetchProfileViewHydrationData(usersList)
     const t3 = Date.now()
 
-    ctx.logger.logTimes(`search users ${query}`, [t1, t2, t3])
+    ctx.logger.logTimes(`search users ${searchQuery}`, [t1, t2, t3])
 
-    const users = userList.map(did => hydrateProfileViewBasic(ctx, did, dataplane))
+    const users = usersList.map(did => hydrateProfileViewBasic(ctx, did, dataplane))
 
     return {data: users.filter(x => x != null)}
 }

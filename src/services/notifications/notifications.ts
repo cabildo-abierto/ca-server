@@ -33,7 +33,7 @@ function hydrateCANotification(ctx: AppContext, id: string, dataplane: Dataplane
         return null
     }
 
-    if(!data.cid) {
+    if (!data.cid) {
         console.log(`No cid for notification: ${id}`)
         return null
     }
@@ -80,23 +80,22 @@ export type NotificationsSkeleton = {
 }[]
 
 
-
 async function getCANotifications(ctx: AppContext, agent: SessionAgent): Promise<ArCabildoabiertoNotificationListNotifications.Notification[]> {
     const dataplane = new Dataplane(ctx, agent)
 
     const [skeleton, lastSeen] = await Promise.all([
         ctx.kysely
-        .selectFrom("Notification")
-        .innerJoin("Record", "Notification.causedByRecordId", "Record.uri")
-        .select([
-            "Notification.id",
-            "Notification.causedByRecordId",
-            "Notification.reasonSubject"
-        ])
-        .where("Notification.userNotifiedId", "=", agent.did)
-        .orderBy("Notification.created_at", "desc")
-        .limit(20)
-        .execute(),
+            .selectFrom("Notification")
+            .innerJoin("Record", "Notification.causedByRecordId", "Record.uri")
+            .select([
+                "Notification.id",
+                "Notification.causedByRecordId",
+                "Notification.reasonSubject"
+            ])
+            .where("Notification.userNotifiedId", "=", agent.did)
+            .orderBy("Notification.created_at", "desc")
+            .limit(20)
+            .execute(),
         ctx.kysely
             .selectFrom("User")
             .select("lastSeenNotifications")
@@ -164,7 +163,7 @@ export const getUnreadNotificationsCount: CAHandler<{}, number> = async (ctx, ag
 
     const result = await ctx.kysely
         .selectFrom('Notification')
-        .select(({ fn }) => [fn.count('id').as('count')])
+        .select(({fn}) => [fn.count('id').as('count')])
         .where('userNotifiedId', '=', agent.did)
         .where('created_at', '>', (eb) =>
             eb
@@ -176,120 +175,122 @@ export const getUnreadNotificationsCount: CAHandler<{}, number> = async (ctx, ag
 
     const caUnreadCount = Number(result?.count ?? 0)
 
-    return {data: data.count+caUnreadCount}
+    return {data: data.count + caUnreadCount}
 }
 
 
-export type NotificationBatchData = {
-    uris: string[]
-    topics: string[]
-} & ({
-    subjectUris: string[]
-    type: "TopicVersionVote"
-} | {
-    type: "TopicEdit"
-})
+export type NotificationJobData = (Omit<FullNotification, "type"> & {type: "Mention" | "Reply"}) | TopicVersionVoteNotification | TopicEditNotification
 
 
-export type NotificationJobData = {
+type FullNotification = {
     userNotifiedId: string
     type: NotificationType
     causedByRecordId: string
     message?: string
     moreContext?: string
-    createdAt: string
+    created_at: Date
     reasonSubject?: string
 }
 
+type TopicVersionVoteNotification = {
+    type: "TopicVersionVote"
+    uri: string
+    subjectId: string
+    topic: string
+}
 
-export const createNotificationJob = async (ctx: AppContext, data: NotificationJobData) => {
-    await ctx.kysely
-        .insertInto("Notification")
-        .values([{
-            id: uuidv4(),
-            userNotifiedId: data.userNotifiedId,
-            type: data.type,
-            causedByRecordId: data.causedByRecordId,
-            message: data.message,
-            moreContext: data.moreContext,
-            created_at: data.createdAt,
-            reasonSubject: data.reasonSubject
-        }])
-        .onConflict(cb => cb.doNothing())
-        .execute()
+type TopicEditNotification = {
+    type: "TopicEdit"
+    uri: string
 }
 
 
-export const createNotificationsBatchJob = async (ctx: AppContext, data: NotificationBatchData) => {
-    if(data.type == "TopicEdit") {
-        if(data.uris.length == 0) return
-        let relatedUris = await ctx.kysely
-            .with('InputVersions', (qb) =>
-                qb
-                    .selectFrom('TopicVersion')
-                    .innerJoin("Record", "Record.uri", "TopicVersion.uri")
-                    .select(['Record.uri', 'topicId', "Record.created_at"])
-                    .where('Record.uri', 'in', data.uris)
-            )
-            .selectFrom("InputVersions")
-            .innerJoin('TopicVersion as tv', 'InputVersions.topicId', 'tv.topicId')
-            .innerJoin("Record as tvRecord", "tvRecord.uri", "InputVersions.uri")
-            .whereRef("InputVersions.created_at", ">", "tvRecord.created_at")
-            .select([
-                'InputVersions.uri as causeUri',
-                'tv.uri as notifiedVersionUri',
-                'tv.topicId as topicId',
-            ])
-            .execute()
+async function getTopicEditsFullNotifications(ctx: AppContext, data: TopicEditNotification[]): Promise<FullNotification[]> {
+    if (data.length == 0) return []
 
-        // no notificamos dos veces a un usuario que editó dos veces el mismo tema
-        relatedUris = unique(relatedUris, e => `${e.causeUri}:${getDidFromUri(e.notifiedVersionUri)}`)
-
-        // no notificamos al usuario que editó
-        relatedUris = relatedUris.filter(e => getDidFromUri(e.notifiedVersionUri) != getDidFromUri(e.causeUri))
-
-        const values = relatedUris.map((v, i) => {
-            return {
-                id: uuidv4(),
-                created_at: new Date().toISOString(),
-                type: data.type,
-                causedByRecordId: v.causeUri,
-                reasonSubject: v.topicId,
-                userNotifiedId: getDidFromUri(v.notifiedVersionUri)
-            }
-        })
-
-        if(values.length > 0){
-            await ctx.kysely
-                .insertInto("Notification")
-                .values(values)
-                .onConflict(cb => cb.doNothing())
-                .execute()
-        }
-    } else if(data.type == "TopicVersionVote") {
-        let values = data.uris.map((uri, i) => {
-            return {
-                id: uuidv4(),
-                created_at: new Date().toISOString(),
-                type: data.type,
-                causedByRecordId: uri,
-                reasonSubject: data.topics[i],
-                userNotifiedId: getDidFromUri(data.subjectUris[i])
-            }
-        })
-
-        values = values.filter(v =>
-            getDidFromUri(v.causedByRecordId) != v.userNotifiedId
+    let relatedUris = await ctx.kysely
+        .with('InputVersions', (qb) =>
+            qb
+                .selectFrom('TopicVersion')
+                .innerJoin("Record", "Record.uri", "TopicVersion.uri")
+                .select(['Record.uri', 'topicId', "Record.created_at"])
+                .where('Record.uri', 'in', data.map(d => d.uri))
         )
+        .selectFrom("InputVersions")
+        .innerJoin('TopicVersion as tv', 'InputVersions.topicId', 'tv.topicId')
+        .innerJoin("Record as tvRecord", "tvRecord.uri", "InputVersions.uri")
+        .whereRef("InputVersions.created_at", ">", "tvRecord.created_at")
+        .select([
+            'InputVersions.uri as causeUri',
+            'tv.uri as notifiedVersionUri',
+            'tv.topicId as topicId',
+        ])
+        .execute()
 
-        values = unique(values, v => `${v.userNotifiedId}:${v.causedByRecordId}`)
+    // no notificamos dos veces a un usuario que editó dos veces el mismo tema
+    relatedUris = unique(relatedUris, e => `${e.causeUri}:${getDidFromUri(e.notifiedVersionUri)}`)
 
-        if(values.length > 0){
-            await ctx.kysely
-                .insertInto("Notification")
-                .values(values)
-                .onConflict(cb => cb.doNothing())
-                .execute()
+    // no notificamos al usuario que editó
+    relatedUris = relatedUris.filter(e => getDidFromUri(e.notifiedVersionUri) != getDidFromUri(e.causeUri))
+
+    return relatedUris.map((v, i) => {
+        return {
+            created_at: new Date(),
+            type: "TopicEdit",
+            causedByRecordId: v.causeUri,
+            reasonSubject: v.topicId,
+            userNotifiedId: getDidFromUri(v.notifiedVersionUri)
         }
+    })
+}
+
+
+async function getTopicVersionVoteFullNotifications(ctx: AppContext, data: TopicVersionVoteNotification[]): Promise<FullNotification[]> {
+    if (data.length == 0) return []
+
+    let notifications: FullNotification[] = data.map((d, i) => {
+        return {
+            created_at: new Date(),
+            type: "TopicVersionVote",
+            causedByRecordId: d.uri,
+            reasonSubject: d.topic,
+            userNotifiedId: getDidFromUri(d.subjectId)
+        }
+    })
+
+    notifications = notifications.filter(v =>
+        getDidFromUri(v.causedByRecordId) != v.userNotifiedId
+    )
+
+    return notifications
+}
+
+
+async function createFullNotifications(ctx: AppContext, data: FullNotification[]) {
+    data = unique(data, v => `${v.userNotifiedId}:${v.causedByRecordId}`)
+
+    if(data.length > 0){
+        await ctx.kysely
+            .insertInto("Notification")
+            .values(data.map(d => ({
+                id: uuidv4(),
+                ...d
+            })))
+            .onConflict(cb => cb.doNothing())
+            .execute()
     }
+}
+
+
+export const createNotificationsJob = async (ctx: AppContext, data: NotificationJobData[]) => {
+    const topicEdits = await getTopicEditsFullNotifications(ctx, data.filter(d => d.type == "TopicEdit"))
+    const topicVersionVotes = await getTopicVersionVoteFullNotifications(ctx, data.filter(d => d.type == "TopicVersionVote"))
+
+    const fullNotifications = [
+        ...topicEdits,
+        ...topicVersionVotes,
+        ...data.filter(d => d.type != "TopicVersionVote" && d.type != "TopicEdit")
+    ]
+
+    await createFullNotifications(ctx, fullNotifications)
 }

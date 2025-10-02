@@ -8,7 +8,7 @@ import {redisCacheTTL} from "#/services/wiki/topics";
 import {imageSize} from "image-size";
 
 
-export async function getServiceEndpointForDid(did: string){
+export async function getServiceEndpointForDid(ctx: AppContext, did: string){
     try {
         const didres: DidResolver = new DidResolver({})
         const doc = await didres.resolve(did)
@@ -16,31 +16,21 @@ export async function getServiceEndpointForDid(did: string){
             return doc.service[0].serviceEndpoint
         }
     } catch (e) {
-        console.error("Error getting service endpoint", e)
+        ctx.logger.pino.error({error: e}, "error getting service endpoint")
         return null
     }
     return null
 }
 
 
-export async function getBlobUrl(blob: {cid: string, authorId: string}){
-    let serviceEndpoint = await getServiceEndpointForDid(blob.authorId)
-
-    if(serviceEndpoint && serviceEndpoint.toString() != "undefined"){
-        return serviceEndpoint + "/xrpc/com.atproto.sync.getBlob?did=" + blob.authorId + "&cid=" + blob.cid
-    }
-    return null
-}
-
-
-export async function fetchBlob(blob: {cid: string, authorId: string}) {
-    let serviceEndpoint = await getServiceEndpointForDid(blob.authorId)
+export async function fetchBlob(ctx: AppContext, blob: {cid: string, authorId: string}) {
+    let serviceEndpoint = await getServiceEndpointForDid(ctx, blob.authorId)
     if (serviceEndpoint) {
         const url = serviceEndpoint + "/xrpc/com.atproto.sync.getBlob?did=" + blob.authorId + "&cid=" + blob.cid
         try {
             return await fetch(url)
         } catch {
-            console.error("Couldn't fetch blob", blob.cid, blob.authorId)
+            ctx.logger.pino.error({blob}, "couldn't fetch blob")
             return null
         }
     }
@@ -48,12 +38,12 @@ export async function fetchBlob(blob: {cid: string, authorId: string}) {
 }
 
 
-export async function fetchTextBlob(ref: {cid: string, authorId: string}, retries: number = 0) {
-    const res = await fetchBlob(ref)
+export async function fetchTextBlob(ctx: AppContext, ref: {cid: string, authorId: string}, retries: number = 0) {
+    const res = await fetchBlob(ctx, ref)
     if(!res || res.status != 200) {
         if(retries > 0) {
-            console.log(`Retrying... (${retries-1} retries left)`)
-            return fetchTextBlob(ref, retries - 1)
+            ctx.logger.pino.warn({retriesLeft: retries-1}, "retrying fetch text blob")
+            return fetchTextBlob(ctx, ref, retries - 1)
         } else {
             return null
         }
@@ -72,7 +62,7 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
         blobContents = await ctx.ioredis.mget(keys)
     } catch (err) {
         if(err instanceof Error){
-            console.log("Error fetching text blobs from redis", err.message)
+            ctx.logger.pino.error({err: err.message}, "error fetching text blobs from redis")
         }
         blobContents = keys.map(k => null)
     }
@@ -84,14 +74,14 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
         }
     }
 
-    const res = await Promise.all(pending.map(p => fetchTextBlob(p.blob, retries)))
+    const res = await Promise.all(pending.map(p => fetchTextBlob(ctx, p.blob, retries)))
 
     for(let i = 0; i < pending.length; i++) {
         const r = res[i]
         if (r) {
             blobContents[pending[i].i] = r
         } else {
-            console.log("Warning: Couldn't find blob:", pending[i].blob)
+            ctx.logger.pino.warn({blob: pending[i].blob}, "couldn't find blob")
         }
     }
 

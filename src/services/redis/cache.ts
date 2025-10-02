@@ -1,7 +1,6 @@
 import Redis from "ioredis"
 import {getCollectionFromUri, getDidFromUri, isCAProfile, isFollow, splitUri} from "#/utils/uri";
 import {unique} from "#/utils/arrays";
-import {formatIsoDate} from "#/utils/dates";
 import {FollowingFeedSkeletonElement} from "#/services/feed/inicio/following";
 import {CAHandler} from "#/utils/handler";
 import {Logger} from "#/utils/logger";
@@ -9,6 +8,7 @@ import { ArCabildoabiertoActorDefs } from "#/lex-api";
 import {RefAndRecord} from "#/services/sync/types";
 import {AppBskyGraphFollow} from "@atproto/api";
 import {NextMeeting} from "#/services/admin/meetings";
+import {AppContext} from "#/setup";
 
 
 class CacheKey {
@@ -44,6 +44,10 @@ class CacheKey {
 
     buildKey(params: string[]) {
         return params.join(":")
+    }
+
+    async clear() {
+
     }
 }
 
@@ -131,6 +135,10 @@ class ProfileCacheKey extends CacheKey {
             await this.del(did)
         }
     }
+
+    async clear() {
+        await this.cache.deleteByPrefix("profile-detailed")
+    }
 }
 
 
@@ -144,6 +152,10 @@ export class FollowingFeedSkeletonKey extends CacheKey {
 
     key(did: string) {
         return this.buildKey(["following-feed-skeleton", did, ...this.params])
+    }
+
+    async clear() {
+        await this.cache.deleteByPrefix("following-feed-skeleton")
     }
 
     async get(did: string, score: number | null, limit: number): Promise<string[]> {
@@ -192,6 +204,10 @@ class CAFollowsCacheKey extends CacheKey {
         return `ca-follows:${did}`
     }
 
+    async clear() {
+        await this.cache.deleteByPrefix("ca-follows")
+    }
+
     async get(did: string): Promise<string[] | null> {
         const cached = await this.cache.redis.get(this.key(did));
         if (cached) {
@@ -237,6 +253,10 @@ class FollowSuggestionsDirtyCacheKey extends CacheKey {
         await this.cache.redis.srem("follow-suggestions-dirty", did)
     }
 
+    async clear() {
+        // TO DO no se limpia. Probablemente esto no debería estar en Redis.
+    }
+
     async onEvent(e: RedisEvent, params: string[]) {
         if(params.length == 1){
             const did = params[0]
@@ -250,7 +270,6 @@ class FollowSuggestionsDirtyCacheKey extends CacheKey {
 
     async getDirty() {
         const dirty = await this.cache.redis.smembers("follow-suggestions-dirty")
-        this.cache.logger.pino.info({dirty}, "dirty")
         const requested = new Set((await this.cache.getKeysByPrefix(`follow-suggestions:`)).map(k => k.replace("follow-suggestions:", "")))
 
         return dirty.filter(did => requested.has(did))
@@ -268,37 +287,15 @@ class FollowSuggestionsCacheKey extends CacheKey {
         return `follow-suggestions:${did}`
     }
 
+    async clear() {
+        // TO DO no se limpia. Probablemente esto no debería estar en Redis.
+    }
+
     async set(did: string, dids: string[]) {
         await this.cache.redis.set(
             this.key(did),
             JSON.stringify(dids)
         )
-    }
-}
-
-
-class TimestampKey extends CacheKey {
-    key: string
-    defaultValue: Date
-
-    constructor(cache: RedisCache, key: string, defaultValue: Date = new Date(0)) {
-        super(cache)
-        this.key = key
-        this.defaultValue = defaultValue
-    }
-
-    async get(): Promise<Date> {
-        const cur = await this.cache.redis.get(this.key)
-        return cur ? new Date(cur) : this.defaultValue
-    }
-
-    async set(date: Date) {
-        console.log(`Set ${this.key} to`, formatIsoDate(date))
-        await this.cache.redis.set(this.key, date.toISOString())
-    }
-
-    async restart() {
-        await this.set(new Date(0))
     }
 }
 
@@ -367,8 +364,6 @@ export class RedisCache {
     followSuggestions: FollowSuggestionsCacheKey
     CAFollows: CAFollowsCacheKey
     mirrorStatus: MirrorStatusCacheKey
-    lastReferencesUpdate: TimestampKey
-    lastTopicInteractionsUpdate: TimestampKey
     followingFeedSkeletonCAAll: FollowingFeedSkeletonKey
     followingFeedSkeletonCAArticles: FollowingFeedSkeletonKey
     profile: ProfileCacheKey
@@ -379,8 +374,6 @@ export class RedisCache {
         this.followSuggestions = new FollowSuggestionsCacheKey(this)
         this.followSuggestionsDirty = new FollowSuggestionsDirtyCacheKey(this)
         this.mirrorStatus = new MirrorStatusCacheKey(this, mirrorId)
-        this.lastReferencesUpdate = new TimestampKey(this, "last-references-update", new Date(0))
-        this.lastTopicInteractionsUpdate = new TimestampKey(this, "last-topic-interactions-update", new Date(0))
         this.CAFollows = new CAFollowsCacheKey(this)
         this.followingFeedSkeletonCAAll = new FollowingFeedSkeletonKey(this, ["ca-all"])
         this.followingFeedSkeletonCAArticles = new FollowingFeedSkeletonKey(this, ["ca-articles"])
@@ -447,10 +440,28 @@ export class RedisCache {
 
         await pipeline.exec()
     }
+
+    async clear() {
+        const toClear = [
+            this.profile,
+            this.CAFollows,
+            this.followingFeedSkeletonCAAll,
+            this.followingFeedSkeletonCAArticles,
+        ]
+
+        for (const k of toClear) {
+            await k.clear()
+        }
+    }
 }
 
 export const clearRedisHandler: CAHandler<{ params: { prefix: string } }, {}> = async (ctx, agent, {params}) => {
     console.log("Clearing redis prefix", params.prefix)
     await ctx.redisCache.deleteByPrefix(params.prefix)
     return {data: {}}
+}
+
+
+export async function clearAllRedis(ctx: AppContext) {
+    await ctx.redisCache.clear()
 }

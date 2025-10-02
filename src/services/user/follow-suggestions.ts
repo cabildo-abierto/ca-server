@@ -1,7 +1,7 @@
-import {ProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
+import {ProfileView} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {CAHandler} from "#/utils/handler";
-import {hydrateProfileViewBasic} from "#/services/hydration/profile";
+import {hydrateProfileView} from "#/services/hydration/profile";
 import {sql} from "kysely";
 import {AppContext} from "#/setup";
 import {v4 as uuidv4} from 'uuid'
@@ -130,7 +130,7 @@ export async function getFollowSuggestionsToAvoid(ctx: AppContext, did: string) 
 }
 
 
-export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: string}}, {profiles: ProfileViewBasic[], cursor?: string}> = async (ctx, agent, {params}) =>  {
+export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: string}}, {profiles: ProfileView[], cursor?: string}> = async (ctx, agent, {params}) =>  {
     const t1 = Date.now()
     const [ranking, avoid] = await Promise.all([
         getRecommendationRankingForUser(ctx, agent.did),
@@ -153,12 +153,12 @@ export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: s
     }
 
     const dataplane = new Dataplane(ctx, agent)
-    await dataplane.fetchUsersHydrationData(dids)
+    await dataplane.fetchProfileViewHydrationData(dids)
     const t3 = Date.now()
     ctx.logger.logTimes("follow suggestions", [t1, t2, t3])
 
     const profiles = dids
-        .map(d => hydrateProfileViewBasic(ctx, d, dataplane))
+        .map(d => hydrateProfileView(ctx, d, dataplane))
         .filter(x => x != null)
 
     const cursor = nextIndex >= ranking.length ? undefined : nextIndex.toString()
@@ -171,7 +171,7 @@ export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: s
 }
 
 
-export const setNotInterested: CAHandler<{params: {subject: string}}, {}> = async (ctx, agent, {params}) => {
+export const setNotInterested: CAHandler<{params: {subject: string}}> = async (ctx, agent, {params}) => {
     await ctx.kysely
         .insertInto("NotInterested")
         .values([{
@@ -189,20 +189,19 @@ export const setNotInterested: CAHandler<{params: {subject: string}}, {}> = asyn
 
 export async function updateFollowSuggestions(ctx: AppContext){
     let dids = await ctx.redisCache.followSuggestionsDirty.getDirty()
-    console.log(`${dids.length} follow suggestions to update`)
 
     const caUsers = new Set(await getCAUsersDids(ctx))
 
     dids = dids.filter(d => caUsers.has(d))
+    ctx.logger.pino.info({count: dids.length}, `updating follow suggestions`)
 
     for(let i = 0; i < dids.length; i++) {
         const did = dids[i]
-        console.log(`updating follow-suggestions ${i} of ${dids.length}: ${did}`)
         const t1 = Date.now()
         await ctx.redisCache.onEvent("follow-suggestions-ready", [did])
         const t2 = Date.now()
         await getRecommendationRankingForUser(ctx, did, true)
         const t3 = Date.now()
-        ctx.logger.logTimes(`updated follow-suggestions ${i}`, [t1, t2, t3])
+        ctx.logger.logTimes(`updated follow-suggestions`, [t1, t2, t3], {i, total: dids.length, did})
     }
 }

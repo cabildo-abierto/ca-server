@@ -23,8 +23,6 @@ export const env = cleanEnv(process.env, {
 
   DATABASE_URL: str(),
   DIRECT_URL: str(),
-  MAX_APP_CPUS: num({devDefault: 1}),
-  MAX_WORKER_CPUS: num({devDefault: 1}),
   MAX_REPO_MBS: num({devDefault: 300}),
   MAX_CONNECTIONS: num({devDefault: 2}),
   RUN_CRONS: bool({devDefault: false}),

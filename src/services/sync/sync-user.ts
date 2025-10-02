@@ -66,7 +66,7 @@ export class RepoSync {
         ctx.logger.pino.info(`${did} collections to sync: ${this.collections.join(", ")}`)
 
         const t3 = Date.now()
-        const doc = await getServiceEndpointForDid(did)
+        const doc = await getServiceEndpointForDid(ctx, did)
         if (typeof doc != "string") {
             await ctx.redisCache.mirrorStatus.set(did, "Failed", inCA)
             return

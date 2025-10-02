@@ -91,7 +91,7 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
                 }
             ]
 
-            const author = dbUserToProfileViewBasic(v)
+            const author = dbUserToProfileViewBasic(v) // TO DO: Usar el dataplane
             if (!author) return null
 
             const status: TopicVersionStatus = {

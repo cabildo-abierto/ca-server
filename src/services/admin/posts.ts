@@ -7,7 +7,7 @@ export async function updatePostLangs(ctx: AppContext) {
     let curOffset = 0
 
     while(true){
-        console.log("Updating post langs batch", curOffset)
+        ctx.logger.pino.info({offset: curOffset}, "updating post langs batch")
         const res = await ctx.kysely
             .selectFrom("Record")
             .where("Record.collection", "=", "app.bsky.feed.post")
