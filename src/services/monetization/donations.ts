@@ -2,7 +2,7 @@ import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import MercadoPagoConfig, {Preference} from "mercadopago";
 import {AppContext} from "#/setup";
 import {getUsersWithReadSessions, UserWithReadSessions} from "#/services/monetization/user-months";
-import {count} from "#/utils/arrays";
+import {count, max} from "#/utils/arrays";
 import {v4 as uuidv4} from "uuid";
 import {env} from "#/lib/env";
 
@@ -40,10 +40,16 @@ export function getMonthlyValue() {
 }
 
 
-export function isWeeklyActiveUser(u: UserWithReadSessions, at: Date = new Date()): boolean {
+export function isWeeklyActiveUser(ctx: AppContext, u: UserWithReadSessions, at: Date = new Date()): boolean {
     const lastWeekStart = new Date(at.getTime() - 1000 * 3600 * 24 * 7)
+    ctx.logger.pino.info({
+        lastWeekStart,
+        handle: u.handle,
+        sess: max(u.readSessions.map(r => r.created_at), x => new Date(x).getTime())
+    }, "isWA?")
     const recentSessions = u.readSessions
-        .filter(x => x.created_at > lastWeekStart && x.created_at < at)
+        .filter(x => new Date(x.created_at) > lastWeekStart && new Date(x.created_at) < at)
+
     return recentSessions.length > 0
 }
 

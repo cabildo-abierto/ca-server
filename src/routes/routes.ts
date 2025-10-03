@@ -112,7 +112,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get(
         '/profile-feed/:handleOrDid/:kind',
-        handler(makeHandler(ctx, getProfileFeed))
+        handler(makeHandlerNoAuth(ctx, getProfileFeed))
     )
 
     router.post(

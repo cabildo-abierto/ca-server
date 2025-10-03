@@ -90,7 +90,6 @@ export async function getUsersWithReadSessions(
                         "monthEnd"
                     ])
                     .orderBy("monthStart desc")
-                    .limit(1)
                 ).as("months"),
                 eb => jsonArrayFrom(eb
                     .selectFrom("ReadSession")
@@ -102,7 +101,6 @@ export async function getUsersWithReadSessions(
                     ])
                     .where("created_at", ">", after)
                     .orderBy("created_at asc")
-                    .limit(1)
                 ).as("readSessions")
             ])
             .where("User.inCA", "=", true)

@@ -2,7 +2,6 @@ import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
 import got from 'got';
 import * as cheerio from 'cheerio';
 import {getUri, isArticle, isDataset, isPost} from "#/utils/uri";
-import {getArticleSummary} from "#/services/hydration/hydrate";
 
 const getContent = async (url: string): Promise<Partial<Metadata>> => {
     const {body: html} = await got(url);
@@ -68,16 +67,12 @@ export const getContentMetadata: CAHandlerNoAuth<{
         const article = await ctx.kysely
             .selectFrom("Article")
             .innerJoin("Record", "Record.uri", "Article.uri")
-            .innerJoin("Content", "Content.uri", "Article.uri")
             .innerJoin("User", "Record.authorId", "User.did")
-            .select(["title", "User.displayName", "User.handle", "Content.text", "Content.dbFormat"])
+            .select(["title", "User.handle"])
             .where("Record.uri", "=", uri)
             .execute()
 
-        const description = article[0].text ? getArticleSummary(
-            article[0].text,
-            article[0].dbFormat ?? undefined
-        ).summary : `Artículo de ${getUsername(article[0])}.`
+        const description = `Artículo de @${article[0].handle}.`
 
         if (article.length > 0) {
             return {
