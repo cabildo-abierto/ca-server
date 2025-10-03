@@ -2,7 +2,7 @@ import {max, unique} from "#/utils/arrays";
 import {TopicProp, TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {getUri} from "#/utils/uri";
 import {CAHandlerNoAuth} from "#/utils/handler";
-import {getTopicTitle} from "#/services/wiki/utils";
+import {getTopicCategories, getTopicTitle} from "#/services/wiki/utils";
 import {AppContext} from "#/setup";
 import {DB} from "../../../prisma/generated/types";
 import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard";
@@ -100,7 +100,7 @@ export const getTopicTitleHandler: CAHandlerNoAuth<{ params: { id: string } }, {
 }
 
 
-export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB> | AppContext["kysely"], topicIds: string[]) {
+export async function updateTopicsCurrentVersionBatch(ctx: AppContext, trx: Transaction<DB> | AppContext["kysely"], topicIds: string[]) {
     topicIds = unique(topicIds)
     if (topicIds.length == 0) return
 
@@ -113,6 +113,7 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB> | App
         currentVersionId: string | null
         accCharsAdded: number | null
         created_at: Date
+        props: unknown
     }
 
     let allVersions: VersionWithVotes[]
@@ -135,6 +136,7 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB> | App
                 "Topic.protection",
                 "User.editorStatus",
                 "accCharsAdded",
+                "TopicVersion.props",
                 eb => eb.fn.jsonAgg(
                     sql<{ uri: string; editorStatus: string }>`json_build_object
                     ('uri', "Reaction"."uri", 'editorStatus', "ReactionAuthor"."editorStatus")`
@@ -143,6 +145,7 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB> | App
             .where('TopicVersion.topicId', 'in', topicIds)
             .where('Record.cid', 'is not', null)
             .groupBy([
+                "TopicVersion.props",
                 "Record.created_at",
                 'TopicVersion.topicId',
                 "Topic.currentVersionId",
@@ -162,6 +165,8 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB> | App
     allVersions.forEach(version => {
         versionsByTopic.set(version.topicId, [...versionsByTopic.get(version.topicId) ?? [], version])
     })
+
+    const categoryUpdates: {id: string, categories: string[]}[] = []
 
     let lastEdit = new Date()
     let updates: {
@@ -210,28 +215,58 @@ export async function updateTopicsCurrentVersionBatch(trx: Transaction<DB> | App
                         currentVersionId: newCurrentVersion,
                         lastEdit
                     })
+                    categoryUpdates.push({
+                        id,
+                        categories: getTopicCategories(versions[currentVersion].props as TopicProp[])
+                    })
                 }
             }
         }
     }
 
-    if (updates.length == 0) {
-        return
+    if (updates.length > 0) {
+        try {
+            await trx
+                .insertInto("Topic")
+                .values(updates.map(u => ({...u, synonyms: []})))
+                .onConflict((oc) =>
+                    oc.column("id").doUpdateSet({
+                        currentVersionId: (eb) => eb.ref('excluded.currentVersionId'),
+                        lastEdit: (eb) => eb.ref('excluded.lastEdit')
+                    })
+                )
+                .execute()
+        } catch (err) {
+            ctx.logger.pino.error({error: err}, "Error updating topics current version")
+        }
     }
 
-    try {
-        await trx
-            .insertInto("Topic")
-            .values(updates.map(u => ({...u, synonyms: []})))
-            .onConflict((oc) =>
-                oc.column("id").doUpdateSet({
-                    currentVersionId: (eb) => eb.ref('excluded.currentVersionId'),
-                    lastEdit: (eb) => eb.ref('excluded.lastEdit')
-                })
-            )
-            .execute()
-    } catch (err) {
-        console.error("Error updating topics current version:", err)
+    if(categoryUpdates.length > 0) {
+        try {
+            const newCategories = categoryUpdates.flatMap(u => u.categories)
+            ctx.logger.pino.info({newCategories}, "new topic categories")
+            await trx
+                .insertInto("TopicCategory")
+                .values(newCategories.map(u => ({id: u})))
+                .onConflict(oc => oc.doNothing())
+                .execute()
+            const values: {topicId: string, categoryId: string}[] = []
+            categoryUpdates.forEach(c => {
+                values.push(...c.categories.map(cat => ({topicId: c.id, categoryId: cat})))
+            })
+            await trx.deleteFrom("TopicToCategory")
+                .where("topicId", "in", values.map(v => v.topicId))
+                .execute()
+            if(values.length > 0) {
+                await trx
+                    .insertInto("TopicToCategory")
+                    .values(values)
+                    .onConflict(oc => oc.doNothing())
+                    .execute()
+            }
+        } catch (err) {
+            ctx.logger.pino.error({error: err}, "Error updating categories with new topic current version")
+        }
     }
 }
 
@@ -242,9 +277,12 @@ export async function updateAllTopicsCurrentVersions(ctx: AppContext) {
 
     for (let i = 0; i < topics.length; i += batchSize) {
         console.log("Updating all topics current version", i)
-        await updateTopicsCurrentVersionBatch(
-            ctx.kysely,
-            topics.slice(i, i + batchSize).map(x => x.id)
-        )
+        await ctx.kysely.transaction().execute(async trx => {
+            await updateTopicsCurrentVersionBatch(
+                ctx,
+                trx,
+                topics.slice(i, i + batchSize).map(x => x.id)
+            )
+        })
     }
 }

@@ -350,6 +350,7 @@ model Topic {
   @@index([popularityScoreLastWeek(sort: Desc)])
 }
 
+// categoría de temas, con sus links con otras categorías para el grafo
 model TopicCategory {
   id                                                   String            @id
   CategoryLink_CategoryLink_idCategoryAToTopicCategory CategoryLink[]    @relation("CategoryLink_idCategoryAToTopicCategory")
@@ -373,6 +374,7 @@ model TopicInteraction {
   @@index([recordId])
 }
 
+// relación muchos a muchos entre temas y categorías
 model TopicToCategory {
   topicId       String
   categoryId    String

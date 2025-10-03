@@ -98,6 +98,7 @@ export async function getTopics(
         .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
         .innerJoin("Record", "TopicVersion.uri", "Record.uri")
         .innerJoin("Content", "Content.uri", "TopicVersion.uri")
+        .innerJoin("User", "User.did", "Record.authorId")
         .select([
             "id",
             "lastEdit",
@@ -121,6 +122,9 @@ export async function getTopics(
                 .whereRef("ReadSession.readContentId", "=", "TopicVersion.uri").as("lastRead")
             )
         ])
+        .where("Record.record", "is not", null)
+        .where("Record.cid", "is not", null)
+        .where("User.inCA", "=", true)
         .where(categories.includes("Sin categoría") ?
             stringListIsEmpty("Categorías") :
             (eb) =>
@@ -306,7 +310,7 @@ export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?:
 
     let uri: string
     if (!currentVersionId) {
-        console.log(`Warning: Current version not set for topic ${id}.`)
+        ctx.logger.pino.warn({id}, `Warning: Current version not set for topic.`)
         const history = await getTopicHistory(ctx, id, agent.hasSession() ? agent : undefined)
 
         if (!history) {
@@ -402,6 +406,7 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
         .executeTakeFirst()
 
     if (!topic || !topic.cid) {
+        ctx.logger.pino.info({uri, topic}, "topic version not found")
         return {error: "No se encontró la versión."}
     }
 

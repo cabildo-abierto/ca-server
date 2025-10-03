@@ -75,7 +75,7 @@ export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Re
                         .returning(["topicId", "TopicVersion.uri"])
                         .execute()
 
-                    await updateTopicsCurrentVersionBatch(trx, inserted.map(t => t.topicId))
+                    await updateTopicsCurrentVersionBatch(this.ctx, trx, inserted.map(t => t.topicId))
 
                     return inserted
                 } else {
@@ -148,6 +148,11 @@ export async function processDeleteTopicVersionsBatch(ctx: AppContext, uris: str
                 .execute()
 
             await trx
+                .deleteFrom("Notification")
+                .where("causedByRecordId", "in", uris)
+                .execute()
+
+            await trx
                 .deleteFrom("HasReacted")
                 .where("recordId", "in", uris)
                 .execute()
@@ -184,8 +189,7 @@ export async function processDeleteTopicVersionsBatch(ctx: AppContext, uris: str
                 .where("uri", "in", uris)
                 .execute()
 
-            console.log("updating topic current versions for", topicIds.map(t => t.id))
-            await updateTopicsCurrentVersionBatch(trx, topicIds.map(t => t.id))
+            await updateTopicsCurrentVersionBatch(ctx, trx, topicIds.map(t => t.id))
             await ctx.worker?.addJob("update-contents-topic-mentions", uris)
             await ctx.worker?.addJob("update-topic-mentions", topicIds.map(t => t.id))
         } catch (err) {

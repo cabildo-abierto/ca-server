@@ -110,7 +110,7 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
 
                 const topicIdsList = unique(topicVotes.map(t => t.topicId))
 
-                await updateTopicsCurrentVersionBatch(trx, topicIdsList)
+                await updateTopicsCurrentVersionBatch(this.ctx, trx, topicIdsList)
 
                 return {topicIdsList, topicVotes}
             }
@@ -263,7 +263,9 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
                     .execute()).map(t => t.topicId)
 
                 if (topicIds.length > 0) {
-                    await updateTopicsCurrentVersionBatch(db, topicIds)
+                    await db.transaction().execute(async trx => {
+                        await updateTopicsCurrentVersionBatch(this.ctx, trx, topicIds)
+                    })
                     return topicIds
                 }
             }
