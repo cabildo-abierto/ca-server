@@ -174,6 +174,8 @@ async function createMonthForUser(ctx: AppContext, user: UserWithReadSessions, v
             userId: user.did,
             monthStart,
             monthEnd,
+            monthStart_tz: monthStart,
+            monthEnd_tz: monthEnd,
             wasActive: active,
             value: active ? value : 0,
         }])

@@ -1,5 +1,4 @@
 import {AppBskyGraphFollow} from "@atproto/api"
-import {createUsersBatch, processRecordsBatch} from "#/services/sync/event-processing/record";
 import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
 import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
 import {RefAndRecord} from "#/services/sync/types";
@@ -9,10 +8,10 @@ import {RefAndRecord} from "#/services/sync/types";
 export class FollowRecordProcessor extends RecordProcessor<AppBskyGraphFollow.Record> {
     validateRecord = AppBskyGraphFollow.validateRecord
 
-    async addRecordsToDB(records: RefAndRecord<AppBskyGraphFollow.Record>[]) {
+    async addRecordsToDB(records: RefAndRecord<AppBskyGraphFollow.Record>[], reprocess: boolean = false) {
         await this.ctx.kysely.transaction().execute(async (trx) => {
-            await processRecordsBatch(trx, records)
-            await createUsersBatch(trx, records.map(r => r.record.subject))
+            await this.processRecordsBatch(trx, records)
+            await this.createUsersBatch(trx, records.map(r => r.record.subject))
 
             const follows = records.map(r => ({
                 uri: r.ref.uri,

@@ -1,4 +1,3 @@
-import {processRecordsBatch} from "#/services/sync/event-processing/record";
 import {processContentsBatch} from "#/services/sync/event-processing/content";
 import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
 import {getDidFromUri} from "#/utils/uri";
@@ -15,7 +14,7 @@ export class ArticleRecordProcessor extends RecordProcessor<Article.Record> {
 
     validateRecord = Article.validateRecord
 
-    async addRecordsToDB(records: {ref: ATProtoStrongRef, record: Article.Record}[]) {
+    async addRecordsToDB(records: {ref: ATProtoStrongRef, record: Article.Record}[], reprocess: boolean = false) {
         const contents: { ref: ATProtoStrongRef, record: SyncContentProps }[] = records.map(r => ({
             record: {
                 format: r.record.format,
@@ -35,7 +34,7 @@ export class ArticleRecordProcessor extends RecordProcessor<Article.Record> {
         }))
 
         await this.ctx.kysely.transaction().execute(async (trx) => {
-            await processRecordsBatch(trx, records)
+            await this.processRecordsBatch(trx, records)
             await processContentsBatch(trx, contents)
 
             await trx
@@ -50,7 +49,7 @@ export class ArticleRecordProcessor extends RecordProcessor<Article.Record> {
         })
 
         const authors = unique(records.map(r => getDidFromUri(r.ref.uri)))
-        await Promise.all([
+        if(!reprocess) await Promise.all([
             this.ctx.worker?.addJob("update-author-status", authors, 11),
             this.ctx.worker?.addJob("update-contents-topic-mentions", records.map(r => r.ref.uri), 11),
             this.ctx.worker?.addJob("update-interactions-score", records.map(r => r.ref.uri), 11)

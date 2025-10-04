@@ -15,17 +15,18 @@ async function countCollectionRecords(ctx: AppContext, collection: string): Prom
 }
 
 
-export async function reprocessCollection(ctx: AppContext, collection: string): Promise<void> {
+export async function reprocessCollection(ctx: AppContext, collection: string, onlyRecords: boolean = true): Promise<void> {
     let offset = 0
     const bs = 5000
 
     const count = await countCollectionRecords(ctx, collection)
 
-    ctx.logger.pino.info({collection, count}, "Reprocessing collection...")
+    ctx.logger.pino.info({collection, count, onlyRecords}, "Reprocessing collection...")
 
     const processor = getRecordProcessor(ctx, collection)
 
     while(true) {
+        const t1 = Date.now()
         const records = await ctx.kysely
             .selectFrom("Record")
             .select(["Record.uri", "Record.cid", "Record.record"])
@@ -36,8 +37,8 @@ export async function reprocessCollection(ctx: AppContext, collection: string): 
             .offset(offset)
             .orderBy("created_at asc")
             .execute()
+        const t2 = Date.now()
 
-        ctx.logger.pino.info({offset, count: records.length, collection}, "Reprocessing collection batch")
         if(records.length == 0) break
 
         const refAndRecords: RefAndRecord[] = records.map(r => {
@@ -53,8 +54,16 @@ export async function reprocessCollection(ctx: AppContext, collection: string): 
             return null
         }).filter(x => x != null)
 
-        await processor.process(refAndRecords)
+        if(onlyRecords) {
+            await ctx.kysely.transaction().execute(async trx => {
+                await processor.processRecordsBatch(trx, refAndRecords)
+            })
+        } else {
+            await processor.process(refAndRecords, true)
+        }
+        const t3 = Date.now()
 
+        ctx.logger.logTimes( "Reprocessed collection batch", [t1, t2, t3], {offset, count: records.length, collection})
         if(records.length < bs) break
         offset += bs
     }

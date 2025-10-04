@@ -2,7 +2,6 @@ import {
     getDidFromUri
 } from "#/utils/uri";
 import * as Dataset from "#/lex-api/types/ar/cabildoabierto/data/dataset"
-import {processRecordsBatch} from "#/services/sync/event-processing/record";
 import {ATProtoStrongRef} from "#/lib/types";
 import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
 import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
@@ -13,7 +12,7 @@ export class DatasetRecordProcessor extends RecordProcessor<Dataset.Record> {
 
     validateRecord = Dataset.validateRecord
 
-    async addRecordsToDB(records: {ref: ATProtoStrongRef, record: Dataset.Record}[]) {
+    async addRecordsToDB(records: {ref: ATProtoStrongRef, record: Dataset.Record}[], reprocess: boolean = false) {
         const datasets = records.map(({ref, record: r}) => ({
             uri: ref.uri,
             columns: r.columns.map(({name}: { name: string }) => (name)),
@@ -37,7 +36,7 @@ export class DatasetRecordProcessor extends RecordProcessor<Dataset.Record> {
         )
 
         await this.ctx.kysely.transaction().execute(async (trx) => {
-            await processRecordsBatch(trx, records)
+            await this.processRecordsBatch(trx, records)
 
             await trx
                 .insertInto("Dataset")

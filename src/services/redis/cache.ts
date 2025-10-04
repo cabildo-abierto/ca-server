@@ -67,6 +67,7 @@ class ProfileCacheKey extends CacheKey {
         } else if(isCAProfile(collection)){
             await this.del(did)
         } else if(isFollow(collection)){
+            console.log("deleting did", did)
             await this.del(did)
             const follow: AppBskyGraphFollow.Record = r.record
             await this.del(follow.subject)
@@ -85,6 +86,7 @@ class ProfileCacheKey extends CacheKey {
     }
 
     private del(did: string) {
+        this.cache.logger.pino.info({did}, "deleting did")
         return this.cache.redis.del(this.key(did))
     }
 

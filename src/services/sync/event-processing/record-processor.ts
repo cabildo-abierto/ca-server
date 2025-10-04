@@ -1,9 +1,12 @@
 import {AppContext} from "#/setup";
 import {ATProtoStrongRef} from "#/lib/types";
-import {getCollectionFromUri} from "#/utils/uri";
+import {getCollectionFromUri, getDidFromUri, getRkeyFromUri, splitUri} from "#/utils/uri";
 import {ValidationResult} from "@atproto/lexicon";
 import {parseRecord} from "#/services/sync/parse";
 import {RefAndRecord} from "#/services/sync/types";
+import { Transaction } from "kysely";
+import { DB } from "prisma/generated/types";
+import {unique} from "#/utils/arrays";
 
 
 export class RecordProcessor<T> {
@@ -13,16 +16,18 @@ export class RecordProcessor<T> {
         this.ctx = ctx
     }
 
-    async process(records: RefAndRecord[]) {
+    async process(records: RefAndRecord[], reprocess: boolean = false) {
         if(records.length == 0) return
         const validatedRecords = this.parseRecords(records)
-        await this.processValidated(validatedRecords)
+        await this.processValidated(validatedRecords, reprocess)
     }
 
-    async processValidated(records: RefAndRecord<T>[]) {
+    async processValidated(records: RefAndRecord<T>[], reprocess: boolean = false) {
         if(records.length == 0) return
-        await this.addRecordsToDB(records)
-        await this.ctx.redisCache.onUpdateRecords(records)
+        await this.addRecordsToDB(records, reprocess)
+        if(!reprocess){
+            await this.ctx.redisCache.onUpdateRecords(records)
+        }
     }
 
     validateRecord(record: any): ValidationResult<T> {
@@ -33,7 +38,7 @@ export class RecordProcessor<T> {
         }
     }
 
-    async addRecordsToDB(records: RefAndRecord<T>[]) {
+    async addRecordsToDB(records: RefAndRecord<T>[], reprocess: boolean = false) {
         if(records.length == 0) return
         this.ctx.logger.pino.info({uri: records[0].ref.uri}, "Warning: Validación sin implementar para este tipo de record.")
     }
@@ -72,6 +77,99 @@ export class RecordProcessor<T> {
             }
         }
         return parsedRecords
+    }
+
+
+    async processRecordsBatch(trx: Transaction<DB>, records: { ref: ATProtoStrongRef, record: any }[]) {
+        const data: {
+            uri: string,
+            cid: string,
+            rkey: string,
+            collection: string,
+            created_at?: Date,
+            authorId: string
+            record: string
+            CAIndexedAt: Date
+            lastUpdatedAt: Date
+            created_at_tz?: Date
+        }[] = []
+
+        records.forEach(r => {
+            const {ref, record} = r
+            const {did, collection, rkey} = splitUri(ref.uri)
+            data.push({
+                uri: ref.uri,
+                cid: ref.cid,
+                rkey,
+                collection,
+                created_at: record.createdAt ? new Date(record.createdAt) : undefined,
+                authorId: did,
+                record: JSON.stringify(record),
+                CAIndexedAt: new Date(),
+                lastUpdatedAt: new Date(),
+                created_at_tz: record.createdAt ? new Date(record.createdAt) : undefined
+            })
+        })
+
+        try {
+            if(data.length > 0){
+                await trx
+                    .insertInto('Record')
+                    .values(data)
+                    .onConflict((oc) =>
+                        oc.column("uri").doUpdateSet((eb) => ({
+                            cid: eb.ref('excluded.cid'),
+                            rkey: eb.ref('excluded.rkey'),
+                            collection: eb.ref('excluded.collection'),
+                            created_at: eb.ref('excluded.created_at'),
+                            created_at_tz: eb.ref('excluded.created_at_tz'),
+                            authorId: eb.ref('excluded.authorId'),
+                            record: eb.ref('excluded.record'),
+                            lastUpdatedAt: eb.ref('excluded.lastUpdatedAt') // CAIndexedAt no se actualiza
+                        }))
+                    )
+                    .execute()
+            }
+        } catch (err) {
+            console.log(err)
+            console.log("Error processing records")
+        }
+    }
+
+
+    async createUsersBatch(trx: Transaction<DB>, dids: string[]) {
+        if (dids.length == 0) return
+        dids = unique(dids)
+        await trx
+            .insertInto("User")
+            .values(dids.map(did => ({did})))
+            .onConflict((oc) => oc.column("did").doNothing())
+            .execute()
+    }
+
+
+    async processDirtyRecordsBatch(trx: Transaction<DB>, refs: ATProtoStrongRef[]) {
+        if (refs.length == 0) return
+
+        const users = refs.map(r => getDidFromUri(r.uri))
+        await this.createUsersBatch(trx, users)
+
+        const data = refs.map(({uri, cid}) => ({
+            uri,
+            rkey: getRkeyFromUri(uri),
+            collection: getCollectionFromUri(uri),
+            authorId: getDidFromUri(uri),
+            cid,
+            record: null
+        }))
+
+        if (data.length == 0) return
+
+        await trx
+            .insertInto("Record")
+            .values(data)
+            .onConflict((oc) => oc.column("uri").doNothing())
+            .execute()
     }
 }
 

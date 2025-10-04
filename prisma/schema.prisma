@@ -13,13 +13,15 @@ datasource db {
 }
 
 model AccessRequest {
-  id           String      @id
-  created_at   DateTime    @default(now())
-  email        String
-  comment      String
-  sentInviteAt DateTime?
-  inviteCodeId String?     @unique
-  InviteCode   InviteCode? @relation(fields: [inviteCodeId], references: [code])
+  id              String      @id
+  created_at      DateTime    @default(now())
+  created_at_tz   DateTime?   @default(now()) @db.Timestamptz(3)
+  email           String
+  comment         String
+  sentInviteAt    DateTime?
+  sentInviteAt_tz DateTime?   @db.Timestamptz(3)
+  inviteCodeId    String?     @unique
+  InviteCode      InviteCode? @relation(fields: [inviteCodeId], references: [code])
 
   @@index([inviteCodeId])
 }
@@ -64,11 +66,11 @@ model Content {
   uri                     String                   @id
   format                  String?
   textBlobId              String?
-  lastReferencesUpdate    DateTime?
   selfLabels              String[]
   embeds                  Json[]
   dbFormat                String?
   created_at              DateTime                 @default(now())
+  created_at_tz           DateTime?                @db.Timestamptz(3)
   interactionsScore       Int?
   likesScore              Int?
   relativePopularityScore Float?
@@ -109,27 +111,30 @@ model Dataset {
 }
 
 model Donation {
-  id             String   @id
+  id             String    @id
   userById       String?
-  created_at     DateTime @default(now())
+  created_at     DateTime  @default(now())
+  created_at_tz  DateTime? @default(now()) @db.Timestamptz(3)
   transactionId  String?
   amount         Int
-  mpPreferenceId String?  @unique
-  User           User?    @relation(fields: [userById], references: [did])
+  mpPreferenceId String?   @unique
+  User           User?     @relation(fields: [userById], references: [did])
 
   @@index([userById])
 }
 
 model Draft {
-  id         String   @id
-  created_at DateTime @default(now())
-  lastUpdate DateTime @default(now())
-  authorId   String
-  collection String
-  embeds     Json?
-  text       String
-  title      String?
-  User       User     @relation(fields: [authorId], references: [did])
+  id            String    @id
+  created_at    DateTime  @default(now())
+  created_at_tz DateTime? @default(now()) @db.Timestamptz(3)
+  lastUpdate    DateTime  @default(now())
+  lastUpdate_tz DateTime? @default(now()) @db.Timestamptz(3)
+  authorId      String
+  collection    String
+  embeds        Json?
+  text          String
+  title         String?
+  User          User      @relation(fields: [authorId], references: [did])
 
   @@index([authorId])
 }
@@ -159,8 +164,10 @@ model InviteCode {
   code                                String         @id
   usedByDid                           String?        @unique
   usedAt                              DateTime?
+  usedAt_tz                           DateTime?      @db.Timestamptz(3)
   recommenderId                       String?
   created_at                          DateTime?      @default(now())
+  created_at_tz                       DateTime?      @db.Timestamptz(3)
   AccessRequest                       AccessRequest?
   User_InviteCode_recommenderIdToUser User?          @relation("InviteCode_recommenderIdToUser", fields: [recommenderId], references: [did])
   User_InviteCode_usedByDidToUser     User?          @relation("InviteCode_usedByDidToUser", fields: [usedByDid], references: [did])
@@ -170,12 +177,13 @@ model InviteCode {
 }
 
 model Meeting {
-  id          String   @id
+  id          String    @id
   date        DateTime
+  date_tz     DateTime? @db.Timestamptz(3)
   title       String
   url         String
   description String
-  show        Boolean  @default(false)
+  show        Boolean   @default(false)
 
   @@index([show])
 }
@@ -200,6 +208,7 @@ model Notification {
   message          String?
   moreContext      String?
   created_at       DateTime         @default(now())
+  created_at_tz    DateTime?        @default(now()) @db.Timestamptz(3)
   reasonSubject    String?
   Record           Record           @relation(fields: [causedByRecordId], references: [uri])
   User             User             @relation(fields: [userNotifiedId], references: [did])
@@ -209,14 +218,15 @@ model Notification {
 }
 
 model PaymentPromise {
-  id          String        @id
-  created_at  DateTime      @default(now())
-  amount      Float
-  status      PromiseStatus @default(Pending)
-  contentId   String
-  userMonthId String
-  Content     Content       @relation(fields: [contentId], references: [uri])
-  UserMonth   UserMonth     @relation(fields: [userMonthId], references: [id])
+  id            String        @id
+  created_at    DateTime      @default(now())
+  created_at_tz DateTime?     @default(now()) @db.Timestamptz(3)
+  amount        Float
+  status        PromiseStatus @default(Pending)
+  contentId     String
+  userMonthId   String
+  Content       Content       @relation(fields: [contentId], references: [uri])
+  UserMonth     UserMonth     @relation(fields: [userMonthId], references: [id])
 
   @@unique([contentId, userMonthId])
   @@index([contentId])
@@ -253,36 +263,42 @@ model Reaction {
 }
 
 model ReadSession {
-  id                                     String   @id
+  id                                     String    @id
   userId                                 String
-  created_at                             DateTime @default(now())
+  created_at                             DateTime  @default(now())
+  created_at_tz                          DateTime? @default(now()) @db.Timestamptz(3)
   readContentId                          String?
   readChunks                             Json
   contentAuthorId                        String
   topicId                                String?
-  User_ReadSession_contentAuthorIdToUser User     @relation("ReadSession_contentAuthorIdToUser", fields: [contentAuthorId], references: [did])
-  Content                                Content? @relation(fields: [readContentId], references: [uri])
-  Topic                                  Topic?   @relation(fields: [topicId], references: [id])
-  User_ReadSession_userIdToUser          User     @relation("ReadSession_userIdToUser", fields: [userId], references: [did])
+  User_ReadSession_contentAuthorIdToUser User      @relation("ReadSession_contentAuthorIdToUser", fields: [contentAuthorId], references: [did])
+  Content                                Content?  @relation(fields: [readContentId], references: [uri])
+  Topic                                  Topic?    @relation(fields: [topicId], references: [id])
+  User_ReadSession_userIdToUser          User      @relation("ReadSession_userIdToUser", fields: [userId], references: [did])
 
   @@index([readContentId])
   @@index([userId])
 }
 
 model Record {
-  uri                                 String             @id @unique
-  collection                          String
-  rkey                                String
-  authorId                            String
-  created_at                          DateTime           @default(now())
-  record                              String?
-  cid                                 String?
-  uniqueLikesCount                    Int                @default(0)
-  uniqueRepostsCount                  Int                @default(0)
-  uniqueAcceptsCount                  Int                @default(0)
-  uniqueRejectsCount                  Int                @default(0)
-  CAIndexedAt                         DateTime           @default(now())
-  lastUpdatedAt                       DateTime           @default(now())
+  uri                String    @id @unique
+  collection         String
+  rkey               String
+  authorId           String
+  created_at         DateTime  @default(now())
+  created_at_tz      DateTime? @db.Timestamptz(3)
+  record             String?
+  cid                String?
+  uniqueLikesCount   Int       @default(0)
+  uniqueRepostsCount Int       @default(0)
+  uniqueAcceptsCount Int       @default(0)
+  uniqueRejectsCount Int       @default(0)
+  CAIndexedAt        DateTime  @default(now())
+  CAIndexedAt_tz     DateTime? @db.Timestamptz(3)
+
+  lastUpdatedAt    DateTime  @default(now())
+  lastUpdatedAt_tz DateTime? @db.Timestamptz(3)
+
   quotesCount                         Int                @default(0)
   Content                             Content?
   Dataset                             Dataset?
@@ -319,7 +335,8 @@ model Reference {
 
   interactions TopicInteraction[]
 
-  touched DateTime
+  touched    DateTime?
+  touched_tz DateTime? @db.Timestamptz(3)
 
   @@unique([referencingContentId, referencedTopicId])
   @@index([referencedTopicId])
@@ -333,10 +350,10 @@ model Topic {
   currentVersionId                                  String?           @unique
   popularityScore                                   Int?              @default(1)
   lastEdit                                          DateTime?
+  lastEdit_tz                                       DateTime?         @db.Timestamptz(3)
   popularityScoreLastDay                            Int               @default(0)
   popularityScoreLastMonth                          Int               @default(0)
   popularityScoreLastWeek                           Int               @default(0)
-  lastContentChange                                 DateTime?
   ReadSession                                       ReadSession[]
   Reference                                         Reference[]
   TopicVersion_Topic_currentVersionIdToTopicVersion TopicVersion?     @relation("Topic_currentVersionIdToTopicVersion", fields: [currentVersionId], references: [uri])
@@ -409,23 +426,26 @@ model TopicVersion {
 }
 
 model User {
-  did                                           String             @id @db.VarChar(255)
-  handle                                        String?
-  email                                         String?
-  created_at                                    DateTime           @default(now())
-  editorStatus                                  EditorStatus       @default(Beginner)
-  hasAccess                                     Boolean            @default(false)
-  avatar                                        String?
-  banner                                        String?
-  description                                   String?
-  displayName                                   String?
-  inCA                                          Boolean            @default(false)
-  platformAdmin                                 Boolean            @default(false)
-  CAProfileUri                                  String?            @unique
-  seenTutorial                                  Boolean            @default(false)
-  orgValidation                                 String?
-  userValidationHash                            String?            @unique
-  lastSeenNotifications                         DateTime           @default(dbgenerated("'1970-01-01 00:00:00'::timestamp without time zone"))
+  did                      String       @id @db.VarChar(255)
+  handle                   String?
+  email                    String?
+  created_at               DateTime     @default(now())
+  created_at_tz            DateTime?    @db.Timestamptz(3)
+  editorStatus             EditorStatus @default(Beginner)
+  hasAccess                Boolean      @default(false)
+  avatar                   String?
+  banner                   String?
+  description              String?
+  displayName              String?
+  inCA                     Boolean      @default(false)
+  platformAdmin            Boolean      @default(false)
+  CAProfileUri             String?      @unique
+  seenTutorial             Boolean      @default(false)
+  orgValidation            String?
+  userValidationHash       String?      @unique
+  lastSeenNotifications    DateTime     @default(dbgenerated("'1970-01-01 00:00:00'::timestamp without time zone"))
+  lastSeenNotifications_tz DateTime?    @default(dbgenerated("'1970-01-01 00:00:00+00'::timestamptz")) @db.Timestamptz(3)
+
   moderationState                               ModerationState    @default(Ok)
   seenTopicMaximizedTutorial                    Boolean            @default(false)
   seenTopicMinimizedTutorial                    Boolean            @default(false)
@@ -464,7 +484,9 @@ model UserMonth {
   id              String           @id
   userId          String
   monthStart      DateTime
+  monthStart_tz   DateTime?        @db.Timestamptz(3)
   monthEnd        DateTime
+  monthEnd_tz     DateTime?        @db.Timestamptz(3)
   wasActive       Boolean
   value           Float
   promisesCreated Boolean          @default(false)
@@ -486,6 +508,7 @@ model ValidationRequest {
   sitioWeb      String?
   tipoOrg       String?
   created_at    DateTime                @default(now())
+  created_at_tz DateTime?               @default(now()) @db.Timestamptz(3)
   rejectReason  String?
   result        ValidationRequestResult @default(Pendiente)
   User          User                    @relation(fields: [userId], references: [did])
@@ -499,8 +522,9 @@ model VoteReject {
 }
 
 model Timestamps {
-  id   String   @id
-  date DateTime
+  id      String    @id
+  date    DateTime
+  date_tz DateTime? @db.Timestamptz(3)
 }
 
 enum EditorStatus {

@@ -135,7 +135,6 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
             "t.id",
             "tv.authorship",
             "t.protection",
-            "t.lastContentChange",
             "c.text",
             "c.format",
             "c.dbFormat",

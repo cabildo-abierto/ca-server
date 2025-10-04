@@ -188,9 +188,9 @@ export async function updateTopicInteractionsOnNewReferences(ctx: AppContext, re
 
         await ctx.kysely
             .insertInto("TopicInteraction")
-            .values(values.map(v => ({...v, touched: date})))
+            .values(values.map(v => ({...v, touched_tz: date})))
             .onConflict(oc => oc.columns(["recordId", "referenceId"]).doUpdateSet(eb => ({
-                touched: eb.ref("excluded.touched")
+                touched_tz: eb.ref("excluded.touched_tz")
             })))
             .execute()
 

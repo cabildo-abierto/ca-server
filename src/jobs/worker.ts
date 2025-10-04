@@ -214,9 +214,7 @@ export class CAWorker {
         )
         this.registerJob(
             "reprocess-collection",
-            (data) => reprocessCollection(ctx, (data as {
-                collection: string
-            }).collection)
+            (data) => reprocessCollection(ctx, data.collection as string, data.onlyRecords as boolean)
         )
         this.registerJob(
             "update-topic-mentions",

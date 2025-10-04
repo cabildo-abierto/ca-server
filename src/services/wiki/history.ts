@@ -40,6 +40,7 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
             "Record.uri",
             "Record.cid",
             "Record.created_at",
+            "Record.created_at_tz",
             "uniqueAcceptsCount",
             "uniqueRejectsCount",
             "diff",
@@ -117,7 +118,7 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
                 addedChars: v.charsAdded ?? undefined,
                 removedChars: v.charsDeleted ?? undefined,
                 props,
-                createdAt: v.created_at.toISOString(),
+                createdAt: v.created_at_tz ? v.created_at_tz.toISOString() : v.created_at.toISOString(),
                 contribution,
                 prevAccepted: v.prevAcceptedUri ?? undefined,
                 claimsAuthorship: v.authorship ?? false

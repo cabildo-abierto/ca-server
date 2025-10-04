@@ -110,7 +110,6 @@ export async function getTopics(
             "Record.created_at",
             "TopicVersion.charsAdded",
             "TopicVersion.charsDeleted",
-            "Topic.lastContentChange",
             "Content.numWords",
             eb => (
                 eb
@@ -160,7 +159,7 @@ export async function getTopics(
             popularityScoreLastMonth: t.popularityScoreLastMonth,
             popularityScoreLastWeek: t.popularityScoreLastWeek,
             popularityScoreLastDay: t.popularityScoreLastDay,
-            lastEdit: t.lastContentChange,
+            lastEdit: t.lastEdit,
             created_at: t.created_at,
             props: t.props,
             numWords: t.numWords,

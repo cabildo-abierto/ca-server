@@ -250,10 +250,14 @@ export class RepoSync {
 
     async processRepoBatch(batch: UserRepo) {
         const t1 = Date.now()
+        this.ctx.logger.pino.info({size: batch.size}, "processing repo batch")
 
         for (const collection of this.collections) {
             const records: RefAndRecord[] = batch.get(collection) ?? []
-            if(records.length == 0) continue
+            if(records.length == 0) {
+                this.ctx.logger.pino.info({collection}, "empty collection")
+                continue
+            }
 
             this.ctx.logger.pino.info(`${this.did} processing collection ${collection} (${records.length} records).`)
             const t1 = Date.now()

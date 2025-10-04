@@ -2,7 +2,6 @@ import {AppContext} from "#/setup";
 import { ATProtoStrongRef } from "#/lib/types";
 import {RefAndRecord, SyncContentProps} from "#/services/sync/types";
 import {getDidFromUri} from "#/utils/uri";
-import {processRecordsBatch} from "#/services/sync/event-processing/record";
 import {processContentsBatch} from "#/services/sync/event-processing/content";
 import {ExpressionBuilder, OnConflictDatabase, OnConflictTables, sql} from "kysely";
 import {DB} from "../../../../prisma/generated/types";
@@ -21,7 +20,7 @@ export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Re
 
     validateRecord = TopicVersion.validateRecord
 
-    async addRecordsToDB(records: RefAndRecord<TopicVersion.Record>[]) {
+    async addRecordsToDB(records: RefAndRecord<TopicVersion.Record>[], reprocess: boolean = false) {
         const contents: { ref: ATProtoStrongRef, record: SyncContentProps }[] = records.map(r => ({
             record: {
                 format: r.record.format,
@@ -45,7 +44,7 @@ export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Re
         }))
 
         const inserted = await this.ctx.kysely.transaction().execute(async (trx) => {
-            await processRecordsBatch(trx, records)
+            await this.processRecordsBatch(trx, records)
             await processContentsBatch(trx, contents)
 
             try {
@@ -58,8 +57,7 @@ export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Re
                     }))
                     .execute()
             } catch (err) {
-                console.log("Error processing topics")
-                console.log(err)
+                this.ctx.logger.pino.error({error: err}, "Error processing topics")
             }
 
             try {
@@ -82,10 +80,17 @@ export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Re
                     return []
                 }
             } catch (err) {
-                console.log("error inserting topic versions", err)
+                this.ctx.logger.pino.error({error: err}, "error inserting topic versions")
             }
-
         })
+
+        if(!reprocess){
+            await this.createJobs(records, inserted, topics)
+        }
+    }
+
+    async createJobs(records: RefAndRecord<TopicVersion.Record>[], inserted: {uri: string, topicId: string}[] | undefined, topics: {id: string}[]) {
+        const authors = unique(records.map(r => getDidFromUri(r.ref.uri)))
 
         if (inserted) {
             const data: NotificationJobData[] = inserted.map((i) => ({
@@ -98,10 +103,11 @@ export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Re
 
         await addUpdateContributionsJobForTopics(this.ctx, topics.map(t => t.id))
 
-        const authors = unique(records.map(r => getDidFromUri(r.ref.uri)))
-        await this.ctx.worker?.addJob("update-author-status", authors, 11)
-        await this.ctx.worker?.addJob("update-contents-topic-mentions", records.map(r => r.ref.uri), 11)
-        await this.ctx.worker?.addJob("update-topic-mentions", topics.map(t=> t.id), 11)
+        await Promise.all([
+            this.ctx.worker?.addJob("update-author-status", authors, 11),
+            this.ctx.worker?.addJob("update-contents-topic-mentions", records.map(r => r.ref.uri), 11),
+            this.ctx.worker?.addJob("update-topic-mentions", topics.map(t=> t.id), 11)
+        ])
     }
 }
 

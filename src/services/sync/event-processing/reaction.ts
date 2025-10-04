@@ -13,7 +13,6 @@ import {isReactionCollection} from "#/utils/type-utils";
 import {
     addUpdateContributionsJobForTopics
 } from "#/services/sync/event-processing/topic";
-import {processDirtyRecordsBatch, processRecordsBatch} from "#/services/sync/event-processing/record";
 import {DB} from "../../../../prisma/generated/types";
 import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
 import {AppBskyFeedLike, AppBskyFeedRepost} from "@atproto/api"
@@ -32,90 +31,129 @@ const columnMap: Record<ReactionType, keyof DB['Record']> = {
 }
 
 
+function isLikeOrRepost(r: RefAndRecord) {
+    return ["app.bsky.feed.like", "app.bsky.feed.repost"].includes(getCollectionFromUri(r.ref.uri))
+}
+
 export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
 
-    async addRecordsToDB(records: RefAndRecord<ReactionRecord>[]){
-        const res = await this.ctx.kysely.transaction().execute(async (trx) => {
-            const reactionType = getCollectionFromUri(records[0].ref.uri)
-            if (!isReactionType(reactionType)) return
+    async addRecordsToDB(records: RefAndRecord<ReactionRecord>[], reprocess: boolean = false) {
+        try {
+            const res = await this.ctx.kysely.transaction().execute(async (trx) => {
+                const reactionType = getCollectionFromUri(records[0].ref.uri)
+                if (!isReactionType(reactionType)) return
 
-            await processRecordsBatch(trx, records)
+                this.ctx.logger.pino.info("processing records")
 
-            const subjects = records.map(r => ({uri: r.record.subject.uri, cid: r.record.subject.cid}))
-            await processDirtyRecordsBatch(trx, subjects)
+                await this.processRecordsBatch(trx, records)
+                this.ctx.logger.pino.info("processing dirty records")
 
-            const reactions = records.map(r => ({
-                uri: r.ref.uri,
-                subjectId: r.record.subject.uri
-            }))
+                const subjects = records.map(r => ({uri: r.record.subject.uri, cid: r.record.subject.cid}))
+                await this.processDirtyRecordsBatch(trx, subjects)
 
-            await trx
-                .insertInto("Reaction")
-                .values(reactions)
-                .onConflict((oc) =>
-                    oc.column("uri").doUpdateSet({
-                        subjectId: (eb) => eb.ref('excluded.subjectId'),
-                    })
-                )
-                .execute()
+                const reactions = records.map(r => ({
+                    uri: r.ref.uri,
+                    subjectId: r.record.subject.uri
+                }))
 
-            const hasReacted = records.map(r => ({
-                userId: getDidFromUri(r.ref.uri),
-                recordId: r.record.subject.uri,
-                reactionType: getCollectionFromUri(r.ref.uri),
-                id: uuidv4()
-            }))
+                this.ctx.logger.pino.info("processing reactions")
+                await trx
+                    .insertInto("Reaction")
+                    .values(reactions)
+                    .onConflict((oc) =>
+                        oc.column("uri").doUpdateSet({
+                            subjectId: (eb) => eb.ref('excluded.subjectId'),
+                        })
+                    )
+                    .execute()
 
-            const inserted = await trx
-                .insertInto("HasReacted")
-                .values(hasReacted)
-                .onConflict(oc => oc.doNothing())
-                .returning(['recordId'])
-                .execute()
+                const hasReacted = records.map(r => ({
+                    userId: getDidFromUri(r.ref.uri),
+                    recordId: r.record.subject.uri,
+                    reactionType: getCollectionFromUri(r.ref.uri),
+                    id: uuidv4()
+                }))
+                this.ctx.logger.pino.info("processing has reacted")
 
-            await this.batchIncrementReactionCounter(trx, reactionType, inserted.map(r => r.recordId))
+                const inserted = await trx
+                    .insertInto("HasReacted")
+                    .values(hasReacted)
+                    .onConflict(oc => oc.doNothing())
+                    .returning(['recordId'])
+                    .execute()
 
-            if (isTopicVote(reactionType)) {
-                if (isVoteReject(reactionType)) {
-                    const votes: { uri: string, message: string | null, labels: string[] }[] = records.map(r => {
-                        if (isVoteReject(r.record)) {
-                            return {
-                                uri: r.ref.uri,
-                                message: r.record.message ?? null,
-                                labels: r.record.labels ?? []
+                this.ctx.logger.pino.info("processing increment")
+                await this.batchIncrementReactionCounter(trx, reactionType, inserted.map(r => r.recordId))
+
+                if (isTopicVote(reactionType)) {
+                    if (isVoteReject(reactionType)) {
+                        const votes: { uri: string, message: string | null, labels: string[] }[] = records.map(r => {
+                            if (isVoteReject(r.record)) {
+                                return {
+                                    uri: r.ref.uri,
+                                    message: r.record.message ?? null,
+                                    labels: r.record.labels ?? []
+                                }
                             }
+                            return null
+                        }).filter(v => v != null)
+
+                        this.ctx.logger.pino.info("processing vote reject")
+                        await trx
+                            .insertInto("VoteReject")
+                            .values(votes)
+                            .onConflict((oc) =>
+                                oc.column("uri").doUpdateSet({
+                                    message: (eb) => eb.ref('excluded.message'),
+                                    labels: (eb) => eb.ref('excluded.labels'),
+                                })
+                            )
+                            .execute()
+                    }
+
+                    this.ctx.logger.pino.info("processing tv")
+                    if(records.length > 0 && inserted.length > 0){
+                        let topicVotes = (await trx
+                            .selectFrom("TopicVersion")
+                            .innerJoin("Reaction", "TopicVersion.uri", "Reaction.subjectId")
+                            .select([
+                                "TopicVersion.topicId",
+                                "TopicVersion.uri",
+                                "Reaction.uri as reactionUri"
+                            ])
+                            .where("Reaction.uri", "in", records.map(r => r.ref.uri))
+                            .where("TopicVersion.uri", "in", inserted.map(r => r.recordId))
+                            .execute())
+                        const topicIdsList = unique(topicVotes.map(t => t.topicId))
+
+                        if(!reprocess) await updateTopicsCurrentVersionBatch(this.ctx, trx, topicIdsList)
+
+                        return {topicIdsList, topicVotes}
+                    } else {
+                        return {
+                            topicVotes: [],
+                            topicIdsList: []
                         }
-                        return null
-                    }).filter(v => v != null)
-
-                    await trx
-                        .insertInto("VoteReject")
-                        .values(votes)
-                        .onConflict((oc) =>
-                            oc.column("uri").doUpdateSet({
-                                message: (eb) => eb.ref('excluded.message'),
-                                labels: (eb) => eb.ref('excluded.labels'),
-                            })
-                        )
-                        .execute()
+                    }
                 }
+            })
 
-                let topicVotes = (await trx
-                    .selectFrom("TopicVersion")
-                    .innerJoin("Reaction", "TopicVersion.uri", "Reaction.subjectId")
-                    .select(["TopicVersion.topicId", "TopicVersion.uri", "Reaction.uri as reactionUri"])
-                    .where("Reaction.uri", "in", records.map(r => r.ref.uri))
-                    .where("TopicVersion.uri", "in", inserted.map(r => r.recordId))
-                    .execute())
-
-                const topicIdsList = unique(topicVotes.map(t => t.topicId))
-
-                await updateTopicsCurrentVersionBatch(this.ctx, trx, topicIdsList)
-
-                return {topicIdsList, topicVotes}
+            if (!reprocess) {
+                await this.addJobs(res, records)
             }
-        })
+        } catch (err) {
+            this.ctx.logger.pino.error({error: err}, "error processing reaction records")
+        }
 
+    }
+
+    async addJobs(
+        res: {
+            topicVotes: { reactionUri: string, uri: string, topicId: string }[]
+            topicIdsList: string[]
+        } | undefined,
+        records: RefAndRecord<ReactionRecord>[]
+    ) {
         if (res) {
             const data: NotificationJobData[] = res.topicVotes.map(t => ({
                 type: "TopicVersionVote",
@@ -123,19 +161,19 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
                 subjectId: t.uri,
                 topic: t.topicId
             }))
-            this.ctx.worker?.addJob("batch-create-notifications", data)
-            await addUpdateContributionsJobForTopics(this.ctx, res.topicIdsList)
-        }
-
-        function isLikeOrRepost(r: RefAndRecord) {
-            return ["app.bsky.feed.like", "app.bsky.feed.repost"].includes(getCollectionFromUri(r.ref.uri))
+            if(data.length > 0){
+                this.ctx.worker?.addJob("batch-create-notifications", data)
+            }
+            if(res.topicIdsList.length > 0){
+                await addUpdateContributionsJobForTopics(this.ctx, res.topicIdsList)
+            }
         }
 
         const likeAndRepostsSubjects = records
             .filter(isLikeOrRepost)
             .map(r => r.record.subject.uri)
 
-        if(likeAndRepostsSubjects.length > 0) {
+        if (likeAndRepostsSubjects.length > 0) {
             await this.ctx.worker?.addJob(
                 "update-interactions-score",
                 likeAndRepostsSubjects
@@ -188,7 +226,7 @@ export class VoteRejectRecordProcessor extends ReactionRecordProcessor {
 
 
 export class ReactionDeleteProcessor extends DeleteProcessor {
-    async deleteRecordsFromDB(uris: string[]){
+    async deleteRecordsFromDB(uris: string[]) {
         if (uris.length == 0) return
         const type = getCollectionFromUri(uris[0])
         if (!isReactionCollection(type)) return
@@ -219,7 +257,8 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
                     .execute()
 
                 await this.batchDecrementReactionCounter(db, type, deletedSubjects.map(u => u.recordId))
-            } catch {}
+            } catch {
+            }
 
             const sameSubjectUris = (await db
                 .selectFrom("Reaction")

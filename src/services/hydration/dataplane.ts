@@ -223,6 +223,7 @@ export class Dataplane {
                 "Record.uri",
                 "Record.cid",
                 "Record.created_at",
+                "Record.created_at_tz",
                 "Record.uniqueLikesCount",
                 "Record.uniqueRepostsCount",
                 eb => eb
@@ -943,7 +944,7 @@ export class Dataplane {
             ]))
             .execute()
 
-        ctx.logger.logTimes("fetch profiles viewer state", [t1, Date.now()])
+        ctx.logger.logTimes("fetch profiles viewer state", [t1, Date.now()], {follows})
 
         dids.forEach(did => {
             const following = follows.find(f => getDidFromUri(f.uri) == agent.did)

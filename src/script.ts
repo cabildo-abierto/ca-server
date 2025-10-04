@@ -1,21 +1,42 @@
 import {setupAppContext} from "#/setup"
-import {
-    getReferencesToInsert, recreateAllReferences
-} from "./services/wiki/references/references";
 
 
 async function run() {
     const {ctx} = await setupAppContext([])
 
-    //const uris = ["at://did:plc:u325utpfhcdeekqzlbyhidhw/ar.cabildoabierto.feed.article/3lukyhxzxot2l"]
-    //const uris = ["at://did:plc:mymz5u2wmmmxdtsdqjqyv3x3/ar.cabildoabierto.feed.article/3lwr7etijeq2a"]
-    //const topics = ["Educación"]
+    const donations = await ctx.kysely
+        .selectFrom("Notification")
+        .innerJoin("Record", "Record.uri", "Notification.causedByRecordId")
+        .select(["id", "Record.created_at_tz", "Record.uri"])
+        .execute()
 
-    //const refs = await getReferencesToInsert(ctx, uris, topics)
 
-    //ctx.logger.pino.info({refs}, "refs")
-    //await recreateAllReferences(ctx, new Date(0))
-    //await recomputeTopicInteractionsAndPopularities(ctx, new Date(0))
+    const values: {id: string, created_at_tz: Date, type: "Mention", userNotifiedId: string, causedByRecordId: string}[] = []
+    donations.forEach(d => {
+        if(d.created_at_tz){
+            values.push({
+                id: d.id,
+                created_at_tz: d.created_at_tz,
+                type: "Mention",
+                userNotifiedId: "did:plc:cpooyynmjuqtcyhujscrxme7",
+                causedByRecordId: "at://did:plc:cpooyynmjuqtcyhujscrxme7/app.bsky.feed.post"
+            })
+        } else {
+            console.log(d)
+        }
+    })
+
+    console.log("values", values.length, donations.length)
+
+    await ctx.kysely
+        .insertInto("Notification")
+        .values(values)
+        .onConflict(oc => oc.column("id").doUpdateSet(() => ({
+            created_at_tz: eb => eb.ref("excluded.created_at_tz"),
+        })))
+        .execute()
+
+    ctx.logger.pino.info("updat done")
 }
 
 run()

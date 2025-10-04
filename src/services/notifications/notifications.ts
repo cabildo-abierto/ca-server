@@ -115,6 +115,7 @@ async function updateSeenCANotifications(ctx: AppContext, agent: SessionAgent) {
     await ctx.kysely
         .updateTable("User")
         .set("lastSeenNotifications", new Date())
+        .set("lastSeenNotifications_tz", new Date())
         .where("did", "=", agent.did)
         .execute()
 }

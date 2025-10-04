@@ -47,9 +47,11 @@ export type ValidationType = (typeof ValidationType)[keyof typeof ValidationType
 export type AccessRequest = {
     id: string;
     created_at: Generated<Timestamp>;
+    created_at_tz: Generated<Timestamp | null>;
     email: string;
     comment: string;
     sentInviteAt: Timestamp | null;
+    sentInviteAt_tz: Timestamp | null;
     inviteCodeId: string | null;
 };
 export type Article = {
@@ -78,11 +80,11 @@ export type Content = {
     uri: string;
     format: string | null;
     textBlobId: string | null;
-    lastReferencesUpdate: Timestamp | null;
     selfLabels: string[];
     embeds: unknown[];
     dbFormat: string | null;
     created_at: Generated<Timestamp>;
+    created_at_tz: Timestamp | null;
     interactionsScore: number | null;
     likesScore: number | null;
     relativePopularityScore: number | null;
@@ -106,6 +108,7 @@ export type Donation = {
     id: string;
     userById: string | null;
     created_at: Generated<Timestamp>;
+    created_at_tz: Generated<Timestamp | null>;
     transactionId: string | null;
     amount: number;
     mpPreferenceId: string | null;
@@ -113,7 +116,9 @@ export type Donation = {
 export type Draft = {
     id: string;
     created_at: Generated<Timestamp>;
+    created_at_tz: Generated<Timestamp | null>;
     lastUpdate: Generated<Timestamp>;
+    lastUpdate_tz: Generated<Timestamp | null>;
     authorId: string;
     collection: string;
     embeds: unknown | null;
@@ -134,12 +139,15 @@ export type InviteCode = {
     code: string;
     usedByDid: string | null;
     usedAt: Timestamp | null;
+    usedAt_tz: Timestamp | null;
     recommenderId: string | null;
     created_at: Generated<Timestamp | null>;
+    created_at_tz: Timestamp | null;
 };
 export type Meeting = {
     id: string;
     date: Timestamp;
+    date_tz: Timestamp | null;
     title: string;
     url: string;
     description: string;
@@ -153,6 +161,7 @@ export type Notification = {
     message: string | null;
     moreContext: string | null;
     created_at: Generated<Timestamp>;
+    created_at_tz: Generated<Timestamp | null>;
     reasonSubject: string | null;
 };
 export type NotInterested = {
@@ -163,6 +172,7 @@ export type NotInterested = {
 export type PaymentPromise = {
     id: string;
     created_at: Generated<Timestamp>;
+    created_at_tz: Generated<Timestamp | null>;
     amount: number;
     status: Generated<PromiseStatus>;
     contentId: string;
@@ -185,6 +195,7 @@ export type ReadSession = {
     id: string;
     userId: string;
     created_at: Generated<Timestamp>;
+    created_at_tz: Generated<Timestamp | null>;
     readContentId: string | null;
     readChunks: unknown;
     contentAuthorId: string;
@@ -196,6 +207,7 @@ export type Record = {
     rkey: string;
     authorId: string;
     created_at: Generated<Timestamp>;
+    created_at_tz: Timestamp | null;
     record: string | null;
     cid: string | null;
     uniqueLikesCount: Generated<number>;
@@ -203,7 +215,9 @@ export type Record = {
     uniqueAcceptsCount: Generated<number>;
     uniqueRejectsCount: Generated<number>;
     CAIndexedAt: Generated<Timestamp>;
+    CAIndexedAt_tz: Timestamp | null;
     lastUpdatedAt: Generated<Timestamp>;
+    lastUpdatedAt_tz: Timestamp | null;
     quotesCount: Generated<number>;
 };
 export type Reference = {
@@ -213,11 +227,13 @@ export type Reference = {
     referencingContentId: string;
     count: number | null;
     relevance: number | null;
-    touched: Timestamp;
+    touched: Timestamp | null;
+    touched_tz: Timestamp | null;
 };
 export type Timestamps = {
     id: string;
     date: Timestamp;
+    date_tz: Timestamp | null;
 };
 export type Topic = {
     id: string;
@@ -225,10 +241,10 @@ export type Topic = {
     currentVersionId: string | null;
     popularityScore: Generated<number | null>;
     lastEdit: Timestamp | null;
+    lastEdit_tz: Timestamp | null;
     popularityScoreLastDay: Generated<number>;
     popularityScoreLastMonth: Generated<number>;
     popularityScoreLastWeek: Generated<number>;
-    lastContentChange: Timestamp | null;
     synonyms: string[];
 };
 export type TopicCategory = {
@@ -265,6 +281,7 @@ export type User = {
     handle: string | null;
     email: string | null;
     created_at: Generated<Timestamp>;
+    created_at_tz: Timestamp | null;
     editorStatus: Generated<EditorStatus>;
     hasAccess: Generated<boolean>;
     avatar: string | null;
@@ -278,6 +295,7 @@ export type User = {
     orgValidation: string | null;
     userValidationHash: string | null;
     lastSeenNotifications: Generated<Timestamp>;
+    lastSeenNotifications_tz: Generated<Timestamp | null>;
     moderationState: Generated<ModerationState>;
     seenTopicMaximizedTutorial: Generated<boolean>;
     seenTopicMinimizedTutorial: Generated<boolean>;
@@ -291,7 +309,9 @@ export type UserMonth = {
     id: string;
     userId: string;
     monthStart: Timestamp;
+    monthStart_tz: Timestamp | null;
     monthEnd: Timestamp;
+    monthEnd_tz: Timestamp | null;
     wasActive: boolean;
     value: number;
     promisesCreated: Generated<boolean>;
@@ -308,6 +328,7 @@ export type ValidationRequest = {
     sitioWeb: string | null;
     tipoOrg: string | null;
     created_at: Generated<Timestamp>;
+    created_at_tz: Generated<Timestamp | null>;
     rejectReason: string | null;
     result: Generated<ValidationRequestResult>;
 };

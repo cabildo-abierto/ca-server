@@ -16,7 +16,6 @@ import {
     SyncContentProps
 } from "#/services/sync/types";
 import {NotificationJobData} from "#/services/notifications/notifications";
-import {processDirtyRecordsBatch, processRecordsBatch} from "#/services/sync/event-processing/record";
 import {processContentsBatch} from "#/services/sync/event-processing/content";
 import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
 import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
@@ -40,7 +39,7 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
                 ...(quoteRef? [quoteRef] : [])
             ]
         }, [] as ATProtoStrongRef[])
-        await processDirtyRecordsBatch(trx, referencedRefs)
+        await this.processDirtyRecordsBatch(trx, referencedRefs)
     }
 
     async createContents(records: RefAndRecord<Post.Record>[], trx: Transaction<DB>){
@@ -83,9 +82,9 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
         }
     }
 
-    async addRecordsToDB(records: RefAndRecord<Post.Record>[]) {
+    async addRecordsToDB(records: RefAndRecord<Post.Record>[], reprocess: boolean = false) {
         const insertedPosts = await this.ctx.kysely.transaction().execute(async (trx) => {
-            await processRecordsBatch(trx, records)
+            await this.processRecordsBatch(trx, records)
             await this.createReferences(records, trx)
             await this.createContents(records, trx)
 
@@ -128,7 +127,7 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
                 .filter(p => !existingSet.has(p.uri))
         })
 
-        if (insertedPosts) {
+        if (insertedPosts && !reprocess) {
             await Promise.all([
                 this.createNotifications(insertedPosts),
                 this.ctx.worker?.addJob("update-contents-topic-mentions", insertedPosts.map(r => r.uri), 11)
@@ -163,6 +162,11 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
 export class PostDeleteProcessor extends DeleteProcessor {
     async deleteRecordsFromDB(uris: string[]){
         await this.ctx.kysely.transaction().execute(async (trx) => {
+            await trx
+                .deleteFrom("Notification")
+                .where("Notification.causedByRecordId", "in", uris)
+                .execute()
+
             await trx
                 .deleteFrom("TopicInteraction")
                 .where("TopicInteraction.recordId", "in", uris)

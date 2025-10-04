@@ -235,6 +235,7 @@ export const markAccessRequestSent: CAHandler<{params: {id: string}}, {}> = asyn
     await ctx.kysely
         .updateTable("AccessRequest")
         .set("sentInviteAt", new Date())
+        .set("sentInviteAt_tz", new Date())
         .where("id", "=", params.id)
         .execute()
 

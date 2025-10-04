@@ -228,11 +228,12 @@ export async function updateTopicsCurrentVersionBatch(ctx: AppContext, trx: Tran
         try {
             await trx
                 .insertInto("Topic")
-                .values(updates.map(u => ({...u, synonyms: []})))
+                .values(updates.map(u => ({...u, synonyms: [], lastEdit_tz: u.lastEdit})))
                 .onConflict((oc) =>
                     oc.column("id").doUpdateSet({
                         currentVersionId: (eb) => eb.ref('excluded.currentVersionId'),
-                        lastEdit: (eb) => eb.ref('excluded.lastEdit')
+                        lastEdit: (eb) => eb.ref('excluded.lastEdit'),
+                        lastEdit_tz: (eb) => eb.ref('excluded.lastEdit_tz')
                     })
                 )
                 .execute()
@@ -245,23 +246,27 @@ export async function updateTopicsCurrentVersionBatch(ctx: AppContext, trx: Tran
         try {
             const newCategories = categoryUpdates.flatMap(u => u.categories)
             ctx.logger.pino.info({newCategories}, "new topic categories")
-            await trx
-                .insertInto("TopicCategory")
-                .values(newCategories.map(u => ({id: u})))
-                .onConflict(oc => oc.doNothing())
-                .execute()
+            if(newCategories.length > 0){
+                await trx
+                    .insertInto("TopicCategory")
+                    .values(newCategories.map(u => ({id: u})))
+                    .onConflict(
+                        oc => oc
+                            .column("id").doNothing())
+                    .execute()
+            }
             const values: {topicId: string, categoryId: string}[] = []
             categoryUpdates.forEach(c => {
                 values.push(...c.categories.map(cat => ({topicId: c.id, categoryId: cat})))
             })
             await trx.deleteFrom("TopicToCategory")
-                .where("topicId", "in", values.map(v => v.topicId))
+                .where("topicId", "in", categoryUpdates.map(v => v.id))
                 .execute()
             if(values.length > 0) {
                 await trx
                     .insertInto("TopicToCategory")
                     .values(values)
-                    .onConflict(oc => oc.doNothing())
+                    .onConflict(oc => oc.columns(["topicId", "categoryId"]).doNothing())
                     .execute()
             }
         } catch (err) {
