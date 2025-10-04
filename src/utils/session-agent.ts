@@ -4,17 +4,20 @@ import express from "express";
 import {AtpBaseClient, Agent as BskyAgent} from "@atproto/api";
 import {env} from "#/lib/env";
 import {AppContext} from "#/setup";
+import {MockSessionAgent} from "#/tests/processing.test";
 
 export type Session = { did: string }
 
 
-export type Agent = SessionAgent | NoSessionAgent
+export type Agent = BaseAgent
 
 
 export class BaseAgent {
     ca: AtpBaseClient
-    constructor(CAAgent: AtpBaseClient) {
+    bsky: AtpBaseClient | BskyAgent
+    constructor(CAAgent: AtpBaseClient, bsky: AtpBaseClient | BskyAgent) {
         this.ca = CAAgent
+        this.bsky = bsky
     }
     hasSession(): this is SessionAgent {
         return false
@@ -25,7 +28,7 @@ export class BaseAgent {
 export class NoSessionAgent extends BaseAgent {
     bsky: AtpBaseClient
     constructor(CAAgent: AtpBaseClient, bsky: AtpBaseClient) {
-        super(CAAgent)
+        super(CAAgent, bsky)
         this.bsky = bsky
     }
 }
@@ -37,11 +40,11 @@ export class SessionAgent extends BaseAgent {
     req?: IncomingMessage
     res?: ServerResponse<IncomingMessage>
     constructor(CAAgent: AtpBaseClient, bskyAgent: BskyAgent, req?: IncomingMessage, res?: ServerResponse<IncomingMessage>) {
-        super(CAAgent)
-        this.bsky = bskyAgent
+        super(CAAgent, bskyAgent)
         if(!bskyAgent || !bskyAgent.did){
             throw Error("No session.")
         }
+        this.bsky = bskyAgent
         this.did = bskyAgent && bskyAgent.did
         this.req = req
         this.res = res
@@ -66,9 +69,9 @@ export async function sessionAgent(
     const session = await getIronSession<Session>(req, res, cookieOptions)
     if (session.did) {
         try {
-            const oauthSession = await ctx.oauthClient.restore(session.did)
-            const bskyAgent = new BskyAgent(oauthSession)
+            const oauthSession = await ctx.oauthClient?.restore(session.did)
             if(oauthSession) {
+                const bskyAgent = new BskyAgent(oauthSession)
                 return new SessionAgent(CAAgent, bskyAgent, req, res)
             }
         } catch (err) {

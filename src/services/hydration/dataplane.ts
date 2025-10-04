@@ -258,6 +258,7 @@ export class Dataplane {
             if (c.cid) {
                 this.caContents.set(c.uri, {
                     ...c,
+                    created_at: c.created_at_tz ?? c.created_at,
                     repliesCount: c.repliesCount ? Number(c.repliesCount) : 0,
                     quotesCount: c.quotesCount ? Number(c.quotesCount) : 0,
                     cid: c.cid,
@@ -944,8 +945,6 @@ export class Dataplane {
             ]))
             .execute()
 
-        ctx.logger.logTimes("fetch profiles viewer state", [t1, Date.now()], {follows})
-
         dids.forEach(did => {
             const following = follows.find(f => getDidFromUri(f.uri) == agent.did)
             const followedBy = follows.find(f => getDidFromUri(f.uri) == did)
@@ -993,6 +992,7 @@ export class Dataplane {
     }
 
     async fetchFilesFromStorage(filePaths: string[], bucket: string) {
+        if(!this.ctx.storage) return
         for (let i = 0; i < filePaths.length; i++) {
             const path = filePaths[i]
             const {data} = await this.ctx.storage.download(path, bucket)

@@ -254,7 +254,8 @@ export type TopicInteraction = {
     id: string;
     recordId: string;
     referenceId: string;
-    touched: Timestamp;
+    touched: Timestamp | null;
+    touched_tz: Timestamp | null;
 };
 export type TopicToCategory = {
     topicId: string;

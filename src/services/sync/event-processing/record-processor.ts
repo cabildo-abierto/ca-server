@@ -90,6 +90,7 @@ export class RecordProcessor<T> {
             authorId: string
             record: string
             CAIndexedAt: Date
+            CAIndexedAt_tz: Date
             lastUpdatedAt: Date
             created_at_tz?: Date
         }[] = []
@@ -106,10 +107,14 @@ export class RecordProcessor<T> {
                 authorId: did,
                 record: JSON.stringify(record),
                 CAIndexedAt: new Date(),
+                CAIndexedAt_tz: new Date(),
                 lastUpdatedAt: new Date(),
                 created_at_tz: record.createdAt ? new Date(record.createdAt) : undefined
             })
         })
+
+        const users = unique(records.map(r => getDidFromUri(r.ref.uri)))
+        await this.createUsersBatch(trx, users)
 
         try {
             if(data.length > 0){

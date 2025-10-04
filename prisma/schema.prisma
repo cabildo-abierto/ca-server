@@ -384,7 +384,8 @@ model TopicInteraction {
   referenceId String
   Reference   Reference @relation(fields: [referenceId], references: [id], onDelete: Cascade)
 
-  touched DateTime
+  touched    DateTime?
+  touched_tz DateTime? @db.Timestamptz(3)
 
   @@unique([recordId, referenceId])
   @@index([referenceId])

@@ -188,8 +188,11 @@ export async function updateTopicInteractionsOnNewReferences(ctx: AppContext, re
 
         await ctx.kysely
             .insertInto("TopicInteraction")
-            .values(values.map(v => ({...v, touched_tz: date})))
-            .onConflict(oc => oc.columns(["recordId", "referenceId"]).doUpdateSet(eb => ({
+            .values(values
+                .map(v => ({...v, touched_tz: date}))
+            )
+            .onConflict(oc => oc
+                .columns(["recordId", "referenceId"]).doUpdateSet(eb => ({
                 touched_tz: eb.ref("excluded.touched_tz")
             })))
             .execute()
@@ -197,7 +200,7 @@ export async function updateTopicInteractionsOnNewReferences(ctx: AppContext, re
     }
     await ctx.kysely
         .deleteFrom("TopicInteraction")
-        .where("TopicInteraction.touched", "<", date)
+        .where("TopicInteraction.touched_tz", "<", date)
         .where("TopicInteraction.referenceId", "in", references)
         .execute()
     const t3 = Date.now()

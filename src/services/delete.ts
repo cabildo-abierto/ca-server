@@ -72,6 +72,8 @@ export async function deleteUser(ctx: AppContext, did: string) {
     await deleteRecordsForAuthor({ctx, did: did, atproto: false})
 
     await ctx.kysely.transaction().execute(async trx => {
+        await trx.deleteFrom("ReadSession").where("userId", "=", did).execute()
+        await trx.deleteFrom("Notification").where("userNotifiedId", "=", did).execute()
         await trx.deleteFrom("Blob").where("authorId", "=", did).execute()
         await trx.deleteFrom("User").where("did", "=", did).execute()
     })

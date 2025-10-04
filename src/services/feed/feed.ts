@@ -15,9 +15,26 @@ import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {articlesFeedPipeline} from "#/services/feed/inicio/articles";
 import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
+import {clearFollowsHandler, getProfile, getSessionData} from "#/services/user/users";
 
 
 export type FollowingFeedFilter = "Todos" | "Solo Cabildo Abierto"
+
+
+async function maybeClearFollows(ctx: AppContext, agent: Agent) {
+    if(agent.hasSession()){
+        const data = await getSessionData(ctx, agent.did)
+        ctx.logger.pino.info({data}, "checking clear follows")
+        if(data && (!data.seenTutorial || !data.seenTutorial.home)){
+            const {data: profile} = await getProfile(ctx, agent, {params: {handleOrDid: agent.did}})
+
+            ctx.logger.pino.info({data, profile}, "checking clear follows")
+            if(profile && profile.bskyFollowsCount == 1){
+                await clearFollowsHandler(ctx, agent, {})
+            }
+        }
+    }
+}
 
 
 export const getFeedByKind: CAHandlerNoAuth<{params: {kind: string}, query: {cursor?: string, metric?: EnDiscusionMetric, time?: EnDiscusionTime, format?: FeedFormatOption, filter?: FollowingFeedFilter}}, GetFeedOutput> = async (ctx, agent, {params, query}) => {
@@ -28,6 +45,7 @@ export const getFeedByKind: CAHandlerNoAuth<{params: {kind: string}, query: {cur
     if(kind == "discusion"){
         pipeline = getEnDiscusionFeedPipeline(metric, time, format)
     } else if(kind == "siguiendo"){
+        await maybeClearFollows(ctx, agent)
         pipeline = getFollowingFeedPipeline(filter, format)
     } else if(kind == "descubrir") {
         pipeline = discoverFeedPipeline

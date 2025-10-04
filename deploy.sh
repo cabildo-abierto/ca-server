@@ -18,6 +18,10 @@ echo_blue "Deploying backend to ${ENV} environment"
 echo_blue "Building locally..."
 npm run build
 
+echo_blue "Running tests..."
+npm test
+echo_blue "✅ Tests passed! Proceeding with deployment."
+
 RELEASE_DIR_NAME=$(date '+%Y%m%d%H%M%S')
 REMOTE_RELEASE_PATH="${RELEASES_PATH}/${RELEASE_DIR_NAME}"
 

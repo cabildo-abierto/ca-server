@@ -160,7 +160,7 @@ export const getProfile: CAHandlerNoAuth<{ params: { handleOrDid: string } }, Ar
 
 
 export async function deleteSession(ctx: AppContext, agent: SessionAgent) {
-    await ctx.oauthClient.revoke(agent.did)
+    await ctx.oauthClient?.revoke(agent.did)
     if (agent.req && agent.res) {
         const session = await getIronSession<Session>(agent.req, agent.res, cookieOptions)
         session.destroy()
@@ -190,56 +190,64 @@ type SessionData = Omit<Session, "handle"> & {handle: string | null}
 
 export const getSessionData = async (ctx: AppContext, did: string): Promise<SessionData | null> => {
     const t1 = Date.now()
-    const [res, mirrorStatus] = await Promise.all([
-        ctx.kysely
-        .selectFrom("User")
-        .select([
-            "platformAdmin",
-            "editorStatus",
-            "seenTutorial",
-            "seenTopicMaximizedTutorial",
-            "seenTopicMinimizedTutorial",
-            "seenTopicsTutorial",
-            "handle",
-            "displayName",
-            "avatar",
-            "hasAccess",
-            "inCA",
-            "userValidationHash",
-            "orgValidation",
-            "algorithmConfig",
-            "authorStatus",
+
+    try {
+        const [res, mirrorStatus] = await Promise.all([
+            ctx.kysely
+                .selectFrom("User")
+                .select([
+                    "platformAdmin",
+                    "editorStatus",
+                    "seenTutorial",
+                    "seenTopicMaximizedTutorial",
+                    "seenTopicMinimizedTutorial",
+                    "seenTopicsTutorial",
+                    "handle",
+                    "displayName",
+                    "avatar",
+                    "hasAccess",
+                    "inCA",
+                    "userValidationHash",
+                    "orgValidation",
+                    "algorithmConfig",
+                    "authorStatus",
+                ])
+                .where("did", "=", did)
+                .executeTakeFirst(),
+            ctx.redisCache.mirrorStatus.get(did, true)
         ])
-        .where("did", "=", did)
-        .executeTakeFirst(),
-        ctx.redisCache.mirrorStatus.get(did, true)
-    ])
+        const t2 = Date.now()
+        ctx.logger.logTimes("get session", [t1, t2])
 
-    const t2 = Date.now()
-    ctx.logger.logTimes("get session", [t1, t2])
+        if(!res) {
+            ctx.logger.pino.info({did}, "user not found")
+            return null
+        }
 
-    if(!res) return null
+        const data = res
 
-    const data = res
-
-    return {
-        authorStatus: data.authorStatus as AuthorStatus | null,
-        did: did,
-        handle: data.handle,
-        displayName: data.displayName,
-        avatar: data.avatar,
-        hasAccess: data.hasAccess,
-        seenTutorial: {
-            home: data.seenTutorial,
-            topics: data.seenTopicsTutorial,
-            topicMinimized: data.seenTopicMinimizedTutorial,
-            topicMaximized: data.seenTopicMaximizedTutorial
-        },
-        editorStatus: data.editorStatus,
-        platformAdmin: data.platformAdmin,
-        validation: getValidationState(data),
-        algorithmConfig: (data.algorithmConfig ?? {}) as AlgorithmConfig,
-        mirrorStatus: data.inCA ? mirrorStatus: "Dirty"
+        return {
+            authorStatus: data.authorStatus as AuthorStatus | null,
+            did: did,
+            handle: data.handle,
+            displayName: data.displayName,
+            avatar: data.avatar,
+            hasAccess: data.hasAccess,
+            seenTutorial: {
+                home: data.seenTutorial,
+                topics: data.seenTopicsTutorial,
+                topicMinimized: data.seenTopicMinimizedTutorial,
+                topicMaximized: data.seenTopicMaximizedTutorial
+            },
+            editorStatus: data.editorStatus,
+            platformAdmin: data.platformAdmin,
+            validation: getValidationState(data),
+            algorithmConfig: (data.algorithmConfig ?? {}) as AlgorithmConfig,
+            mirrorStatus: data.inCA ? mirrorStatus: "Dirty"
+        }
+    } catch (err) {
+        ctx.logger.pino.error({error: err, did}, "error getting session data")
+        return null
     }
 }
 
@@ -286,6 +294,8 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
         const newUserData = await getSessionData(ctx, agent.did)
         if (isFullSessionData(newUserData)) {
             return {data: newUserData}
+        } else {
+            ctx.logger.pino.error({data, did: agent.did, newUserData}, "no user after sync")
         }
     } else if (code) {
         ctx.logger.pino.info("creando usuario de ca")
@@ -299,7 +309,11 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
         const newUserData = await getSessionData(ctx, agent.did)
         if (isFullSessionData(newUserData)) {
             return {data: newUserData}
+        } else {
+            ctx.logger.pino.error({did: agent.did, newUserData, data}, "no full session data after user creation")
         }
+    } else {
+        ctx.logger.pino.error({did: agent.did, data}, "no code and no access")
     }
 
     await deleteSession(ctx, agent)
@@ -479,7 +493,7 @@ export const updateProfile: CAHandler<UpdateProfileProps, {}> = async (ctx, agen
 
 const bskyDid = "did:plc:z72i7hdynmk6r22z27h6tvur"
 
-export const clearFollows: CAHandler<{}, {}> = async (ctx, agent, {}) => {
+export const clearFollowsHandler: CAHandler<{}, {}> = async (ctx, agent, {}) => {
     const {data: follows} = await getFollows(ctx, agent, {params: {handleOrDid: agent.did}})
 
     if (follows && follows.length == 1 && follows[0].did == bskyDid && follows[0].viewer?.following) {

@@ -9,15 +9,15 @@ import {
   type MethodConfigOrHandler,
   createServer as createXrpcServer,
 } from '@atproto/xrpc-server'
-import { schemas } from './lexicons.js'
-import * as ArCabildoabiertoNotificationGetUnreadCount from './types/ar/cabildoabierto/notification/getUnreadCount.js'
-import * as ArCabildoabiertoNotificationListNotifications from './types/ar/cabildoabierto/notification/listNotifications.js'
-import * as ArCabildoabiertoNotificationUpdateSeen from './types/ar/cabildoabierto/notification/updateSeen.js'
-import * as ComAtprotoRepoCreateRecord from './types/com/atproto/repo/createRecord.js'
-import * as ComAtprotoRepoDeleteRecord from './types/com/atproto/repo/deleteRecord.js'
-import * as ComAtprotoRepoGetRecord from './types/com/atproto/repo/getRecord.js'
-import * as ComAtprotoRepoListRecords from './types/com/atproto/repo/listRecords.js'
-import * as ComAtprotoRepoPutRecord from './types/com/atproto/repo/putRecord.js'
+import { schemas } from './lexicons'
+import * as ArCabildoabiertoNotificationGetUnreadCount from './types/ar/cabildoabierto/notification/getUnreadCount'
+import * as ArCabildoabiertoNotificationListNotifications from './types/ar/cabildoabierto/notification/listNotifications'
+import * as ArCabildoabiertoNotificationUpdateSeen from './types/ar/cabildoabierto/notification/updateSeen'
+import * as ComAtprotoRepoCreateRecord from './types/com/atproto/repo/createRecord'
+import * as ComAtprotoRepoDeleteRecord from './types/com/atproto/repo/deleteRecord'
+import * as ComAtprotoRepoGetRecord from './types/com/atproto/repo/getRecord'
+import * as ComAtprotoRepoListRecords from './types/com/atproto/repo/listRecords'
+import * as ComAtprotoRepoPutRecord from './types/com/atproto/repo/putRecord'
 
 export const APP_BSKY_FEED = {
   DefsRequestLess: 'app.bsky.feed.defs#requestLess',

@@ -9,9 +9,9 @@ import {
   is$typed as _is$typed,
   type OmitKey,
 } from '../../../../util'
-import type * as ComAtprotoLabelDefs from '../../../com/atproto/label/defs.js'
-import type * as ArCabildoabiertoEmbedVisualization from '../embed/visualization.js'
-import type * as AppBskyEmbedImages from '../../../app/bsky/embed/images.js'
+import type * as ComAtprotoLabelDefs from '../../../com/atproto/label/defs'
+import type * as ArCabildoabiertoEmbedVisualization from '../embed/visualization'
+import type * as AppBskyEmbedImages from '../../../app/bsky/embed/images'
 
 const is$typed = _is$typed,
   validate = _validate

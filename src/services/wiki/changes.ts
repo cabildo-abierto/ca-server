@@ -1,10 +1,12 @@
 import {CAHandlerNoAuth} from "#/utils/handler";
 import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {diff, nodesCharDiff} from "#/services/wiki/diff";
-import {getUri} from "#/utils/uri";
+import {getDidFromUri, getUri} from "#/utils/uri";
 import {getTopicVersion} from "#/services/wiki/topics";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
 import {ProfileViewBasic as ProfileViewBasicCA} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
+import { Dataplane } from "../hydration/dataplane";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 
 
 export const getNewVersionDiff: CAHandlerNoAuth<{currentText: string, currentFormat: string, markdown: string, embeds: ArticleEmbed[]}, {charsAdded: number, charsDeleted: number}> = async (ctx, agent, params) => {
@@ -37,8 +39,8 @@ export type TopicVersionChangesProps = {
     prevFormat: string | undefined
     curText: string
     curFormat: string | undefined
-    curAuthor: ProfileViewBasicCA
-    prevAuthor: ProfileViewBasicCA
+    curAuthor?: ProfileViewBasicCA
+    prevAuthor?: ProfileViewBasicCA
     diff: MatchesType
 }
 
@@ -60,8 +62,16 @@ export const getTopicVersionChanges: CAHandlerNoAuth<{
 
     const curUri = getUri(curDid, "ar.cabildoabierto.wiki.topicVersion", curRkey)
     const prevUri = getUri(prevDid, "ar.cabildoabierto.wiki.topicVersion", prevRkey)
-    const cur = await getTopicVersion(ctx, curUri)
-    const prev = await getTopicVersion(ctx, prevUri)
+
+    const dataplane = new Dataplane(ctx, agent)
+
+    const curAuthorId = getDidFromUri(curUri)
+    const prevAuthorId = getDidFromUri(prevUri)
+    const [cur, prev] = await Promise.all([
+        getTopicVersion(ctx, curUri),
+        getTopicVersion(ctx, prevUri),
+        dataplane.fetchProfileViewBasicHydrationData([curAuthorId, prevAuthorId])
+    ])
 
     if(!cur.data || !prev.data){
         return {error: "No se encontró una de las versiones."}
@@ -76,14 +86,17 @@ export const getTopicVersionChanges: CAHandlerNoAuth<{
 
     const d = diff(nodes1, nodes2, true)
 
+    const curAuthor = hydrateProfileViewBasic(ctx, curAuthorId, dataplane) ?? undefined
+    const prevAuthor = hydrateProfileViewBasic(ctx, prevAuthorId, dataplane) ?? undefined
+
     return {
         data: {
             curText: cur.data.text,
             curFormat: cur.data.format,
             prevText: prev.data.text,
             prevFormat: prev.data.format,
-            curAuthor: cur.data.author,
-            prevAuthor: prev.data.author,
+            curAuthor,
+            prevAuthor,
             diff: d
         }
     }

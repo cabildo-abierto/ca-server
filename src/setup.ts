@@ -1,8 +1,8 @@
 import type {OAuthClient} from '@atproto/oauth-client-node'
 import {createClient} from '#/auth/client'
 import {createBidirectionalResolver, createIdResolver, BidirectionalResolver} from '#/id-resolver'
-import {createServer} from "src/lex-server";
-import {Server as XrpcServer} from "src/lex-server"
+import {createServer} from "../src/lex-server";
+import {Server as XrpcServer} from "../src/lex-server"
 import Redis from "ioredis"
 import {CAWorker} from "#/jobs/worker";
 import { Kysely, PostgresDialect } from 'kysely'
@@ -18,15 +18,15 @@ import {getCAUsersDids} from "#/services/user/users";
 
 export type AppContext = {
     logger: Logger
-    oauthClient: OAuthClient
+    oauthClient: OAuthClient | undefined
     resolver: BidirectionalResolver
-    xrpc: XrpcServer
+    xrpc: XrpcServer | undefined
     ioredis: Redis
     redisCache: RedisCache
     mirrorId: string
     worker: CAWorker | undefined
     kysely: Kysely<DB>
-    storage: S3Storage
+    storage: S3Storage | undefined
 }
 
 
@@ -35,25 +35,46 @@ export type Role = "worker" | "web" | "mirror"
 export const redisUrl = env.REDIS_URL
 const envName = env.NODE_ENV
 
-export async function setupAppContext(roles: Role[]) {
-    const logger = new Logger([...roles, envName].join(":"))
 
-    const kysely = new Kysely<DB>({
+export function setupKysely(dbUrl?: string) {
+    return new Kysely<DB>({
         dialect: new PostgresDialect({
             pool: new Pool({
-                connectionString: env.DATABASE_URL,
+                connectionString: dbUrl ?? env.DATABASE_URL,
                 max: env.MAX_CONNECTIONS,
                 idleTimeoutMillis: 30000,
                 keepAlive: true,
             })
         })
     })
+}
+
+
+export function setupRedis(db: number) {
+    return new Redis(redisUrl, {
+        maxRetriesPerRequest: null,
+        family: 6,
+        db
+    })
+}
+
+
+export function setupResolver(ioredis: Redis) {
+    const baseIdResolver = createIdResolver()
+    return createBidirectionalResolver(baseIdResolver, ioredis)
+}
+
+
+export async function setupAppContext(roles: Role[]) {
+    const logger = new Logger([...roles, envName].join(":"))
+
+    const kysely = setupKysely()
     logger.pino.info("kysely client created")
 
     const storage = new S3Storage(logger)
     logger.pino.info("storage client created")
 
-    const ioredis = new Redis(redisUrl, {maxRetriesPerRequest: null, family: 6})
+    const ioredis = setupRedis(0)
     logger.pino.info("redis client created")
 
     const oauthClient = await createClient(ioredis)
@@ -68,8 +89,7 @@ export async function setupAppContext(roles: Role[]) {
         )
     }
 
-    const baseIdResolver = createIdResolver()
-    const resolver = createBidirectionalResolver(baseIdResolver, ioredis)
+    const resolver = setupResolver(ioredis)
     const xrpc = createServer()
     logger.pino.info("xrpc server created")
 

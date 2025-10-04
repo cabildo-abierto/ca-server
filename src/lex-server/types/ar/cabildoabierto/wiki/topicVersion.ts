@@ -9,8 +9,8 @@ import {
   is$typed as _is$typed,
   type OmitKey,
 } from '../../../../util'
-import type * as ArCabildoabiertoFeedArticle from '../feed/article.js'
-import type * as ArCabildoabiertoActorDefs from '../actor/defs.js'
+import type * as ArCabildoabiertoFeedArticle from '../feed/article'
+import type * as ArCabildoabiertoActorDefs from '../actor/defs'
 
 const is$typed = _is$typed,
   validate = _validate

@@ -1,5 +1,4 @@
 import {CAHandler} from "#/utils/handler";
-import {ValidationRequestResult, ValidationType} from "@prisma/client";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {ProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
@@ -23,9 +22,14 @@ type ValidationRequestProps = {
 }
 
 
+type ValidationType = "Organizacion" | "Persona"
+type ValidationRequestResult = "Aceptada" | "Rechazada" | "Pendiente"
+
+
 export const createValidationRequest: CAHandler<ValidationRequestProps, {}> = async (ctx, agent, request) => {
+    if(!ctx.storage) return {error: "Error al guardar."}
     try {
-        const documentacion = request.tipo == "org" && request.documentacion ? await Promise.all(request.documentacion.map((f => ctx.storage.upload(f, 'validation-documents')))) : []
+        const documentacion = request.tipo == "org" && request.documentacion ? await Promise.all(request.documentacion.map((f => ctx.storage?.upload(f, 'validation-documents')))) : []
         const dniFrente = request.tipo == "persona" && request.dniFrente ? await ctx.storage.upload(request.dniFrente, 'validation-documents') : undefined
         const dniDorso = request.tipo == "persona" && request.dniDorso ? await ctx.storage.upload(request.dniDorso, 'validation-documents') : undefined
 
@@ -36,8 +40,18 @@ export const createValidationRequest: CAHandler<ValidationRequestProps, {}> = as
         if (request.tipo == "persona" && !dniFrente) return {error: "Debe incluir una foto del frente de su DNI."}
         if (request.tipo == "persona" && !dniDorso) return {error: "Debe incluir una foto del dorso de su DNI."}
 
-        const data = request.tipo == "org" ? {
-            type: ValidationType.Organizacion,
+        const data: {
+            type: ValidationType
+            documentacion: string[]
+            userId: string
+            comentarios?: string
+            sitioWeb?: string
+            email?: string
+            tipoOrg?: string
+            dniFrente?: string
+            dniDorso?: string
+        } = request.tipo == "org" ? {
+            type: "Organizacion",
             documentacion: documentacion ? documentacion.map(d => d?.path) as string[] : [],
             userId: agent.did,
             comentarios: request.comentarios,
@@ -45,7 +59,7 @@ export const createValidationRequest: CAHandler<ValidationRequestProps, {}> = as
             email: request.email,
             tipoOrg: request.tipoOrg
         } : {
-            type: ValidationType.Persona,
+            type: "Persona",
             dniFrente: dniFrente?.path,
             dniDorso: dniDorso?.path,
             userId: agent.did,
@@ -139,12 +153,12 @@ export const getPendingValidationRequests: CAHandler<{}, {
                 "sitioWeb",
                 "email"
             ])
-            .where("result", "=", ValidationRequestResult.Pendiente)
+            .where("result", "=", "Pendiente")
             .limit(10)
             .execute(),
         ctx.kysely.selectFrom("ValidationRequest")
             .select(eb => eb.fn.count<number>("id").as("count"))
-            .where("result", "=", ValidationRequestResult.Pendiente)
+            .where("result", "=", "Pendiente")
             .executeTakeFirst()
     ])
 

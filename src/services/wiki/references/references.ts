@@ -181,9 +181,9 @@ async function applyReferencesUpdate(ctx: AppContext, referencesToInsert: Refere
             await ctx.kysely
                 .insertInto("Reference")
                 .values(referencesToInsert
-                    .map(r => ({...r, touched: date})))
+                    .map(r => ({...r, touched_tz: date})))
                 .onConflict(oc => oc.columns(["referencingContentId", "referencedTopicId"]).doUpdateSet(eb => ({
-                    touched: eb.ref("excluded.touched"),
+                    touched: eb.ref("excluded.touched_tz"),
                     relevance: eb.ref("excluded.relevance")
                 })))
                 .execute()

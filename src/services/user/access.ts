@@ -44,7 +44,7 @@ export const login: CAHandlerNoAuth<{handle?: string, code?: string}> = async (c
     }
 
     try {
-        const url = await ctx.oauthClient.authorize(handle, {
+        const url = await ctx.oauthClient?.authorize(handle, {
             scope: 'atproto transition:generic transition:chat.bsky transition:email',
         })
         return {data: {url}}
@@ -70,8 +70,6 @@ export async function checkValidCode(ctx: AppContext, code: string, did: string)
 export async function createCAUser(ctx: AppContext, agent: SessionAgent, code?: string) {
     const did = agent.did
 
-    ctx.logger.pino.info({did}, "creating ca user")
-
     try {
         await ctx.kysely
             .insertInto("User")
@@ -92,26 +90,32 @@ export async function createCAUser(ctx: AppContext, agent: SessionAgent, code?: 
         createdAt: new Date().toISOString()
     }
 
-    const [{data}, {data: bskyProfile}] = await Promise.all([
-        agent.bsky.com.atproto.repo.putRecord({
-            repo: did,
-            collection: "ar.cabildoabierto.actor.caProfile",
-            rkey: "self",
-            record: caProfileRecord
-        }),
-        agent.bsky.com.atproto.repo.getRecord({
-            repo: did,
-            collection: "app.bsky.actor.profile",
-            rkey: "self"
-        })
-    ])
+    try {
+        const [{data}, {data: bskyProfile}] = await Promise.all([
+            agent.bsky.com.atproto.repo.putRecord({
+                repo: did,
+                collection: "ar.cabildoabierto.actor.caProfile",
+                rkey: "self",
+                record: caProfileRecord
+            }),
+            agent.bsky.com.atproto.repo.getRecord({
+                repo: did,
+                collection: "app.bsky.actor.profile",
+                rkey: "self"
+            })
+        ])
 
-    await Promise.all([
-        new CAProfileRecordProcessor(ctx)
-            .processValidated([{ref: {uri: data.uri, cid: data.cid}, record: caProfileRecord}]),
-        new BskyProfileRecordProcessor(ctx)
-            .processValidated([{ref: {uri: bskyProfile.uri, cid: bskyProfile.cid!}, record: bskyProfile.value as AppBskyActorProfile.Record}])
-    ])
+        const refAndRecordCA = {ref: {uri: data.uri, cid: data.cid}, record: caProfileRecord}
+        const refAndRecordBsky = {ref: {uri: bskyProfile.uri, cid: bskyProfile.cid!}, record: bskyProfile.value as AppBskyActorProfile.Record}
+        await Promise.all([
+            new CAProfileRecordProcessor(ctx)
+                .processValidated([refAndRecordCA]),
+            new BskyProfileRecordProcessor(ctx)
+                .processValidated([refAndRecordBsky])
+        ])
+    } catch (err) {
+        ctx.logger.pino.error({err, caProfileRecord, did}, "error processing profiles for new user")
+    }
 
     return {}
 }
@@ -177,7 +181,9 @@ export async function assignInviteCode(ctx: AppContext, agent: SessionAgent, inv
                 .set("usedByDid", did)
                 .where("code", "=", inviteCode)
                 .execute()
+        }
 
+        if(!user.hasAccess){
             await trx
                 .updateTable("User")
                 .set("hasAccess", true)

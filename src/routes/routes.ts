@@ -9,7 +9,7 @@ import {createAccessRequest, getInviteCodesToShare, login} from "#/services/user
 import {getFeedByKind} from "#/services/feed/feed";
 import {getProfileFeed} from "#/services/feed/profile/profile";
 import {
-    clearFollows,
+    clearFollowsHandler,
     deleteSession,
     follow,
     getAccount,
@@ -48,7 +48,7 @@ import {searchContents} from "#/services/feed/search";
 import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion";
 import {cancelValidationRequest, createValidationRequest, getValidationRequest } from '#/services/user/validation';
 import {createPreference, getDonationHistory, getFundingStateHandler, getMonthlyValueHandler, processPayment} from '#/services/monetization/donations';
-import { storeReadSession } from '#/services/monetization/read-tracking';
+import { storeReadSessionHandler } from '#/services/monetization/read-tracking';
 import { getTopicTitleHandler } from '#/services/wiki/current-version';
 import {getTopicHistoryHandler} from "#/services/wiki/history";
 import {getNewVersionDiff, getTopicVersionChanges} from '#/services/wiki/changes';
@@ -83,6 +83,7 @@ export const createRouter = (ctx: AppContext) => {
     router.post('/login', makeHandlerNoAuth(ctx, login))
 
     router.get('/oauth/callback', async (req, res) => {
+        if(!ctx.oauthClient) return
         const params = new URLSearchParams(req.originalUrl.split('?')[1])
         try {
             const { session } = await ctx.oauthClient.callback(params)
@@ -362,7 +363,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.post('/notify-payment', makeHandlerNoAuth(ctx, processPayment))
 
-    router.post('/read-session/:did/:collection/:rkey', makeHandlerNoAuth(ctx, storeReadSession))
+    router.post('/read-session/:did/:collection/:rkey', makeHandlerNoAuth(ctx, storeReadSessionHandler))
 
     router.get("/topic-title/:id", makeHandlerNoAuth(ctx, getTopicTitleHandler))
 
@@ -382,7 +383,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.post("/access-request", makeHandlerNoAuth(ctx, createAccessRequest))
 
-    router.post('/clear-follows', makeHandler(ctx, clearFollows))
+    router.post('/clear-follows', makeHandler(ctx, clearFollowsHandler))
 
     router.get('/drafts', makeHandler(ctx, getDrafts))
 
@@ -414,7 +415,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.use(adminRoutes(ctx))
 
-    router.use(ctx.xrpc.xrpc.router)
+    if(ctx.xrpc) router.use(ctx.xrpc.xrpc.router)
 
     return router
 }
