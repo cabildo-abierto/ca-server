@@ -109,6 +109,7 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
                     eb("TopicVersion.uri", "is", null)
                 ]))
                 .where("Record.created_at", ">", startDate)
+                .where("interactionsScore", "is not", null)
                 .select([
                     'Record.uri',
                     "Record.created_at as createdAt"

@@ -21,18 +21,17 @@ type Metadata = {
 }
 
 
-export const fetchURLMetadata: CAHandler<{
-    query: { url: string }
-}, Partial<Metadata>> = async (ctx, agent, {query}) => {
-    const {url} = query
-
+export const fetchURLMetadataHandler: CAHandler<{ url: string }, Partial<Metadata>> = async (
+    ctx,
+    agent,
+    {url}
+) => {
     if (!url) return {error: "Falta el URL."}
 
     try {
-
         const metadata = await getContent(url)
 
-        ctx.logger.pino.info({metadata}, "got metadata")
+        // ctx.logger.pino.info({metadata, url}, "got metadata")
 
         return {
             data: {
@@ -42,7 +41,7 @@ export const fetchURLMetadata: CAHandler<{
             }
         }
     } catch (err) {
-        console.error('Metadata scrape failed:', err);
+        ctx.logger.pino.error({error: err}, 'Metadata scrape failed:')
         return {error: "Error al obtener los metadatos."}
     }
 }

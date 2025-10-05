@@ -1,8 +1,12 @@
 import {Agent, SessionAgent} from "#/utils/session-agent";
 import {AppContext} from "#/setup";
-import {FeedPipelineProps, FeedSkeleton, FollowingFeedFilter, GetSkeletonProps} from "#/services/feed/feed";
+import {
+    FeedPipelineProps,
+    FollowingFeedFilter,
+    GetSkeletonProps
+} from "#/services/feed/feed";
 import {rootCreationDateSortKey} from "#/services/feed/utils";
-import {FeedViewPost, isFeedViewPost, isReasonRepost, SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
+import {FeedViewPost, isFeedViewPost, isReasonRepost} from "#/lex-api/types/app/bsky/feed/defs";
 import {articleCollections, getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri";
 import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
 import {isKnownContent} from "#/utils/type-utils";
@@ -13,6 +17,7 @@ import {$Typed} from "@atproto/api";
 import {isTopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
 import {FeedFormatOption} from "#/services/feed/inicio/discusion";
 import {FollowingFeedSkeletonKey} from "#/services/redis/cache";
+import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 
 export type RepostQueryResult = {
     uri?: string
@@ -24,7 +29,6 @@ export type RepostQueryResult = {
 function skeletonFromArticleReposts(p: RepostQueryResult): SkeletonFeedPost | null {
     if (p.subjectId) {
         return {
-            $type: "app.bsky.feed.defs#skeletonFeedPost",
             post: p.subjectId,
             reason: {
                 $type: "app.bsky.feed.defs#skeletonReasonRepost",
@@ -77,15 +81,19 @@ function getRootTopicIdFromPost(e: FeedViewPost | FeedViewContent): string | nul
     }
 }
 
+export type SkeletonFeedPostWithDate = SkeletonFeedPost & {created_at: Date}
 
-export const feedViewPostToSkeletonElement = (p: FeedViewPost): SkeletonFeedPost => {
-
+export const feedViewPostToSkeletonElement = (p: FeedViewPost): SkeletonFeedPostWithDate => {
     return {
+        $type: "app.bsky.feed.defs#skeletonFeedPost",
         post: p.post.uri,
         reason: p.reason,
-        $type: "app.bsky.feed.defs#skeletonFeedPost"
+        created_at: new Date(p.post.indexedAt)
     }
 }
+
+
+export type FeedSkeletonWithDate = SkeletonFeedPostWithDate[]
 
 
 export const getSkeletonFromTimeline = (ctx: AppContext, timeline: FeedViewPost[], following?: string[]) => {
@@ -104,8 +112,7 @@ export const getSkeletonFromTimeline = (ctx: AppContext, timeline: FeedViewPost[
         return following.includes(rootAuthor)
     }) : timeline
 
-    let skeleton: FeedSkeleton = filtered.map(feedViewPostToSkeletonElement)
-
+    let skeleton: FeedSkeletonWithDate = filtered.map(feedViewPostToSkeletonElement)
 
     return skeleton
 }

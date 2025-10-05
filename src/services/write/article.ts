@@ -5,6 +5,7 @@ import {SessionAgent} from "#/utils/session-agent";
 import {ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article";
 import {EmbedContext, getEmbedsFromEmbedViews} from "#/services/write/topic";
 import {ArticleRecordProcessor} from "#/services/sync/event-processing/article";
+import {getRkeyFromUri} from "#/utils/uri";
 
 export type CreateArticleProps = {
     title: string
@@ -14,6 +15,7 @@ export type CreateArticleProps = {
     embeds?: ArticleEmbedView[]
     embedContexts?: EmbedContext[]
     draftId?: string
+    uri?: string
 }
 
 export const createArticleAT = async (agent: SessionAgent, article: CreateArticleProps) => {
@@ -36,13 +38,23 @@ export const createArticleAT = async (agent: SessionAgent, article: CreateArticl
         labels: article.enDiscusion ? {$type: "com.atproto.label.defs#selfLabels", values: [{val: "ca:en discusión"}]} : undefined
     }
 
-    const {data} = await agent.bsky.com.atproto.repo.createRecord({
-        repo: did,
-        collection: 'ar.cabildoabierto.feed.article',
-        record: record,
-    })
+    if(!article.uri) {
+        const {data} = await agent.bsky.com.atproto.repo.createRecord({
+            repo: did,
+            collection: 'ar.cabildoabierto.feed.article',
+            record: record,
+        })
+        return {ref: {uri: data.uri, cid: data.cid}, record}
+    } else {
+        const {data} = await agent.bsky.com.atproto.repo.putRecord({
+            repo: did,
+            collection: 'ar.cabildoabierto.feed.article',
+            rkey: getRkeyFromUri(article.uri),
+            record: record,
+        })
+        return {ref: {uri: data.uri, cid: data.cid}, record}
+    }
 
-    return {ref: {uri: data.uri, cid: data.cid}, record}
 }
 
 export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, article) => {
@@ -59,10 +71,9 @@ export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, a
             new ArticleRecordProcessor(ctx).processValidated([res])
         ])
     } catch (e) {
-        console.log("error al publicar arículo", e)
+        ctx.logger.pino.error({error: e}, "error al publicar arículo")
         return {error: "Ocurrió un error al publicar el artículo."}
     }
-
 
     return {data: {}}
 }

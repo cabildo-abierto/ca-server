@@ -1,14 +1,12 @@
-import {GetSkeletonOutput, GetSkeletonProps} from "#/services/feed/feed";
+import {GetSkeletonProps} from "#/services/feed/feed";
 import {AppContext} from "#/setup";
 import {Agent} from "#/utils/session-agent";
-import {getSkeletonFromTimeline} from "#/services/feed/inicio/following";
+import {FeedSkeletonWithDate, getSkeletonFromTimeline} from "#/services/feed/inicio/following";
 import {Dataplane} from "#/services/hydration/dataplane";
-import {concat} from "#/utils/arrays";
-import {SkeletonFeedPost} from "#/lex-api/types/app/bsky/feed/defs";
+import {sortByKey} from "#/utils/arrays";
 
 
-const getMainProfileFeedSkeletonBsky = async (ctx: AppContext, agent: Agent, data: Dataplane, did: string, cursor?: string): Promise<GetSkeletonOutput> => {
-    if(!agent.hasSession()) return {skeleton: [], cursor: undefined}
+const getMainProfileFeedSkeletonBsky = async (ctx: AppContext, agent: Agent, data: Dataplane, did: string, cursor?: string): Promise<{skeleton: {post: string, created_at: Date}[], cursor?: string}> => {
     const res = await agent.bsky.app.bsky.feed.getAuthorFeed({actor: did, filter: "posts_and_author_threads", cursor})
     const feed = res.data.feed
     data.storeFeedViewPosts(feed)
@@ -20,17 +18,24 @@ const getMainProfileFeedSkeletonBsky = async (ctx: AppContext, agent: Agent, dat
 }
 
 
-export const getMainProfileFeedSkeletonCA = async (ctx: AppContext, did: string, cursor?: string): Promise<(SkeletonFeedPost & {createdAt: Date})[]> => {
+export const getMainProfileFeedSkeletonCA = async (ctx: AppContext, did: string, cursor?: string): Promise<FeedSkeletonWithDate> => {
     const sk = await ctx.kysely
         .selectFrom("Record")
-        .select(["uri", "created_at"])
+        .select(["uri", "created_at_tz as created_at"])
         .where("authorId", "=", did)
-        .where("collection", "in", ["ar.cabildoabierto.feed.article", "ar.com.cabildoabierto.article"])
-        .$if(cursor != null, qb => qb.where("created_at", ">", new Date(cursor!)))
+        .where("collection", "=", "ar.cabildoabierto.feed.article")
+        .$if(cursor != null, qb => qb.where("created_at", "<", new Date(cursor!)))
         .execute()
 
     return sk
-        .map(({uri, created_at}) => ({post: uri, createdAt: created_at}))
+        .map(({uri, created_at}) => {
+            if(created_at) {
+                return {post: uri, created_at}
+            } else {
+                return null
+            }
+        })
+        .filter(x => x != null)
 }
 
 
@@ -44,10 +49,13 @@ export const getMainProfileFeedSkeleton = (did: string) : GetSkeletonProps => {
 
         if(bskySkeleton.cursor != undefined){
             const newCursorDate = new Date(bskySkeleton.cursor)
-            CASkeleton = CASkeleton.filter(x => new Date(x.createdAt) >= newCursorDate)
+            CASkeleton = CASkeleton.filter(x => new Date(x.created_at) >= newCursorDate)
         }
 
-        const skeleton = concat([bskySkeleton.skeleton, CASkeleton])
+        const skeleton = sortByKey([
+            ...bskySkeleton.skeleton,
+            ...CASkeleton
+        ], e => e.created_at.getTime(), (a, b) => b-a)
 
         return {
             skeleton,

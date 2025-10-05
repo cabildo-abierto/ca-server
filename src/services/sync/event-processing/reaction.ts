@@ -231,7 +231,7 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
         const type = getCollectionFromUri(uris[0])
         if (!isReactionCollection(type)) return
 
-        const ids = await this.ctx.kysely.transaction().execute(async (db) => {
+        const {topicIds, subjectIds} = await this.ctx.kysely.transaction().execute(async (db) => {
             const subjectIds = (await db
                 .selectFrom("Reaction")
                 .select(["subjectId", "uri"])
@@ -240,7 +240,7 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
                 .map(e => e.subjectId != null ? {...e, subjectId: e.subjectId} : null)
                 .filter(x => x != null)
 
-            if (subjectIds.length == 0) return
+            if (subjectIds.length == 0) return {}
 
             try {
                 const deletedSubjects = await db
@@ -305,12 +305,24 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
                     await db.transaction().execute(async trx => {
                         await updateTopicsCurrentVersionBatch(this.ctx, trx, topicIds)
                     })
-                    return topicIds
+                    return {topicIds, subjectIds}
                 }
             }
+            return {subjectIds}
         })
-        if (ids && ids.length > 0) {
-            await addUpdateContributionsJobForTopics(this.ctx, ids)
+        if (topicIds && topicIds.length > 0) {
+            await addUpdateContributionsJobForTopics(this.ctx, topicIds)
+        }
+        if (subjectIds && subjectIds.length > 0) {
+            const postsAndArticles = subjectIds
+                .filter(s => {
+                const c = getCollectionFromUri(s.uri)
+                return c == "app.bsky.feed.post" || c == "ar.cabildoabierto.feed.article"
+            })
+            await this.ctx.worker?.addJob(
+                "update-interactions-score",
+                postsAndArticles
+            )
         }
     }
 

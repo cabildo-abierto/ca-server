@@ -1,13 +1,13 @@
-import {GetSkeletonOutput, GetSkeletonProps} from "#/services/feed/feed";
-import {concat} from "#/utils/arrays";
+import {GetSkeletonProps} from "#/services/feed/feed";
+import {sortByKey} from "#/utils/arrays";
 import {SessionAgent} from "#/utils/session-agent";
-import {getSkeletonFromTimeline} from "#/services/feed/inicio/following";
+import {FeedSkeletonWithDate, getSkeletonFromTimeline} from "#/services/feed/inicio/following";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {getMainProfileFeedSkeletonCA} from "#/services/feed/profile/main";
 import {AppContext} from "#/setup";
 
 
-const getRepliesProfileFeedSkeletonBsky = async (ctx: AppContext, agent: SessionAgent, data: Dataplane, did: string, cursor?: string): Promise<GetSkeletonOutput> => {
+const getRepliesProfileFeedSkeletonBsky = async (ctx: AppContext, agent: SessionAgent, data: Dataplane, did: string, cursor?: string): Promise<{skeleton: FeedSkeletonWithDate, cursor?: string}> => {
     const res = await agent.bsky.app.bsky.feed.getAuthorFeed({actor: did, filter: "posts_with_replies", cursor})
     const feed = res.data.feed
     data.storeFeedViewPosts(feed)
@@ -30,10 +30,16 @@ export const getRepliesProfileFeedSkeleton = (did: string) : GetSkeletonProps =>
 
         if(bskySkeleton.cursor != undefined){
             const newCursorDate = new Date(bskySkeleton.cursor)
-            CASkeleton = CASkeleton.filter(x => new Date(x.createdAt) <= newCursorDate)
+            CASkeleton = CASkeleton.filter(x => new Date(x.created_at) >= newCursorDate)
         }
+
+        const skeleton = sortByKey([
+            ...bskySkeleton.skeleton,
+            ...CASkeleton
+        ], e => e.created_at.getTime(), (a, b) => b-a)
+
         return {
-            skeleton: concat([bskySkeleton.skeleton, CASkeleton]),
+            skeleton: skeleton,
             cursor: bskySkeleton.skeleton.length > 0 ? bskySkeleton.cursor : undefined
         }
     }

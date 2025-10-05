@@ -14,8 +14,8 @@ import {discoverFeedPipeline} from "#/services/feed/inicio/discover";
 import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
 import {Dataplane} from "#/services/hydration/dataplane";
 import {articlesFeedPipeline} from "#/services/feed/inicio/articles";
-import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 import {clearFollowsHandler, getProfile, getSessionData} from "#/services/user/users";
+import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
 
 
 export type FollowingFeedFilter = "Todos" | "Solo Cabildo Abierto"
@@ -24,11 +24,8 @@ export type FollowingFeedFilter = "Todos" | "Solo Cabildo Abierto"
 async function maybeClearFollows(ctx: AppContext, agent: Agent) {
     if(agent.hasSession()){
         const data = await getSessionData(ctx, agent.did)
-        ctx.logger.pino.info({data}, "checking clear follows")
         if(data && (!data.seenTutorial || !data.seenTutorial.home)){
             const {data: profile} = await getProfile(ctx, agent, {params: {handleOrDid: agent.did}})
-
-            ctx.logger.pino.info({data, profile}, "checking clear follows")
             if(profile && profile.bskyFollowsCount == 1){
                 await clearFollowsHandler(ctx, agent, {})
             }

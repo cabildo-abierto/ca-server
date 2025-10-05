@@ -6,9 +6,29 @@ import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
 import {unique} from "#/utils/arrays";
 
 
+async function clearEmptyCategories(ctx: AppContext) {
+    const emptyCategories = await ctx.kysely
+        .selectFrom("TopicCategory")
+        .where(eb => eb.not(eb.exists(eb
+            .selectFrom("TopicToCategory")
+            .whereRef("TopicToCategory.categoryId", "=", "TopicCategory.id")
+        )))
+        .select("TopicCategory.id")
+        .execute()
+
+    ctx.logger.pino.info({emptyCategories}, "clearing empty categories")
+
+    await ctx.kysely
+        .deleteFrom("TopicCategory")
+        .where("TopicCategory.id", "in", emptyCategories.map(c => c.id))
+        .execute()
+}
+
 
 export const updateCategoriesGraph = async (ctx: AppContext) => {
     ctx.logger.pino.info("updating categories graph")
+
+    await clearEmptyCategories(ctx)
 
     const t1 = Date.now()
     let references: {referencedTopicId: string, referencingTopicId: string}[]

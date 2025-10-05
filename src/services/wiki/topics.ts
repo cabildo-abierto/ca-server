@@ -93,79 +93,55 @@ export async function getTopics(
     did?: string
 ): CAHandlerOutput<TopicViewBasic[]> {
 
-    let baseQuery = ctx.kysely
+    if(!limit) limit = 50
+
+    const t1 = Date.now()
+    const topics = await ctx.kysely
         .selectFrom('Topic')
         .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
-        .innerJoin("Record", "TopicVersion.uri", "Record.uri")
-        .innerJoin("Content", "Content.uri", "TopicVersion.uri")
-        .innerJoin("User", "User.did", "Record.authorId")
         .select([
             "id",
-            "lastEdit",
-            "Topic.popularityScoreLastDay",
-            "Topic.popularityScoreLastWeek",
-            "Topic.popularityScoreLastMonth",
-            "TopicVersion.props",
-            "TopicVersion.uri",
-            "Record.created_at",
-            "TopicVersion.charsAdded",
-            "TopicVersion.charsDeleted",
-            "Content.numWords",
-            eb => (
-                eb
-                .selectFrom("ReadSession")
-                .select(
-                    [eb => eb.fn.max("ReadSession.created_at").as("lastRead")
-                ])
-                .where("ReadSession.userId", "=", did ?? "no did")
-                .whereRef("ReadSession.readContentId", "=", "TopicVersion.uri").as("lastRead")
-            )
+            "TopicVersion.uri"
         ])
+        .where("Topic.lastEdit_tz", "is not", null)
+        .innerJoin("Record", "TopicVersion.uri", "Record.uri")
         .where("Record.record", "is not", null)
         .where("Record.cid", "is not", null)
-        .where("User.inCA", "=", true)
-        .where(categories.includes("Sin categoría") ?
+        .$if(categories && categories.length > 0, qb => qb.where(categories.includes("Sin categoría") ?
             stringListIsEmpty("Categorías") :
             (eb) =>
                 eb.and(categories.map(c => stringListIncludes("Categorías", c))
                 )
+        ))
+        .$if(
+            sortedBy == "popular" && (time == "all" || time == "month"),
+                qb => qb
+                    .orderBy("popularityScoreLastMonth desc")
+                    .orderBy("lastEdit_tz desc")
         )
-        .where("Topic.lastEdit", "is not", null)
-
-    if(sortedBy === "popular"){
-        if(time == "all" || time == "month"){
-            baseQuery = baseQuery
-                .orderBy("popularityScoreLastMonth desc")
-                .orderBy("lastEdit desc")
-        } else if(time == "week"){
-            baseQuery = baseQuery
-                .orderBy("popularityScoreLastWeek desc")
-                .orderBy("lastEdit desc")
-        } else if(time == "day"){
-            baseQuery = baseQuery
-                .orderBy("popularityScoreLastDay desc")
-                .orderBy("lastEdit desc")
-        }
-    } else if(sortedBy == "recent"){
-        baseQuery = baseQuery.orderBy("lastEdit desc")
-    }
-    const t1 = Date.now()
-    const topics = await (limit ? baseQuery.limit(limit) : baseQuery).execute()
+        .$if(sortedBy == "popular" && time == "week", qb => qb
+            .orderBy("popularityScoreLastWeek desc")
+            .orderBy("lastEdit_tz desc"))
+        .$if(sortedBy == "popular" && time == "day", qb => qb
+            .orderBy("popularityScoreLastDay desc")
+            .orderBy("lastEdit_tz desc"))
+        .$if(sortedBy == "recent", qb => qb
+            .orderBy("lastEdit_tz desc"))
+        .limit(limit)
+        .execute()
     const t2 = Date.now()
-    ctx.logger.logTimes("get trending topics", [t1, t2])
-    return {
-        data: topics.map(t => topicQueryResultToTopicViewBasic({
-            id: t.id,
-            popularityScoreLastMonth: t.popularityScoreLastMonth,
-            popularityScoreLastWeek: t.popularityScoreLastWeek,
-            popularityScoreLastDay: t.popularityScoreLastDay,
-            lastEdit: t.lastEdit,
-            created_at: t.created_at,
-            props: t.props,
-            numWords: t.numWords,
-            lastRead: getDidFromUri(t.uri) == did ? t.lastEdit : t.lastRead
-        }))
-    }
+
+    const dataplane = new Dataplane(ctx)
+    await dataplane.fetchTopicsBasicByUris(topics.map(t => t.uri))
+    const t3 = Date.now()
+
+    const data = topics
+        .map(t => hydrateTopicViewBasicFromUri(t.uri, dataplane).data)
+        .filter(x => x != null)
+
+    ctx.logger.logTimes( "get trending topics", [t1, t2, t3], {limit, categories, sortedBy, time})
+
+    return {data}
 }
 
 
@@ -212,7 +188,7 @@ async function countTopicsNoCategories(ctx: AppContext) {
         .select(({ fn }) => [fn.count<number>("Topic.id").as("count")])
         .where("TopicToCategory.categoryId", "is", null)
         .where("Topic.currentVersionId", "is not", null)
-        .where("Topic.lastEdit", "is not", null)
+        .where("Topic.lastEdit_tz", "is not", null)
         .execute()
 }
 

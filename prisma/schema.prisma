@@ -87,6 +87,7 @@ model Content {
 
   @@index([text_tsv], map: "content_text_fts_idx", type: Gin)
   @@index([created_at(sort: Desc)])
+  @@index([created_at_tz(sort: Desc)])
   @@index([interactionsScore(sort: Desc), created_at(sort: Desc)])
   @@index([likesScore(sort: Desc), created_at(sort: Desc)])
   @@index([relativePopularityScore(sort: Desc), created_at(sort: Desc)])
@@ -321,6 +322,11 @@ model Record {
   @@index([collection, authorId, created_at(sort: Desc)])
   @@index([collection, created_at(sort: Desc)])
   @@index([created_at(sort: Desc)])
+  @@index([authorId, collection, created_at_tz(sort: Desc)])
+  @@index([authorId, created_at_tz(sort: Desc)])
+  @@index([collection, authorId, created_at_tz(sort: Desc)])
+  @@index([collection, created_at_tz(sort: Desc)])
+  @@index([created_at_tz(sort: Desc)])
 }
 
 model Reference {
@@ -361,10 +367,10 @@ model Topic {
   TopicVersion_TopicVersion_topicIdToTopic          TopicVersion[]    @relation("TopicVersion_topicIdToTopic")
   synonyms                                          String[]
 
-  @@index([lastEdit(sort: Desc)])
-  @@index([popularityScoreLastDay(sort: Desc)])
-  @@index([popularityScoreLastMonth(sort: Desc)])
-  @@index([popularityScoreLastWeek(sort: Desc)])
+  @@index([lastEdit_tz(sort: Desc)])
+  @@index([popularityScoreLastDay(sort: Desc), lastEdit_tz(sort: Desc)])
+  @@index([popularityScoreLastMonth(sort: Desc), lastEdit_tz(sort: Desc)])
+  @@index([popularityScoreLastWeek(sort: Desc), lastEdit_tz(sort: Desc)])
 }
 
 // categoría de temas, con sus links con otras categorías para el grafo
@@ -475,6 +481,7 @@ model User {
   @@index([CAProfileUri])
   @@index([articleLastMonth, did])
   @@index([created_at])
+  @@index([created_at_tz])
   @@index([did, inCA])
   @@index([handle])
   @@index([inCA, did])

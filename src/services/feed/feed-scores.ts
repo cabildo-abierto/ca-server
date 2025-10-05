@@ -1,5 +1,5 @@
 import {AppContext} from "#/setup";
-import {sql} from "kysely";
+import { sql } from "kysely";
 
 
 export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) {
@@ -14,29 +14,38 @@ export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) 
         if(uris != null){
             batchUris = uris.slice(offset, offset+batchSize)
         }
-        ctx.logger.pino.info(`getting interactions scores for batch ${offset}, ${batchSize} with total ${uris?.length}`)
+        ctx.logger.pino.info({offset, batchSize, total: uris?.length}, `getting interactions scores for batch`)
 
-        const scores = await ctx.kysely
-            .selectFrom("Content")
-            .innerJoin("Record", "Record.uri", "Content.uri")
-            .select(eb => [
-                "Content.uri",
-                eb(
-                    "Record.uniqueLikesCount",
-                    "-",
-                    eb.case()
-                        .when(
-                            eb.exists(eb.selectFrom('Reaction')
-                                .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
-                                .whereRef("Reaction.subjectId", "=", "Record.uri")
-                                .where('ReactionRecord.collection', '=', 'app.bsky.feed.like')
-                                .whereRef('ReactionRecord.authorId', '=', 'Record.authorId'))
-                        )
-                        .then(1).else(0)
-                        .end()
-                ).as("likesScore"),
-                sql<number>`
-                    "Record"."uniqueLikesCount" + 
+        let scores: {uri: string, likesScore: number, interactionsScore: number}[] = []
+
+        try {
+            scores = await ctx.kysely
+                .selectFrom("Content")
+                .innerJoin("Record", "Record.uri", "Content.uri")
+                .where("Record.created_at_tz", ">", lastMonth)
+                .$if(batchUris != null, qb => qb.where("Content.uri", "in", batchUris))
+                .$if(batchUris == null, qb => qb.limit(batchSize).offset(offset))
+                .select(eb => [
+                    "Content.uri",
+                    eb(
+                        "Record.uniqueLikesCount",
+                        "-",
+                        eb.case()
+                            .when(
+                                eb.exists(eb.selectFrom('Reaction')
+                                    .leftJoin('Record as ReactionRecord', 'Reaction.uri', 'ReactionRecord.uri')
+                                    .whereRef("Reaction.subjectId", "=", "Record.uri")
+                                    .where('ReactionRecord.collection', '=', 'app.bsky.feed.like')
+                                    .whereRef('ReactionRecord.authorId', '=', 'Record.authorId'))
+                            )
+                            .then(1).else(0)
+                            .end()
+                    ).as("likesScore"),
+                    sql<number>`
+                        "Record"
+                        .
+                        "uniqueLikesCount"
+                        + 
                     "Record"."uniqueRepostsCount" +
                     (select count("Post"."uri") as "count" from "Post"
                     inner join "Record" as "ReplyRecord" on "Post"."uri" = "ReplyRecord"."uri"
@@ -66,8 +75,8 @@ export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) 
                                  and "Reaction"."subjectId" = "Record"."uri"  
                         ) then 1 else 0 end
                     )
-                `.as("interactionsScore"),
-                sql<number>`
+                    `.as("interactionsScore"),
+                    sql<number>`
                     ("Record"."uniqueLikesCount" + 
                     "Record"."uniqueRepostsCount" +
                     (select count("Post"."uri") as "count" from "Post"
@@ -98,20 +107,18 @@ export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) 
                                  and "Reaction"."subjectId" = "Record"."uri"    
                         ) then 1 else 0 end
                     ))::numeric / sqrt(1 + (
-                        select count(distinct "Follower"."did") from "Follow"
-                        inner join "Record" as "FollowRecord" on "Follow"."uri" = "FollowRecord"."uri"
-                        inner join "User" as "Follower" on "FollowRecord"."authorId" = "Follower"."did"
+                        select count(distinct "Follower"."did") from "User" as "Follower"
                         where "Follower"."inCA" = true
-                        and "Follow"."userFollowedId" = "Record"."authorId"
+                        and exists (select * from "Follow" inner join "Record" as "FollowRecord" on "FollowRecord"."uri" = "Follow"."uri"
+                        where "Follow"."userFollowedId" = "Follower"."did")
                     ))
-                `.as("relativePopularityScore"),
-                "Record.created_at"
-            ])
-            .where("Record.created_at", ">", lastMonth)
-            .$if(batchUris != null, qb => qb.where("Content.uri", "in", batchUris))
-            .$if(batchUris == null, qb => qb.limit(batchSize).offset(offset))
-            .execute()
-
+                `.as("relativePopularityScore")
+                ])
+                .execute()
+        } catch (err) {
+            ctx.logger.pino.error({error: err}, "Error updating interactions scores")
+            return
+        }
         const t2 = Date.now()
 
         ctx.logger.pino.info(`inserting ${scores.length} scores`)
@@ -127,8 +134,7 @@ export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) 
                 .onConflict(oc => oc.column("uri").doUpdateSet(eb => ({
                     likesScore: eb.ref("excluded.likesScore"),
                     interactionsScore: eb.ref("excluded.interactionsScore"),
-                    relativePopularityScore: eb.ref("excluded.relativePopularityScore"),
-                    created_at: eb.ref("excluded.created_at")
+                    relativePopularityScore: eb.ref("excluded.relativePopularityScore")
                 })))
                 .execute()
         }

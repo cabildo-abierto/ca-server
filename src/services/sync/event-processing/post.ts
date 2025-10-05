@@ -128,7 +128,12 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
         })
 
         if (insertedPosts && !reprocess) {
+            const parents = insertedPosts.map(i => i.replyToId)
+            const quotes = insertedPosts.map(i => i.quoteToId)
+            const interactions = [...parents, ...quotes].filter(x => x != null)
+
             await Promise.all([
+                this.ctx.worker?.addJob("update-interactions-score", interactions),
                 this.createNotifications(insertedPosts),
                 this.ctx.worker?.addJob("update-contents-topic-mentions", insertedPosts.map(r => r.uri), 11)
             ])

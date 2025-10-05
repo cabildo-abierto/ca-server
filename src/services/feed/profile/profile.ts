@@ -2,7 +2,6 @@ import {handleToDid} from "#/services/user/users";
 import {getMainProfileFeedSkeleton} from "#/services/feed/profile/main";
 import {getRepliesProfileFeedSkeleton} from "#/services/feed/profile/replies";
 import {FeedPipelineProps, getFeed, GetFeedOutput} from "#/services/feed/feed";
-import {creationDateSortKey, rootCreationDateSortKey} from "#/services/feed/utils";
 import {getEditsProfileFeedSkeleton} from "#/services/feed/profile/edits";
 import {CAHandlerNoAuth} from "#/utils/handler";
 import {filterFeed} from "#/services/feed/inicio/following";
@@ -19,24 +18,20 @@ export const getProfileFeed: CAHandlerNoAuth<{params: {handleOrDid: string, kind
     if(kind == "publicaciones"){
         pipeline = {
             getSkeleton: getMainProfileFeedSkeleton(did),
-            sortKey: rootCreationDateSortKey,
             filter: (ctx, f) => filterFeed(ctx, f, true)
         }
     } else if(kind == "respuestas"){
         pipeline = {
             getSkeleton: getRepliesProfileFeedSkeleton(did),
-            sortKey: creationDateSortKey,
             filter: (ctx, f) => filterFeed(ctx, f, true)
         }
     } else if(kind == "ediciones") {
         pipeline = {
-            getSkeleton: getEditsProfileFeedSkeleton(did),
-            sortKey: rootCreationDateSortKey
+            getSkeleton: getEditsProfileFeedSkeleton(did)
         }
     } else if(kind == "articulos") {
         pipeline = {
-            getSkeleton: getArticlesProfileFeedSkeleton(did),
-            sortKey: rootCreationDateSortKey
+            getSkeleton: getArticlesProfileFeedSkeleton(did)
         }
     } else {
         return {error: "Feed inválido."}

@@ -1,7 +1,7 @@
 import express from 'express'
 import {cookieOptions, handler, Session, sessionAgent} from "#/utils/session-agent";
 import {CAHandlerNoAuth, makeHandler, makeHandlerNoAuth} from "#/utils/handler";
-import {searchTopics, searchUsers} from "#/services/search/search";
+import {searchTopics, searchUsers, searchUsersAndTopics} from "#/services/search/search";
 import {createArticle} from "#/services/write/article";
 import {getIronSession} from "iron-session";
 import {env} from "#/lib/env";
@@ -41,7 +41,7 @@ import {createTopicVersion} from "#/services/write/topic";
 import path from "path";
 import {cancelEditVote, voteEdit} from "#/services/wiki/votes";
 import { adminRoutes } from './admin-routes';
-import { fetchURLMetadata, getContentMetadata } from '#/services/write/metadata';
+import { fetchURLMetadataHandler, getContentMetadata } from '#/services/write/metadata';
 import {getDataset, getDatasets, getTopicsDatasetHandler } from '#/services/dataset/read';
 import { createDataset } from '#/services/dataset/write';
 import {searchContents} from "#/services/feed/search";
@@ -139,6 +139,11 @@ export const createRouter = (ctx: AppContext) => {
     router.get(
         '/search-users/:query',
         handler(makeHandlerNoAuth(ctx, searchUsers))
+    )
+
+    router.get(
+        '/search-users-and-topics/:query',
+        handler(makeHandlerNoAuth(ctx, searchUsersAndTopics))
     )
 
     router.post(
@@ -351,7 +356,7 @@ export const createRouter = (ctx: AppContext) => {
         handler(makeHandler(ctx, cancelValidationRequest))
     )
 
-    router.get('/metadata', makeHandler(ctx, fetchURLMetadata))
+    router.post('/metadata', makeHandler(ctx, fetchURLMetadataHandler))
 
     router.get('/donation-history', makeHandler(ctx, getDonationHistory))
 

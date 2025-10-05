@@ -100,6 +100,7 @@ const getEnDiscusionSkeletonQuery: (metric: EnDiscusionMetric, time: EnDiscusion
                     "Content.uri",
                     "Content.created_at as createdAt"
                 ])
+                .where("interactionsScore", "is not", null)
                 .orderBy(["interactionsScore desc", "Content.created_at desc"])
                 .limit(limit)
                 .offset(offsetFrom)

@@ -5,15 +5,20 @@ import {hydrateProfileViewBasic} from "#/services/hydration/profile";
 import {cleanText} from "#/utils/strings";
 import {TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
 import {AppContext} from "#/setup";
-import {topicQueryResultToTopicViewBasic} from "#/services/wiki/topics";
+import {hydrateTopicViewBasicFromUri} from "#/services/wiki/topics";
 import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
 import {Agent} from "#/utils/session-agent";
 import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
 import {$Typed} from "@atproto/api";
 import {sql} from "kysely";
+import {sortByKey, unique} from "#/utils/arrays";
+import {ArCabildoabiertoActorDefs} from "#/lex-api"
+import {getTopicTitle} from "#/services/wiki/utils";
+import dice from "fast-dice-coefficient"
 
 
-export async function searchUsersInCA(ctx: AppContext, query: string, dataplane: Dataplane, limit: number): Promise<string[]> {
+
+export async function searchUsersInCA(ctx: AppContext, query: string, limit: number): Promise<string[]> {
     const MIN_SIMILARITY_THRESHOLD = 0.1
 
     let users = await ctx.kysely
@@ -63,7 +68,7 @@ export const searchUsers: CAHandlerNoAuth<{
 
     const t1 = Date.now()
     let [caSearchResults, bskySearchResults] = await Promise.all([
-        searchUsersInCA(ctx, searchQuery, dataplane, limit),
+        searchUsersInCA(ctx, searchQuery, limit),
         searchUsersInBsky(agent, searchQuery, dataplane, limit)
     ])
     const t2 = Date.now()
@@ -90,68 +95,133 @@ export const searchUsers: CAHandlerNoAuth<{
 }
 
 
-export const searchTopics: CAHandlerNoAuth<{params: {q: string}, query: {c: string | string[] | undefined}}, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
-    let {q} = params;
-    const categories = query.c == undefined ? undefined : (typeof query.c == "string" ? [query.c] : query.c);
-    const searchQuery = cleanText(q);
-
-    const did = agent.hasSession() ? agent.did : undefined
-
-    const topics = await ctx.kysely
+async function searchTopicsSkeleton(ctx: AppContext, query: string, categories?: string[], limit?: number) {
+    return await ctx.kysely
         .with('topics_with_titles', (eb) =>
             eb.selectFrom('Topic')
                 .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
-                .innerJoin("Content", "Content.uri", "TopicVersion.uri")
                 .select([
                     'Topic.id',
-                    'Topic.lastEdit',
-                    'Topic.popularityScoreLastDay',
-                    'Topic.popularityScoreLastWeek',
-                    'Topic.popularityScoreLastMonth',
-                    'TopicVersion.props',
-                    "Content.numWords",
-                    eb => (
-                        eb
-                            .selectFrom("ReadSession")
-                            .select(
-                                [eb => eb.fn.max("ReadSession.created_at").as("lastRead")
-                                ])
-                            .where("ReadSession.userId", "=", did ?? "no did")
-                            .whereRef("ReadSession.readContentId", "=", "TopicVersion.uri").as("lastRead")
-                    ),
                     eb => eb.fn.coalesce(
                         eb.cast<string>(eb.fn('jsonb_path_query_first', [
                             eb.ref('TopicVersion.props'),
                             eb.val('$[*] ? (@.name == "Título").value.value')
                         ]), "text"),
                         eb.cast(eb.ref('Topic.id'), 'text')
-                    ).as('title')
+                    ).as('title'),
+                    "TopicVersion.uri"
                 ])
         )
         .selectFrom('topics_with_titles')
-        .selectAll()
+        .select(["id", "title", "uri"])
         .select(eb => [
-            sql<number>`similarity(${eb.ref('title')}::text, ${eb.val(searchQuery)}::text)`.as('match_score')
+            sql<number>`similarity(${eb.ref('title')}::text, ${eb.val(query)}::text)`.as('match_score')
         ])
         .$if(categories != null, qb => qb.where(eb => categories!.includes("Sin categoría") ?
             eb.val(stringListIsEmpty("Categorías")) :
             eb.and(categories!.map(c => stringListIncludes("Categorías", c)))))
-        .where(eb => sql<number>`similarity(${eb.ref('title')}::text, ${eb.val(searchQuery)}::text)`, ">", 0.1)
+        .where(eb => sql<number>`similarity(${eb.ref('title')}::text, ${eb.val(query)}::text)`, ">", 0.1)
         .orderBy('match_score', 'desc')
-        .orderBy('popularityScoreLastDay', 'desc')
-        .limit(20)
+        .limit(limit ?? 20)
         .execute()
+}
+
+
+export const searchTopics: CAHandlerNoAuth<{params: {q: string}, query: {c: string | string[] | undefined}}, TopicViewBasic[]> = async (ctx, agent, {params, query}) => {
+    let {q} = params;
+    const categories = query.c == undefined ? undefined : (typeof query.c == "string" ? [query.c] : query.c);
+    const searchQuery = cleanText(q)
+
+    const topics = await searchTopicsSkeleton(
+        ctx,
+        searchQuery,
+        categories,
+        20
+    )
+
+    const dataplane = new Dataplane(ctx, agent)
+    await dataplane.fetchTopicsBasicByUris(topics.map(t => t.uri))
+
+    const data: TopicViewBasic[] = topics
+        .map(t => hydrateTopicViewBasicFromUri(t.uri, dataplane).data)
+        .filter(x => x != null)
 
     return {
-        data: topics.map(t => topicQueryResultToTopicViewBasic({
-            id: t.id,
-            popularityScoreLastDay: t.popularityScoreLastDay,
-            popularityScoreLastWeek: t.popularityScoreLastWeek,
-            popularityScoreLastMonth: t.popularityScoreLastMonth,
-            lastEdit: t.lastEdit,
-            props: t.props,
-            numWords: t.numWords,
-            lastRead: t.lastRead
-        }))
-    };
-};
+        data
+    }
+}
+
+type UserOrTopicBasic = $Typed<ArCabildoabiertoActorDefs.ProfileViewBasic> | $Typed<TopicViewBasic>
+
+function calculateScore(query: string, text: string): number {
+    return dice(cleanText(query), cleanText(text))
+}
+
+export const searchUsersAndTopics: CAHandlerNoAuth<{
+    params: { query: string }, query?: {limit?: number}
+}, UserOrTopicBasic[]> = async (ctx, agent, {params, query}) => {
+    const {query: searchQuery} = params
+    const limit = query?.limit ?? 25
+
+
+    const dataplane = new Dataplane(ctx, agent)
+
+    const limitByKind = Math.ceil(limit / 2)
+
+    const t1 = Date.now()
+    const [caUsers, caTopics, bskyUsers] = await Promise.all([
+        searchUsersInCA(ctx, searchQuery, limitByKind),
+        searchTopicsSkeleton(ctx, searchQuery, undefined, limitByKind),
+        searchUsersInBsky(agent, searchQuery, dataplane, limitByKind)
+    ])
+
+    const t2 = Date.now()
+    const userDids = unique([...caUsers, ...bskyUsers])
+    await Promise.all([
+        dataplane.fetchProfileViewBasicHydrationData(userDids),
+        dataplane.fetchTopicsBasicByUris(caTopics.map(t => t.uri)),
+    ])
+    const t3 = Date.now()
+
+    let users: $Typed<ArCabildoabiertoActorDefs.ProfileViewBasic>[] = userDids
+        .map(d => hydrateProfileViewBasic(ctx, d, dataplane))
+        .filter(x => x != null)
+        .map(x => ({$type: "ar.cabildoabierto.actor.defs#profileViewBasic", ...x}))
+
+    let topics = caTopics
+        .map(t => hydrateTopicViewBasicFromUri(t.uri, dataplane).data)
+        .filter(x => x != null)
+
+
+    const score = (x: UserOrTopicBasic) => {
+        if(ArCabildoabiertoActorDefs.isProfileViewBasic(x)){
+            const d = Math.max(
+                calculateScore(x.handle, searchQuery),
+                x.displayName ? calculateScore(x.displayName, searchQuery) : -10000
+            )
+            return d * (x.caProfile ? 1.5 : 1)
+        } else {
+            return calculateScore(getTopicTitle(x), searchQuery) * 1.5
+        }
+    }
+
+    users = sortByKey(users, score, (a, b) => b-a)
+    topics = sortByKey(topics, score, (a, b) => b-a)
+
+    let data = [
+        ...users.slice(0, limitByKind),
+        ...topics.slice(0, limitByKind)
+    ]
+
+    data = sortByKey(
+        data,
+        score,
+        (a, b) => b-a
+    )
+
+    // ctx.logger.pino.info({results: data.map(d => ({s: score(d), d}))}, "data")
+
+    const t4 = Date.now()
+    ctx.logger.logTimes("search users and topics", [t1, t2, t3, t4])
+    return {data: data}
+}

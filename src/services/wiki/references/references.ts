@@ -59,9 +59,9 @@ export async function updateReferencesForNewContents(ctx: AppContext) {
 
 async function ftsReferencesQuery(ctx: AppContext, uris?: string[], topics?: string[]) {
     try {
+        if(uris != undefined && uris.length == 0 || topics != undefined && topics.length == 0) return []
         return await ctx.kysely
             .with(wb => wb("Synonyms").materialized(), eb => eb
-                // Select from a subquery that *only* does the unnesting
                 .selectFrom(
                     (eb) => eb.selectFrom("Topic")
                         .$if(topics != null, qb => qb.where("Topic.id", "in", topics!))
@@ -90,7 +90,7 @@ async function ftsReferencesQuery(ctx: AppContext, uris?: string[], topics?: str
                 "Content.uri",
                 sql<number>`ts_rank_cd("Content"."text_tsv", "Synonyms"."query")`.as("rank")
             ])
-            .execute();
+            .execute()
     } catch (error) {
         ctx.logger.pino.error({error, topics: topics?.slice(0, 5), uris: uris?.slice(0, 5)}, "error in ftsReferences query")
         throw error
@@ -173,6 +173,8 @@ async function applyReferencesUpdate(ctx: AppContext, referencesToInsert: Refere
     // asumimos que referencesToInsert tiene todas las referencias en el producto cartesiano
     // entre contentIds y topicIds
     // si contentIds es undefined son todos los contenidos y lo mismo con topicIds
+    if(contentUris != null && contentUris.length == 0 || topicIds != null && topicIds.length == 0) return
+
     try {
         const date = new Date()
         ctx.logger.pino.info({count: referencesToInsert.length}, "applying references update")
@@ -362,13 +364,13 @@ export async function getTopicsReferencedInText(ctx: AppContext, text: string): 
             .select(["id", "currentVersionId", sql<string>`unnest("Topic"."synonyms")`.as("keyword")])
         )
         .selectFrom("Synonyms")
-        .where(text_tsv, '@@', sql`plainto_tsquery('public.spanish_unaccent', "Synonyms"."keyword")`)
+        .where(sql<boolean>`${text_tsv} @@ to_tsquery('public.spanish_simple_unaccent', regexp_replace(trim("Synonyms"."keyword"), '\\s+', ' <-> ', 'g'))`)
         .innerJoin("TopicVersion", "TopicVersion.uri", "Synonyms.currentVersionId")
         .select([
             'Synonyms.id as topicId',
             'Synonyms.keyword',
             "TopicVersion.props",
-            sql<number>`ts_rank_cd(${text_tsv}, plainto_tsquery('public.spanish_unaccent', "Synonyms"."keyword"))`.as('rank')
+            sql<number>`ts_rank_cd(${text_tsv}, to_tsquery('public.spanish_simple_unaccent', regexp_replace(trim("Synonyms"."keyword"), '\\s+', ' <-> ', 'g')))`.as('rank')
         ])
         .execute();
 
