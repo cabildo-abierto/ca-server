@@ -1,25 +1,25 @@
-import {FeedPipelineProps, GetSkeletonProps} from "#/services/feed/feed";
-import {CAHandler} from "#/utils/handler";
+import {FeedPipelineProps, GetSkeletonProps} from "#/services/feed/feed.js";
+import {CAHandler} from "#/utils/handler.js";
 import {
     isRecord as isPostRecord,
     Record as PostRecord,
     validateRecord as validatePostRecord
-} from "#/lex-api/types/app/bsky/feed/post";
+} from "#/lex-api/types/app/bsky/feed/post.js";
 import {
     isRecord as isArticleRecord,
     Record as ArticleRecord,
     validateRecord as validateArticleRecord
-} from "#/lex-api/types/ar/cabildoabierto/feed/article";
-import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
+} from "#/lex-api/types/ar/cabildoabierto/feed/article.js";
+import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs.js";
 import {$Typed} from "@atproto/api";
 import {sql} from "kysely";
 import {
     GetNextCursor,
     getNextFollowingFeedCursor,
     SkeletonQuery
-} from "#/services/feed/inicio/following";
-import {PostRecordProcessor} from "#/services/sync/event-processing/post";
-import {ArticleRecordProcessor} from "#/services/sync/event-processing/article";
+} from "#/services/feed/inicio/following.js";
+import {PostRecordProcessor} from "#/services/sync/event-processing/post.js";
+import {ArticleRecordProcessor} from "#/services/sync/event-processing/article.js";
 
 
 export function getEnDiscusionStartDate(time: EnDiscusionTime) {

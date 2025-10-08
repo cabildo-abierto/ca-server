@@ -1,5 +1,5 @@
-import {setupAppContext} from "#/setup"
-import {updateInteractionsScore} from "#/services/feed/feed-scores";
+import {setupAppContext} from "#/setup.js"
+import {updateInteractionsScore} from "#/services/feed/feed-scores.js";
 
 
 async function run() {

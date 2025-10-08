@@ -1,5 +1,5 @@
-import {AppContext} from "#/setup";
-import {getCollectionFromUri, getDidFromUri, getRkeyFromUri} from "#/utils/uri";
+import {AppContext} from "#/setup.js";
+import {getCollectionFromUri, getDidFromUri, getRkeyFromUri} from "#/utils/uri.js";
 
 
 export async function updateEngagementCounts(ctx: AppContext) {

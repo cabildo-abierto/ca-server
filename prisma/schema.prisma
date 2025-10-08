@@ -84,6 +84,7 @@ model Content {
   TopicVersion            TopicVersion?
   Dataset                 Dataset[]
   text_tsv                Unsupported("tsvector")?
+  edited                  Boolean                  @default(false)
 
   @@index([text_tsv], map: "content_text_fts_idx", type: Gin)
   @@index([created_at(sort: Desc)])
@@ -238,10 +239,13 @@ model Post {
   facets                        String?
   embed                         String?
   replyToId                     String?
+  replyToCid                    String?
   rootId                        String?
+  rootCid                       String?
   uri                           String   @id
   langs                         String[]
   quoteToId                     String?
+  quoteToCid                    String?
   Record_Post_quoteToIdToRecord Record?  @relation("Post_quoteToIdToRecord", fields: [quoteToId], references: [uri])
   Record_Post_replyToIdToRecord Record?  @relation("Post_replyToIdToRecord", fields: [replyToId], references: [uri])
   Record_Post_rootIdToRecord    Record?  @relation("Post_rootIdToRecord", fields: [rootId], references: [uri])
@@ -255,6 +259,7 @@ model Post {
 model Reaction {
   uri                               String      @id
   subjectId                         String?
+  subjectCid                        String?
   Record_Reaction_subjectIdToRecord Record?     @relation("Reaction_subjectIdToRecord", fields: [subjectId], references: [uri])
   Record_Reaction_uriToRecord       Record      @relation("Reaction_uriToRecord", fields: [uri], references: [uri])
   VoteReject                        VoteReject?

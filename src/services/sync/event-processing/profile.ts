@@ -1,14 +1,14 @@
-import {getDidFromUri} from "#/utils/uri";
-import {didToHandle} from "#/services/user/users";
-import * as CAProfile from "#/lex-api/types/ar/cabildoabierto/actor/caProfile"
+import {getDidFromUri} from "#/utils/uri.js";
+import {didToHandle} from "#/services/user/users.js";
+import * as CAProfile from "#/lex-api/types/ar/cabildoabierto/actor/caProfile.js"
 import {AppBskyActorProfile} from "@atproto/api"
-import {ATProtoStrongRef} from "#/lib/types";
-import {getCidFromBlobRef} from "#/services/sync/utils";
-import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
-import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
-import {RefAndRecord} from "#/services/sync/types";
+import {ATProtoStrongRef} from "#/lib/types.js";
+import {getCidFromBlobRef} from "#/services/sync/utils.js";
+import {RecordProcessor} from "#/services/sync/event-processing/record-processor.js";
+import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor.js";
+import {RefAndRecord} from "#/services/sync/types.js";
 import {ValidationResult} from "@atproto/lexicon";
-import {AppContext} from "#/setup";
+import {AppContext} from "#/setup.js";
 
 
 export class CAProfileRecordProcessor extends RecordProcessor<CAProfile.Record> {

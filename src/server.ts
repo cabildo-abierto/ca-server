@@ -1,12 +1,13 @@
 import events from 'node:events'
 import type http from 'node:http'
 import express, {type Express} from 'express'
-import {env} from '#/lib/env'
-import {createRouter} from '#/routes/routes'
+import {env} from '#/lib/env.js'
+import {createRouter} from '#/routes/routes.js'
 import cors from 'cors'
-import {MirrorMachine} from "#/services/sync/mirror-machine";
-import {AppContext, setupAppContext} from "#/setup";
-import {Role} from "#/index";
+import {MirrorMachine} from "#/services/sync/mirror-machine.js";
+import {AppContext, setupAppContext} from "#/setup.js";
+import {Role} from "#/index.js";
+import morgan from "morgan"
 
 
 export class Server {
@@ -66,7 +67,6 @@ export class Server {
         app.use(express.json())
         app.use(express.urlencoded({extended: true}))
 
-        const morgan = require("morgan")
         app.use(morgan('combined'))
 
         const router = createRouter(ctx)

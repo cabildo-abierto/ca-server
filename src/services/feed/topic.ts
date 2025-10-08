@@ -1,18 +1,17 @@
-import {FeedViewContent, isFeedViewContent, isPostView, PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {FeedSkeleton, getFeed, GetSkeletonProps} from "#/services/feed/feed";
-import {AppContext} from "#/setup";
-import {Agent} from "#/utils/session-agent";
-import {creationDateSortKey} from "#/services/feed/utils";
-import {hydrateFeedViewContent} from "#/services/hydration/hydrate";
-import {listOrderDesc, sortByKey} from "#/utils/arrays";
-import {isNotFoundPost} from "#/lex-server/types/app/bsky/feed/defs";
-import {Dataplane} from "#/services/hydration/dataplane";
-import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
-import {getTopicTitle} from "#/services/wiki/utils";
-import {TopicProp,} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {getUri} from "#/utils/uri";
-import {isView as isSelectionQuoteEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/selectionQuote"
+import {FeedViewContent, isPostView, PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
+import {FeedSkeleton, getFeed, GetSkeletonProps} from "#/services/feed/feed.js";
+import {AppContext} from "#/setup.js";
+import {Agent} from "#/utils/session-agent.js";
+import {creationDateSortKey} from "#/services/feed/utils.js";
+import {hydrateFeedViewContent} from "#/services/hydration/hydrate.js";
+import {listOrderDesc, sortByKey} from "#/utils/arrays.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version.js";
+import {getTopicTitle} from "#/services/wiki/utils.js";
+import {TopicProp,} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
+import {getUri} from "#/utils/uri.js";
+import {isView as isSelectionQuoteEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/selectionQuote.js"
 import {
     EnDiscusionMetric,
     EnDiscusionSkeletonElement,
@@ -20,8 +19,8 @@ import {
     FeedFormatOption,
     getEnDiscusionStartDate,
     getNextCursorEnDiscusion
-} from "#/services/feed/inicio/discusion";
-import {SkeletonQuery} from "#/services/feed/inicio/following";
+} from "#/services/feed/inicio/discusion.js";
+import {SkeletonQuery} from "#/services/feed/inicio/following.js";
 
 
 const getTopicRepliesSkeleton = async (ctx: AppContext, id: string) => {
@@ -257,16 +256,11 @@ async function hydrateRepliesSkeleton(ctx: AppContext, agent: Agent, skeleton: F
     let feed = skeleton
         .map((e) => (hydrateFeedViewContent(ctx, e, data)))
 
-    feed.filter(isNotFoundPost).forEach(x => {
-        ctx.logger.pino.warn({uri: x.uri}, "content not found during hydration")
-    })
-
-    let res = feed
-        .filter(x => isFeedViewContent(x))
-
-    res = sortByKey(res, creationDateSortKey, listOrderDesc)
-
-    return res
+    return sortByKey(
+        feed.filter(x => x != null),
+        creationDateSortKey,
+        listOrderDesc
+    )
 }
 
 

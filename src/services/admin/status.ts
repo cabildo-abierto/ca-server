@@ -1,5 +1,5 @@
-import {CAHandler} from "#/utils/handler";
-import {AppContext} from "#/setup";
+import {CAHandler} from "#/utils/handler.js";
+import {AppContext} from "#/setup.js";
 
 type ServerStatus = {
     worker: boolean

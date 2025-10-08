@@ -1,10 +1,10 @@
-import {getCollectionFromUri, getRkeyFromUri, getUri} from "#/utils/uri";
-import {AppContext} from "#/setup";
-import {SessionAgent} from "#/utils/session-agent";
-import {CAHandler} from "#/utils/handler";
-import {handleToDid} from "#/services/user/users";
-import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor";
-import {batchDeleteRecords} from "#/services/sync/event-processing/get-record-processor";
+import {getCollectionFromUri, getRkeyFromUri, getUri} from "#/utils/uri.js";
+import {AppContext} from "#/setup.js";
+import {SessionAgent} from "#/utils/session-agent.js";
+import {CAHandler} from "#/utils/handler.js";
+import {handleToDid} from "#/services/user/users.js";
+import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor.js";
+import {batchDeleteRecords} from "#/services/sync/event-processing/get-record-processor.js";
 
 
 export async function deleteRecordsForAuthor({ctx, agent, did, collections, atproto}: {ctx: AppContext, agent?: SessionAgent, did: string, collections?: string[], atproto: boolean}){

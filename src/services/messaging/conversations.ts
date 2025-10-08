@@ -1,10 +1,10 @@
-import {CAHandler} from "#/utils/handler";
+import {CAHandler} from "#/utils/handler.js";
 import {
     ConvoView,
     DeletedMessageView,
     MessageInput,
     MessageView
-} from "@atproto/api/dist/client/types/chat/bsky/convo/defs";
+} from "@atproto/api/dist/client/types/chat/bsky/convo/defs.js";
 import {$Typed} from "@atproto/api";
 
 

@@ -6,54 +6,54 @@ import {
     isFeedViewContent,
     PostView,
     ThreadViewContent
-} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {getCollectionFromUri, getDidFromUri, isArticle, isDataset, isPost, isTopicVersion} from "#/utils/uri";
-import {isNotFoundPost, isReasonRepost, NotFoundPost, SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs";
-import {FeedSkeleton} from "#/services/feed/feed";
-import {decompress} from "#/utils/compression";
-import {getAllText} from "#/services/wiki/diff";
-import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
-import {listOrderDesc, sortByKey} from "#/utils/arrays";
+} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {getCollectionFromUri, getDidFromUri, isArticle, isDataset, isPost, isTopicVersion} from "#/utils/uri.js";
+import {isReasonRepost, NotFoundPost, SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs.js";
+import {FeedSkeleton} from "#/services/feed/feed.js";
+import {decompress} from "#/utils/compression.js";
+import {getAllText} from "#/services/wiki/diff.js";
+import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post.js"
+import {listOrderDesc, sortByKey} from "#/utils/arrays.js";
 import {
     isMain as isSelectionQuoteEmbed,
     Main as SelectionQuoteEmbed,
     View as SelectionQuoteEmbedView
-} from "#/lex-server/types/ar/cabildoabierto/embed/selectionQuote"
-import {isPostView, isThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {isPostView as isBskyPostView} from "#/lex-api/types/app/bsky/feed/defs"
-import {Dataplane} from "#/services/hydration/dataplane";
-import {hydrateEmbedViews, hydrateTopicViewBasicFromUri} from "#/services/wiki/topics";
-import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {DatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset"
-import {getTopicTitle} from "#/services/wiki/utils";
+} from "#/lex-server/types/ar/cabildoabierto/embed/selectionQuote.js"
+import {isPostView, isThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {isPostView as isBskyPostView} from "#/lex-api/types/app/bsky/feed/defs.js"
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {hydrateEmbedViews, hydrateTopicViewBasicFromUri} from "#/services/wiki/topics.js";
+import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
+import {DatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset.js"
+import {getTopicTitle} from "#/services/wiki/utils.js";
 import {
     isDatasetDataSource,
     isTopicsDataSource,
     isMain as isVisualizationEmbed,
     Main as VisualizationEmbed,
     View as VisualizationEmbedView
-} from "#/lex-server/types/ar/cabildoabierto/embed/visualization"
-import {hydrateDatasetView, hydrateTopicsDatasetView} from "#/services/dataset/read";
-import {ArticleEmbed, Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
-import {isMain as isRecordEmbed, Main as RecordEmbed} from "#/lex-api/types/app/bsky/embed/record"
+} from "#/lex-server/types/ar/cabildoabierto/embed/visualization.js"
+import {hydrateDatasetView, hydrateTopicsDatasetView} from "#/services/dataset/read.js";
+import {ArticleEmbed, Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
+import {isMain as isRecordEmbed, Main as RecordEmbed} from "#/lex-api/types/app/bsky/embed/record.js"
 import {
     isMain as isCARecordEmbed,
     Main as CARecordEmbed,
     View as CARecordEmbedView
-} from "#/lex-api/types/ar/cabildoabierto/embed/record"
+} from "#/lex-api/types/ar/cabildoabierto/embed/record.js"
 import {
     BlockedPost,
     isSkeletonReasonRepost,
     isThreadViewPost,
     ThreadViewPost
-} from "@atproto/api/dist/client/types/app/bsky/feed/defs"
-import {hydrateProfileViewBasic} from "#/services/hydration/profile"
+} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js"
+import {hydrateProfileViewBasic} from "#/services/hydration/profile.js"
 import removeMarkdown from "remove-markdown"
 import {
     isColumnFilter,
-} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
-import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-import {AppContext} from "#/setup";
+} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
+import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
+import {AppContext} from "#/setup.js";
 
 
 export function hydrateViewer(uri: string, data: Dataplane): { repost?: string, like?: string } {
@@ -87,7 +87,7 @@ export function hydrateFullArticleView(ctx: AppContext, uri: string, data: Datap
 
     let text: string | null = null
     let format: string | null = null
-    if(e?.text != null){
+    if (e?.text != null) {
         text = e.text
         format = e.dbFormat ?? null
     } else if (e?.textBlobId) {
@@ -130,7 +130,7 @@ export function hydrateFullArticleView(ctx: AppContext, uri: string, data: Datap
 }
 
 
-function dbLabelsToLabelsView(labels: string[], uri: string){
+function dbLabelsToLabelsView(labels: string[], uri: string) {
     const did = getDidFromUri(uri)
     return labels.map(l => ({
         val: l, src: did, uri: uri, cts: new Date().toISOString() // TO DO: Almacenar las timestamps de las labels
@@ -138,7 +138,7 @@ function dbLabelsToLabelsView(labels: string[], uri: string){
 }
 
 
-export function markdownToPlainText(md: string){
+export function markdownToPlainText(md: string) {
     return removeMarkdown(md)
         .trim()
         .replaceAll("\n", " ")
@@ -149,7 +149,7 @@ export function markdownToPlainText(md: string){
 
 
 export function getArticleSummary(text: string | null, format?: string) {
-    if(text == null){
+    if (text == null) {
         return {
             summary: "Contenido no encontrado.",
             summaryFormat: "plain-text"
@@ -188,12 +188,16 @@ export function hydrateArticleView(ctx: AppContext, uri: string, data: Dataplane
 
     let text: string | null = null
     let format: string | null = null
-    if(e.text != null){
+    if (e.text != null) {
         text = e.text
         format = e.dbFormat ?? null
     } else if (e.textBlobId) {
         text = data.getFetchedBlob({cid: e?.textBlobId, authorId})
-        ctx.logger.pino.warn({uri: e.uri, textBlobId: e?.textBlobId, text: text != null}, "no text found, tried fetching blob")
+        ctx.logger.pino.warn({
+            uri: e.uri,
+            textBlobId: e?.textBlobId,
+            text: text != null
+        }, "no text found, tried fetching blob")
         format = e.format ?? null
     } else {
         ctx.logger.pino.error({uri: e.uri}, "no text and no blob found")
@@ -246,7 +250,7 @@ function hydrateSelectionQuoteEmbedView(ctx: AppContext, embed: SelectionQuoteEm
 
         let text: string | null = null
         let format: string | null = null
-        if(caData.text != null){
+        if (caData.text != null) {
             text = caData.text
             format = caData.dbFormat ?? null
         } else if (caData.textBlobId) {
@@ -288,20 +292,20 @@ function hydrateSelectionQuoteEmbedView(ctx: AppContext, embed: SelectionQuoteEm
 
 
 function hydrateVisualizationEmbedView(ctx: AppContext, embed: VisualizationEmbed, data: Dataplane): $Typed<VisualizationEmbedView> | null {
-    if(isDatasetDataSource(embed.dataSource)){
+    if (isDatasetDataSource(embed.dataSource)) {
         const datasetUri = embed.dataSource.dataset
         const dataset = hydrateDatasetView(ctx, datasetUri, data)
-        if(dataset){
+        if (dataset) {
             return {
                 visualization: embed,
                 dataset,
                 $type: "ar.cabildoabierto.embed.visualization#view",
             }
         }
-    } else if(isTopicsDataSource(embed.dataSource)){
+    } else if (isTopicsDataSource(embed.dataSource)) {
         const filters = embed.filters?.filter(isColumnFilter) ?? []
         const dataset = hydrateTopicsDatasetView(ctx, filters, data)
-        if(dataset){
+        if (dataset) {
             return {
                 visualization: embed,
                 dataset,
@@ -317,17 +321,17 @@ function hydrateRecordEmbedView(ctx: AppContext, embed: CARecordEmbed | RecordEm
     const uri = embed.record.uri
     const collection = getCollectionFromUri(uri)
 
-    if(isArticle(collection)) {
+    if (isArticle(collection)) {
         const artView = hydrateArticleView(ctx, uri, data)
-        if(artView.data) {
+        if (artView.data) {
             return {
                 $type: "ar.cabildoabierto.embed.record#view",
                 record: artView.data
             }
         }
-    } else if(isPost(collection)) {
+    } else if (isPost(collection)) {
         const post = hydratePostView(ctx, uri, data)
-        if(post.data){
+        if (post.data) {
             return {
                 $type: "ar.cabildoabierto.embed.record#view",
                 record: post.data
@@ -341,7 +345,10 @@ function hydrateRecordEmbedView(ctx: AppContext, embed: CARecordEmbed | RecordEm
 }
 
 
-export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): { data?: $Typed<PostView>, error?: string } {
+export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): {
+    data?: $Typed<PostView>,
+    error?: string
+} {
     const post = data.bskyPosts?.get(uri)
     const caData = data.caContents?.get(uri)
 
@@ -361,25 +368,28 @@ export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): 
         } else {
             ctx.logger.pino.warn({uri}, "Warning: No se encontraron los datos para el selection quote en el post")
         }
-    } else if(isVisualizationEmbed(embed)) {
+    } else if (isVisualizationEmbed(embed)) {
         const view = hydrateVisualizationEmbedView(ctx, embed, data)
         if (view) {
             embedView = view;
         } else {
             ctx.logger.pino.warn({uri}, "Warning: No se encontraron los datos para la visualización")
         }
-    } else if(isRecordEmbed(embed) || isCARecordEmbed(embed)){
+    } else if (isRecordEmbed(embed) || isCARecordEmbed(embed)) {
         const view = hydrateRecordEmbedView(ctx, embed, data)
         if (view) {
             embedView = view;
         } else {
-            ctx.logger.pino.warn({uri, embedRecordUri: embed.record.uri}, "Warning: No se encontraron los datos para el record embed")
+            ctx.logger.pino.warn({
+                uri,
+                embedRecordUri: embed.record.uri
+            }, "Warning: No se encontraron los datos para el record embed")
         }
     }
 
     const authorId = getDidFromUri(post.uri)
     const author = hydrateProfileViewBasic(ctx, authorId, data)
-    if(!author) {
+    if (!author) {
         ctx.logger.pino.warn({uri}, "Warning: No se encontraron los datos del autor")
         return {error: "No se encontraron los datos del autor."}
     }
@@ -388,30 +398,31 @@ export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): 
 
     const rootCreationDate = data.rootCreationDates?.get(uri)
 
-    return {
-        data: {
-            ...post,
-            author,
-            labels: dbLabelsToLabelsView(caData?.selfLabels ?? [], uri),
-            $type: "ar.cabildoabierto.feed.defs#postView",
-            embed: embedView,
-            ...(caData ? {
-                likeCount: caData.uniqueLikesCount,
-                repostCount: caData.uniqueRepostsCount,
-                quoteCount: caData.quotesCount
-            } : {
-                likeCount: 0,
-                repostCount: 0,
-                quoteCount: 0
-            }),
-            bskyLikeCount: post.likeCount,
-            bskyRepostCount: post.repostCount,
-            bskyQuoteCount: post.quoteCount,
-            replyCount: post.replyCount,
-            rootCreationDate: rootCreationDate?.toISOString(),
-            viewer
-        }
+    const postView: $Typed<PostView> = {
+        ...post,
+        author,
+        labels: dbLabelsToLabelsView(caData?.selfLabels ?? [], uri),
+        $type: "ar.cabildoabierto.feed.defs#postView",
+        embed: embedView,
+        ...(caData ? {
+            record: caData.record ? JSON.parse(caData.record) : post.record,
+            text: caData.text,
+            likeCount: caData.uniqueLikesCount,
+            repostCount: caData.uniqueRepostsCount,
+            quoteCount: caData.quotesCount
+        } : {
+            likeCount: 0,
+            repostCount: 0,
+            quoteCount: 0
+        }),
+        bskyLikeCount: post.likeCount,
+        bskyRepostCount: post.repostCount,
+        bskyQuoteCount: post.quoteCount,
+        replyCount: post.replyCount,
+        rootCreationDate: rootCreationDate?.toISOString(),
+        viewer
     }
+    return {data: postView}
 }
 
 
@@ -426,9 +437,9 @@ export function hydrateContent(ctx: AppContext, uri: string, data: Dataplane, fu
         return full ? hydrateFullArticleView(ctx, uri, data) : hydrateArticleView(ctx, uri, data)
     } else if (isTopicVersion(collection)) {
         return hydrateTopicViewBasicFromUri(uri, data)
-    } else if(isDataset(collection)) {
+    } else if (isDataset(collection)) {
         const res = hydrateDatasetView(ctx, uri, data)
-        if(res) return {data: res}; else return {error: "No se pudo hidratar el dataset."}
+        if (res) return {data: res}; else return {error: "No se pudo hidratar el dataset."}
     } else {
         ctx.logger.pino.warn({collection}, "hydration not implemented")
         return {error: "Hidratación no implementada para: " + collection}
@@ -446,15 +457,15 @@ export function notFoundPost(uri: string): $Typed<NotFoundPost> {
 
 
 function hydrateFeedViewContentReason(ctx: AppContext, subjectUri: string, reason: SkeletonFeedPost["reason"], data: Dataplane): FeedViewContent["reason"] | null {
-    if(!reason) return null
-    if(isSkeletonReasonRepost(reason) && reason.repost){
+    if (!reason) return null
+    if (isSkeletonReasonRepost(reason) && reason.repost) {
         const user = hydrateProfileViewBasic(ctx, getDidFromUri(reason.repost), data)
-        if(!user) {
+        if (!user) {
             console.log("Warning: no se encontró el usuario autor del repost", getDidFromUri(reason.repost))
             return null
         }
         const repostData = data.reposts.get(subjectUri)
-        if(!repostData || !repostData.created_at) {
+        if (!repostData || !repostData.created_at) {
             console.log("Warning: no se encontró el repost", reason.repost)
             return null
         }
@@ -467,14 +478,14 @@ function hydrateFeedViewContentReason(ctx: AppContext, subjectUri: string, reaso
             },
             indexedAt
         }
-    } else if(isReasonRepost(reason)){
+    } else if (isReasonRepost(reason)) {
         return reason
     }
     return null
 }
 
 
-export function hydrateFeedViewContent(ctx: AppContext, e: SkeletonFeedPost, data: Dataplane): $Typed<FeedViewContent> | $Typed<NotFoundPost> {
+export function hydrateFeedViewContent(ctx: AppContext, e: SkeletonFeedPost, data: Dataplane): $Typed<FeedViewContent> | null {
     const reason = hydrateFeedViewContentReason(ctx, e.post, e.reason, data) ?? undefined
 
     const childBsky = data.bskyPosts?.get(e.post)
@@ -486,7 +497,7 @@ export function hydrateFeedViewContent(ctx: AppContext, e: SkeletonFeedPost, dat
 
     if (!leaf.data || leaf.error) {
         ctx.logger.pino.warn({uri: e.post}, "content not found")
-        return notFoundPost(e.post)
+        return null
     } else if (!reply) {
         return {
             $type: "ar.cabildoabierto.feed.defs#feedViewContent",
@@ -515,10 +526,7 @@ export async function hydrateFeed(ctx: AppContext, skeleton: FeedSkeleton, data:
 
     const feed = skeleton
         .map((e) => (hydrateFeedViewContent(ctx, e, data)))
-
-    feed.filter(isNotFoundPost).forEach(x => {
-        console.log("Content not found:", x.uri)
-    })
+        .filter(x => x != null)
 
     return feed.filter(x => isFeedViewContent(x))
 }
@@ -531,7 +539,7 @@ export type ThreadSkeleton = {
 }
 
 
-type ThreadViewContentReply = $Typed<ThreadViewContent> | $Typed<NotFoundPost> | $Typed<BlockedPost> | {$type: string}
+type ThreadViewContentReply = $Typed<ThreadViewContent> | $Typed<NotFoundPost> | $Typed<BlockedPost> | { $type: string }
 
 
 export const threadRepliesSortKey = (authorId: string) => (r: ThreadViewContentReply) => {
@@ -542,8 +550,8 @@ export const threadRepliesSortKey = (authorId: string) => (r: ThreadViewContentR
 
 export const threadPostRepliesSortKey = (authorId: string) => (r: ThreadViewPost) => {
     return isThreadViewPost(r) &&
-        isBskyPostView(r.post) &&
-        r.post.author.did == authorId ?
+    isBskyPostView(r.post) &&
+    r.post.author.did == authorId ?
         [1, -new Date(r.post.indexedAt).getTime()] : [0, 0]
 }
 
@@ -566,9 +574,9 @@ export function hydrateThreadViewContent(ctx: AppContext, skeleton: ThreadSkelet
     }
 
     let parent: $Typed<ThreadViewContent> | undefined
-    if(skeleton.parent){
+    if (skeleton.parent) {
         const hydratedParent = hydrateThreadViewContent(ctx, skeleton.parent, data, false)
-        if(hydratedParent) {
+        if (hydratedParent) {
             parent = {
                 ...hydratedParent,
                 $type: "ar.cabildoabierto.feed.defs#threadViewContent"

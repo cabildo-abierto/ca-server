@@ -1,11 +1,11 @@
-import {ATProtoStrongRef} from "#/lib/types";
-import {SessionAgent} from "#/utils/session-agent";
-import {AppContext} from "#/setup";
-import {getUri} from "#/utils/uri";
-import {CAHandler} from "#/utils/handler";
-import {addReaction, removeReactionAT} from "#/services/reactions/reactions";
-import {Record as VoteAcceptRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept"
-import {Record as VoteRejectRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject"
+import {ATProtoStrongRef} from "#/lib/types.js";
+import {SessionAgent} from "#/utils/session-agent.js";
+import {AppContext} from "#/setup.js";
+import {getUri} from "#/utils/uri.js";
+import {CAHandler} from "#/utils/handler.js";
+import {addReaction, removeReactionAT} from "#/services/reactions/reactions.js";
+import {Record as VoteAcceptRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept.js"
+import {Record as VoteRejectRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject.js"
 
 export type TopicVoteType = "ar.cabildoabierto.wiki.voteAccept" | "ar.cabildoabierto.wiki.voteReject"
 

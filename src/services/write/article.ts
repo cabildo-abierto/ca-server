@@ -1,11 +1,13 @@
-import {uploadStringBlob} from "#/services/blob";
-import {CAHandler} from "#/utils/handler";
-import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article";
-import {SessionAgent} from "#/utils/session-agent";
-import {ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article";
-import {EmbedContext, getEmbedsFromEmbedViews} from "#/services/write/topic";
-import {ArticleRecordProcessor} from "#/services/sync/event-processing/article";
-import {getRkeyFromUri} from "#/utils/uri";
+import {uploadStringBlob} from "#/services/blob.js";
+import {CAHandler} from "#/utils/handler.js";
+import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article.js";
+import {SessionAgent} from "#/utils/session-agent.js";
+import {ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article.js";
+import {EmbedContext, getEmbedsFromEmbedViews} from "#/services/write/topic.js";
+import {ArticleRecordProcessor} from "#/services/sync/event-processing/article.js";
+import {getRkeyFromUri} from "#/utils/uri.js";
+import {deleteRecords} from "#/services/delete.js";
+import {isContentReferenced} from "#/services/write/post.js";
 
 export type CreateArticleProps = {
     title: string
@@ -58,6 +60,17 @@ export const createArticleAT = async (agent: SessionAgent, article: CreateArticl
 }
 
 export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, article) => {
+    if(article.uri) {
+        // se está editando un artículo
+        const {data: referenced, error} = await isContentReferenced(ctx, article.uri)
+        if(error) return {error}
+        if(referenced){
+            return {error: "El artículo ya fue referenciado y no se puede editar. Si querés, podés eliminarlo."}
+        } else {
+            await deleteRecords({ctx, agent, uris: [article.uri], atproto: true})
+        }
+    }
+
 
     try {
         const res = await createArticleAT(agent, article)

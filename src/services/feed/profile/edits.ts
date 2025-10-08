@@ -1,4 +1,4 @@
-import {GetSkeletonProps} from "#/services/feed/feed";
+import {GetSkeletonProps} from "#/services/feed/feed.js";
 
 
 

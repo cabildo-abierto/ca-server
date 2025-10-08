@@ -1,7 +1,7 @@
-import {FullArticleView, PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
+import {FullArticleView, PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js"
 import {$Typed} from "@atproto/api";
-import {ArticleView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {ReactionType} from "#/services/reactions/reactions";
+import {ArticleView} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {ReactionType} from "#/services/reactions/reactions.js";
 
 
 export function isKnownContent(content: any): content is $Typed<ArticleView> | $Typed<PostView> | $Typed<FullArticleView> {

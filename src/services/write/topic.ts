@@ -1,13 +1,13 @@
-import {SessionAgent} from "#/utils/session-agent";
-import {CAHandler} from "#/utils/handler";
-import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {uploadBase64Blob, uploadStringBlob} from "#/services/blob";
+import {SessionAgent} from "#/utils/session-agent.js";
+import {CAHandler} from "#/utils/handler.js";
+import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
+import {uploadBase64Blob, uploadStringBlob} from "#/services/blob.js";
 import {BlobRef} from "@atproto/lexicon";
-import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {ArticleEmbedView, ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
-import {isView as isImagesEmbedView, Image} from "#/lex-api/types/app/bsky/embed/images"
-import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
-import {TopicVersionRecordProcessor} from "#/services/sync/event-processing/topic";
+import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
+import {ArticleEmbedView, ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article.js";
+import {isView as isImagesEmbedView, Image} from "#/lex-api/types/app/bsky/embed/images.js"
+import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
+import {TopicVersionRecordProcessor} from "#/services/sync/event-processing/topic.js";
 
 
 export async function getEmbedsFromEmbedViews(agent: SessionAgent, embeds?: ArticleEmbedView[], embedContexts?: EmbedContext[]): Promise<{data?: ArticleEmbed[], error?: string}> {

@@ -1,13 +1,13 @@
-import {AppContext} from "#/setup";
-import {TextAndFormat} from "#/services/wiki/references/references";
-import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
-import {decompress} from "#/utils/compression";
-import {getAllText} from "#/services/wiki/diff";
-import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
-import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-import {BlobRef} from "#/services/hydration/hydrate";
-import {getCollectionFromUri, getDidFromUri, isPost} from "#/utils/uri";
-import {fetchTextBlobs} from "#/services/blob";
+import {AppContext} from "#/setup.js";
+import {TextAndFormat} from "#/services/wiki/references/references.js";
+import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms.js";
+import {decompress} from "#/utils/compression.js";
+import {getAllText} from "#/services/wiki/diff.js";
+import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
+import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
+import {BlobRef} from "#/services/hydration/hydrate.js";
+import {getCollectionFromUri, getDidFromUri, isPost} from "#/utils/uri.js";
+import {fetchTextBlobs} from "#/services/blob.js";
 
 
 export function getNumWords(text: string, format: string) {

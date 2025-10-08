@@ -1,13 +1,13 @@
 import express from 'express'
-import {cookieOptions, handler, Session, sessionAgent} from "#/utils/session-agent";
-import {CAHandlerNoAuth, makeHandler, makeHandlerNoAuth} from "#/utils/handler";
-import {searchTopics, searchUsers, searchUsersAndTopics} from "#/services/search/search";
-import {createArticle} from "#/services/write/article";
+import {cookieOptions, handler, Session, sessionAgent} from "#/utils/session-agent.js";
+import {CAHandlerNoAuth, makeHandler, makeHandlerNoAuth} from "#/utils/handler.js";
+import {searchTopics, searchUsers, searchUsersAndTopics} from "#/services/search/search.js";
+import {createArticle} from "#/services/write/article.js";
 import {getIronSession} from "iron-session";
-import {env} from "#/lib/env";
-import {createAccessRequest, getInviteCodesToShare, login} from "#/services/user/access";
-import {getFeedByKind} from "#/services/feed/feed";
-import {getProfileFeed} from "#/services/feed/profile/profile";
+import {env} from "#/lib/env.js";
+import {createAccessRequest, getInviteCodesToShare, login} from "#/services/user/access.js";
+import {getFeedByKind} from "#/services/feed/feed.js";
+import {getProfileFeed} from "#/services/feed/profile/profile.js";
 import {
     clearFollowsHandler,
     deleteSession,
@@ -21,11 +21,11 @@ import {
     unfollow,
     updateAlgorithmConfig,
     updateProfile
-} from "#/services/user/users";
-import {createPost} from "#/services/write/post";
-import {addLike, removeLike, removeRepost, repost} from "#/services/reactions/reactions";
-import {getThread} from "#/services/thread/thread";
-import {getLikes, getReposts, getQuotes} from "#/services/thread/get-details";
+} from "#/services/user/users.js";
+import {createPost} from "#/services/write/post.js";
+import {addLike, removeLike, removeRepost, repost} from "#/services/reactions/reactions.js";
+import {getThread} from "#/services/thread/thread.js";
+import {getLikes, getReposts, getQuotes} from "#/services/thread/get-details.js";
 import {
     getTopicHandler,
     getTopicVersionHandler,
@@ -33,38 +33,38 @@ import {
     getTopicsHandler,
     getCategories,
     getTopicsMentioned
-} from "#/services/wiki/topics";
-import {getTopicFeed, getTopicMentionsInTopicsFeed, getTopicQuoteReplies} from "#/services/feed/topic";
-import {deleteCAProfile, deleteRecordHandler, deleteRecordsHandler} from "#/services/delete";
-import {getCategoriesGraph, getCategoryGraph} from "#/services/wiki/graph";
-import {createTopicVersion} from "#/services/write/topic";
+} from "#/services/wiki/topics.js";
+import {getTopicFeed, getTopicMentionsInTopicsFeed, getTopicQuoteReplies} from "#/services/feed/topic.js";
+import {deleteCAProfile, deleteRecordHandler, deleteRecordsHandler} from "#/services/delete.js";
+import {getCategoriesGraph, getCategoryGraph} from "#/services/wiki/graph.js";
+import {createTopicVersion} from "#/services/write/topic.js";
 import path from "path";
-import {cancelEditVote, voteEdit} from "#/services/wiki/votes";
-import { adminRoutes } from './admin-routes';
-import { fetchURLMetadataHandler, getContentMetadata } from '#/services/write/metadata';
-import {getDataset, getDatasets, getTopicsDatasetHandler } from '#/services/dataset/read';
-import { createDataset } from '#/services/dataset/write';
-import {searchContents} from "#/services/feed/search";
-import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion";
-import {cancelValidationRequest, createValidationRequest, getValidationRequest } from '#/services/user/validation';
-import {createPreference, getDonationHistory, getFundingStateHandler, getMonthlyValueHandler, processPayment} from '#/services/monetization/donations';
-import { storeReadSessionHandler } from '#/services/monetization/read-tracking';
-import { getTopicTitleHandler } from '#/services/wiki/current-version';
-import {getTopicHistoryHandler} from "#/services/wiki/history";
-import {getNewVersionDiff, getTopicVersionChanges} from '#/services/wiki/changes';
-import {getNotifications, getUnreadNotificationsCount} from '#/services/notifications/notifications';
+import {cancelEditVote, voteEdit} from "#/services/wiki/votes.js";
+import { adminRoutes } from './admin-routes.js';
+import { fetchURLMetadataHandler, getContentMetadata } from '#/services/write/metadata.js';
+import {getDataset, getDatasets, getTopicsDatasetHandler } from '#/services/dataset/read.js';
+import { createDataset } from '#/services/dataset/write.js';
+import {searchContents} from "#/services/feed/search.js";
+import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion.js";
+import {cancelValidationRequest, createValidationRequest, getValidationRequest } from '#/services/user/validation.js';
+import {createPreference, getDonationHistory, getFundingStateHandler, getMonthlyValueHandler, processPayment} from '#/services/monetization/donations.js';
+import { storeReadSessionHandler } from '#/services/monetization/read-tracking.js';
+import { getTopicTitleHandler } from '#/services/wiki/current-version.js';
+import {getTopicHistoryHandler} from "#/services/wiki/history.js";
+import {getNewVersionDiff, getTopicVersionChanges} from '#/services/wiki/changes.js';
+import {getNotifications, getUnreadNotificationsCount} from '#/services/notifications/notifications.js';
 import {
     createConversation,
     getConversation,
     getConversations,
     markConversationRead,
     sendMessage
-} from "#/services/messaging/conversations";
-import {getDraft, getDrafts, saveDraft } from '#/services/write/drafts';
-import { getNextMeeting } from '#/services/admin/meetings';
-import { getAuthorDashboardHandler } from '#/services/monetization/author-dashboard';
-import { getFollowSuggestions, setNotInterested } from '#/services/user/follow-suggestions';
-import {AppContext} from "#/setup";
+} from "#/services/messaging/conversations.js";
+import {getDraft, getDrafts, saveDraft } from '#/services/write/drafts.js';
+import { getNextMeeting } from '#/services/admin/meetings.js';
+import { getAuthorDashboardHandler } from '#/services/monetization/author-dashboard.js';
+import { getFollowSuggestions, setNotInterested } from '#/services/user/follow-suggestions.js';
+import {AppContext} from "#/setup.js";
 
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {

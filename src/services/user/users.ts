@@ -1,23 +1,23 @@
-import {AppContext} from "#/setup";
-import {Account, ATProtoStrongRef, AuthorStatus, Session, ValidationState} from "#/lib/types";
-import {Agent, cookieOptions, SessionAgent} from "#/utils/session-agent";
-import {deleteRecords} from "#/services/delete";
-import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
-import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
-import {hydrateProfileViewDetailed, hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {unique} from "#/utils/arrays";
-import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
+import {AppContext} from "#/setup.js";
+import {Account, ATProtoStrongRef, AuthorStatus, Session, ValidationState} from "#/lib/types.js";
+import {Agent, cookieOptions, SessionAgent} from "#/utils/session-agent.js";
+import {deleteRecords} from "#/services/delete.js";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler.js";
+import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs.js";
+import {hydrateProfileViewDetailed, hydrateProfileViewBasic} from "#/services/hydration/profile.js";
+import {unique} from "#/utils/arrays.js";
+import {Dataplane, joinMaps} from "#/services/hydration/dataplane.js";
 import {getIronSession} from "iron-session";
-import {createCAUser} from "#/services/user/access";
+import {createCAUser} from "#/services/user/access.js";
 import {AppBskyActorProfile, AppBskyGraphFollow} from "@atproto/api"
-import {ArCabildoabiertoActorDefs} from "#/lex-api/index"
+import {ArCabildoabiertoActorDefs} from "#/lex-api/index.js"
 import {BlobRef} from "@atproto/lexicon";
-import {uploadBase64Blob} from "#/services/blob";
-import {EnDiscusionMetric, EnDiscusionTime, FeedFormatOption} from "#/services/feed/inicio/discusion";
-import {FollowingFeedFilter} from "#/services/feed/feed";
-import {BskyProfileRecordProcessor} from "#/services/sync/event-processing/profile";
-import {FollowRecordProcessor} from "#/services/sync/event-processing/follow";
-import {getCAFollowersDids, getCAFollowsDids} from "#/services/feed/inicio/following";
+import {uploadBase64Blob} from "#/services/blob.js";
+import {EnDiscusionMetric, EnDiscusionTime, FeedFormatOption} from "#/services/feed/inicio/discusion.js";
+import {FollowingFeedFilter} from "#/services/feed/feed.js";
+import {BskyProfileRecordProcessor} from "#/services/sync/event-processing/profile.js";
+import {FollowRecordProcessor} from "#/services/sync/event-processing/follow.js";
+import {getCAFollowersDids, getCAFollowsDids} from "#/services/feed/inicio/following.js";
 
 
 export async function dbHandleToDid(ctx: AppContext, handleOrDid: string): Promise<string | null> {

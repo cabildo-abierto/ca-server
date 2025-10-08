@@ -1,11 +1,11 @@
-import {AppContext} from "#/setup";
-import {getChunksReadByContent} from "#/services/monetization/user-months";
-import {sum} from "#/utils/arrays";
-import {getMonthlyValue} from "#/services/monetization/donations";
-import {getCollectionFromUri, isArticle, isTopicVersion, splitUri} from "#/utils/uri";
-import {getTopicIdFromTopicVersionUri, isVersionAccepted} from "#/services/wiki/current-version";
-import {getTopicHistory} from "#/services/wiki/history";
-import {ReadChunksAttr} from "#/services/monetization/read-tracking";
+import {AppContext} from "#/setup.js";
+import {getChunksReadByContent} from "#/services/monetization/user-months.js";
+import {sum} from "#/utils/arrays.js";
+import {getMonthlyValue} from "#/services/monetization/donations.js";
+import {getCollectionFromUri, isArticle, isTopicVersion, splitUri} from "#/utils/uri.js";
+import {getTopicIdFromTopicVersionUri, isVersionAccepted} from "#/services/wiki/current-version.js";
+import {getTopicHistory} from "#/services/wiki/history.js";
+import {ReadChunksAttr} from "#/services/monetization/read-tracking.js";
 import {v4 as uuidv4} from "uuid";
 
 

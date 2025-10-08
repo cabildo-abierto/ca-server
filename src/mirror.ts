@@ -1,4 +1,4 @@
-import {run} from "#/index-worker";
+import {run} from "#/index-worker.js";
 
 
 run(["mirror"])

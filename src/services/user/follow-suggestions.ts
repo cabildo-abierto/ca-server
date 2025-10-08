@@ -1,11 +1,11 @@
-import {ProfileView} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
-import {Dataplane} from "#/services/hydration/dataplane";
-import {CAHandler} from "#/utils/handler";
-import {hydrateProfileView} from "#/services/hydration/profile";
+import {ProfileView} from "#/lex-server/types/ar/cabildoabierto/actor/defs.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {CAHandler} from "#/utils/handler.js";
+import {hydrateProfileView} from "#/services/hydration/profile.js";
 import {sql} from "kysely";
-import {AppContext} from "#/setup";
+import {AppContext} from "#/setup.js";
 import {v4 as uuidv4} from 'uuid'
-import {getCAUsersDids} from "#/services/user/users";
+import {getCAUsersDids} from "#/services/user/users.js";
 
 /*
     1. Tomamos un conjunto de usuarios recomendadores. Los recomendadores son los seguidos del usuario o, si tiene muy pocos, todos los usuarios de CA.

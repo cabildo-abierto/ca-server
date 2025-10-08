@@ -1,5 +1,5 @@
-import {AppContext} from "#/setup";
-import {getCAUsersDids} from "#/services/user/users";
+import {AppContext} from "#/setup.js";
+import {getCAUsersDids} from "#/services/user/users.js";
 import {sql} from "kysely";
 import {v4 as uuidv4} from "uuid";
 import {
@@ -7,15 +7,15 @@ import {
     updateTopicInteractionsOnNewReactions,
     updateTopicInteractionsOnNewReferences,
     updateTopicInteractionsOnNewReplies
-} from "#/services/wiki/references/interactions";
-import {updateTopicPopularities} from "#/services/wiki/references/popularity";
-import {updateContentsText} from "#/services/wiki/content";
-import {getTimestamp, updateTimestamp} from "#/services/admin/status";
-import { TopicMention } from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {getTopicTitle} from "#/services/wiki/utils";
-import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-import {getCollectionFromUri} from "#/utils/uri";
-import {isReactionCollection} from "#/utils/type-utils";
+} from "#/services/wiki/references/interactions.js";
+import {updateTopicPopularities} from "#/services/wiki/references/popularity.js";
+import {updateContentsText} from "#/services/wiki/content.js";
+import {getTimestamp, updateTimestamp} from "#/services/admin/status.js";
+import { TopicMention } from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {getTopicTitle} from "#/services/wiki/utils.js";
+import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
+import {getCollectionFromUri} from "#/utils/uri.js";
+import {isReactionCollection} from "#/utils/type-utils.js";
 
 
 export async function updateReferencesForNewContents(ctx: AppContext) {
@@ -101,13 +101,7 @@ async function ftsReferencesQuery(ctx: AppContext, uris?: string[], topics?: str
 export async function getReferencesToInsert(ctx: AppContext, uris?: string[], topics?: string[]) {
     if(!topics && !uris) throw Error("Obtener las referencias para todos los contenidos y temas es muy caro!")
 
-    ctx.logger.pino.info({uris: uris?.length, topics: topics?.length}, "getting matches")
-
-    const t1 = Date.now()
-
     const matches = await ftsReferencesQuery(ctx, uris, topics)
-
-    ctx.logger.pino.info({total: matches.length, elapsed: Date.now()-t1}, "got matches")
 
     // entre cada par (tema, contenido) almacenamos a lo sumo una referencia
     const refsMap = new Map<string, ReferenceToInsert>()

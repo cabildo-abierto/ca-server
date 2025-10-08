@@ -1,10 +1,10 @@
 import {
     getDidFromUri
-} from "#/utils/uri";
-import * as Dataset from "#/lex-api/types/ar/cabildoabierto/data/dataset"
-import {ATProtoStrongRef} from "#/lib/types";
-import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
-import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
+} from "#/utils/uri.js";
+import * as Dataset from "#/lex-api/types/ar/cabildoabierto/data/dataset.js"
+import {ATProtoStrongRef} from "#/lib/types.js";
+import {RecordProcessor} from "#/services/sync/event-processing/record-processor.js";
+import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor.js";
 
 
 

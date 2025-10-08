@@ -1,7 +1,7 @@
-import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler.js";
 import got from 'got';
 import * as cheerio from 'cheerio';
-import {getUri, isArticle, isDataset, isPost} from "#/utils/uri";
+import {getUri, isArticle, isDataset, isPost} from "#/utils/uri.js";
 
 const getContent = async (url: string): Promise<Partial<Metadata>> => {
     const {body: html} = await got(url);
@@ -60,7 +60,6 @@ export const getContentMetadata: CAHandlerNoAuth<{
 }, Metadata> = async (ctx, agent, {params}) => {
     const c = params.collection
     const uri = getUri(params.did, c, params.rkey)
-
 
     if (isArticle(c)) {
         const article = await ctx.kysely

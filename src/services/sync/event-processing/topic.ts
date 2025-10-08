@@ -1,19 +1,19 @@
-import {AppContext} from "#/setup";
-import { ATProtoStrongRef } from "#/lib/types";
-import {RefAndRecord, SyncContentProps} from "#/services/sync/types";
-import {getDidFromUri} from "#/utils/uri";
-import {processContentsBatch} from "#/services/sync/event-processing/content";
+import {AppContext} from "#/setup.js";
+import { ATProtoStrongRef } from "#/lib/types.js";
+import {RefAndRecord, SyncContentProps} from "#/services/sync/types.js";
+import {getDidFromUri} from "#/utils/uri.js";
+import {processContentsBatch} from "#/services/sync/event-processing/content.js";
 import {ExpressionBuilder, OnConflictDatabase, OnConflictTables, sql} from "kysely";
-import {DB} from "../../../../prisma/generated/types";
-import {NotificationJobData} from "#/services/notifications/notifications";
-import {getCidFromBlobRef} from "#/services/sync/utils";
-import * as TopicVersion from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+import {DB} from "../../../../prisma/generated/types.js";
+import {NotificationJobData} from "#/services/notifications/notifications.js";
+import {getCidFromBlobRef} from "#/services/sync/utils.js";
+import * as TopicVersion from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
 import {
     RecordProcessor
-} from "#/services/sync/event-processing/record-processor";
-import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
-import {unique} from "#/utils/arrays";
-import {updateTopicsCurrentVersionBatch} from "#/services/wiki/current-version";
+} from "#/services/sync/event-processing/record-processor.js";
+import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor.js";
+import {unique} from "#/utils/arrays.js";
+import {updateTopicsCurrentVersionBatch} from "#/services/wiki/current-version.js";
 
 
 export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Record> {
@@ -45,7 +45,7 @@ export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Re
 
         const inserted = await this.ctx.kysely.transaction().execute(async (trx) => {
             await this.processRecordsBatch(trx, records)
-            await processContentsBatch(trx, contents)
+            await processContentsBatch(this.ctx, trx, contents)
 
             try {
                 await trx

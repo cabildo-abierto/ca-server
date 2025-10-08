@@ -1,5 +1,5 @@
-import {AppContext} from "#/setup";
-import {Record as PostRecord} from "#/lex-api/types/app/bsky/feed/post"
+import {AppContext} from "#/setup.js";
+import {Record as PostRecord} from "#/lex-api/types/app/bsky/feed/post.js"
 
 
 export async function updatePostLangs(ctx: AppContext) {

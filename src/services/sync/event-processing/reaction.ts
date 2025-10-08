@@ -1,26 +1,26 @@
 import {
     getCollectionFromUri,
     getDidFromUri
-} from "#/utils/uri";
+} from "#/utils/uri.js";
 import {Transaction} from "kysely";
-import {ReactionRecord, ReactionType} from "#/services/reactions/reactions";
+import {ReactionRecord, ReactionType} from "#/services/reactions/reactions.js";
 import {v4 as uuidv4} from 'uuid'
-import {isTopicVote} from "#/services/wiki/votes";
-import {isRecord as isVoteReject} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject"
-import {unique} from "#/utils/arrays";
-import {NotificationJobData} from "#/services/notifications/notifications";
-import {isReactionCollection} from "#/utils/type-utils";
+import {isTopicVote} from "#/services/wiki/votes.js";
+import {isRecord as isVoteReject} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject.js"
+import {unique} from "#/utils/arrays.js";
+import {NotificationJobData} from "#/services/notifications/notifications.js";
+import {isReactionCollection} from "#/utils/type-utils.js";
 import {
     addUpdateContributionsJobForTopics
-} from "#/services/sync/event-processing/topic";
-import {DB} from "../../../../prisma/generated/types";
-import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
+} from "#/services/sync/event-processing/topic.js";
+import {DB} from "../../../../prisma/generated/types.js";
+import {RecordProcessor} from "#/services/sync/event-processing/record-processor.js";
 import {AppBskyFeedLike, AppBskyFeedRepost} from "@atproto/api"
-import * as VoteAccept from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept"
-import * as VoteReject from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject"
-import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
-import {updateTopicsCurrentVersionBatch} from "#/services/wiki/current-version";
-import {RefAndRecord} from "#/services/sync/types";
+import * as VoteAccept from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept.js"
+import * as VoteReject from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject.js"
+import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor.js";
+import {updateTopicsCurrentVersionBatch} from "#/services/wiki/current-version.js";
+import {RefAndRecord} from "#/services/sync/types.js";
 
 
 const columnMap: Record<ReactionType, keyof DB['Record']> = {
@@ -53,7 +53,8 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
 
                 const reactions = records.map(r => ({
                     uri: r.ref.uri,
-                    subjectId: r.record.subject.uri
+                    subjectId: r.record.subject.uri,
+                    subjectCid: r.record.subject.cid
                 }))
 
                 this.ctx.logger.pino.info("processing reactions")
@@ -62,7 +63,8 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
                     .values(reactions)
                     .onConflict((oc) =>
                         oc.column("uri").doUpdateSet({
-                            subjectId: (eb) => eb.ref('excluded.subjectId'),
+                            subjectId: eb => eb.ref('excluded.subjectId'),
+                            subjectCid: eb => eb.ref("excluded.subjectCid")
                         })
                     )
                     .execute()
@@ -260,6 +262,7 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
             } catch {
             }
 
+            // las reacciones del mismo autor al mismo record
             const sameSubjectUris = (await db
                 .selectFrom("Reaction")
                 .innerJoin("Record", "Record.uri", "Reaction.uri")
@@ -288,10 +291,10 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
 
                 await db.deleteFrom("Reaction").where("uri", "in", sameSubjectUris).execute()
 
-                for (const u of sameSubjectUris) {
-                    await db.deleteFrom("Record").where("uri", "in", [u]).execute()
-                }
-                //await db.deleteFrom("Record").where("uri", "in", sameSubjectUris).execute()
+                //for (const u of sameSubjectUris) { // por qué era esto?
+                //    await db.deleteFrom("Record").where("uri", "in", [u]).execute()
+                //}
+                await db.deleteFrom("Record").where("uri", "in", sameSubjectUris).execute()
             }
 
             if (type == "ar.cabildoabierto.wiki.voteReject" || type == "ar.cabildoabierto.wiki.voteAccept") {

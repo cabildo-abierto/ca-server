@@ -1,23 +1,23 @@
-import {Agent, SessionAgent} from "#/utils/session-agent";
-import {AppContext} from "#/setup";
+import {Agent, SessionAgent} from "#/utils/session-agent.js";
+import {AppContext} from "#/setup.js";
 import {
     FeedPipelineProps,
     FollowingFeedFilter,
     GetSkeletonProps
-} from "#/services/feed/feed";
-import {rootCreationDateSortKey} from "#/services/feed/utils";
-import {FeedViewPost, isFeedViewPost, isReasonRepost} from "#/lex-api/types/app/bsky/feed/defs";
-import {articleCollections, getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri";
-import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {isKnownContent} from "#/utils/type-utils";
-import {isPostView as isCAPostView} from "#/lex-server/types/ar/cabildoabierto/feed/defs";
-import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post";
-import {Dataplane} from "#/services/hydration/dataplane";
+} from "#/services/feed/feed.js";
+import {rootCreationDateSortKey} from "#/services/feed/utils.js";
+import {FeedViewPost, isFeedViewPost, isReasonRepost} from "#/lex-api/types/app/bsky/feed/defs.js";
+import {articleCollections, getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri.js";
+import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {isKnownContent} from "#/utils/type-utils.js";
+import {isPostView as isCAPostView} from "#/lex-server/types/ar/cabildoabierto/feed/defs.js";
+import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
 import {$Typed} from "@atproto/api";
-import {isTopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-import {FeedFormatOption} from "#/services/feed/inicio/discusion";
-import {FollowingFeedSkeletonKey} from "#/services/redis/cache";
-import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
+import {isTopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
+import {FeedFormatOption} from "#/services/feed/inicio/discusion.js";
+import {FollowingFeedSkeletonKey} from "#/services/redis/cache.js";
+import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
 
 export type RepostQueryResult = {
     uri?: string
@@ -47,7 +47,7 @@ function getRootUriFromPost(ctx: AppContext, e: FeedViewPost | FeedViewContent):
         } else if (isFeedViewContent(e) && isKnownContent(e.content)) {
             return e.content.uri
         } else {
-            ctx.logger.pino.warn("Warning: No se encontró el root del post", e)
+            ctx.logger.pino.warn({e}, "Warning: No se encontró el root del post")
             return null
         }
     } else if (e.reply.root && "uri" in e.reply.root) {
@@ -55,7 +55,7 @@ function getRootUriFromPost(ctx: AppContext, e: FeedViewPost | FeedViewContent):
     } else if (e.reply.parent && "uri" in e.reply.parent) {
         return e.reply.parent.uri
     } else {
-        ctx.logger.pino.warn("No se encontró el root del post", e)
+        ctx.logger.pino.warn({e}, "No se encontró el root del post")
         return null
     }
 }

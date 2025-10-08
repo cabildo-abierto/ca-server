@@ -1,12 +1,12 @@
-import {AppContext} from "#/setup";
-import {ATProtoStrongRef} from "#/lib/types";
-import {getCollectionFromUri, getDidFromUri, getRkeyFromUri, splitUri} from "#/utils/uri";
+import {AppContext} from "#/setup.js";
+import {ATProtoStrongRef} from "#/lib/types.js";
+import {getCollectionFromUri, getDidFromUri, getRkeyFromUri, splitUri} from "#/utils/uri.js";
 import {ValidationResult} from "@atproto/lexicon";
-import {parseRecord} from "#/services/sync/parse";
-import {RefAndRecord} from "#/services/sync/types";
+import {parseRecord} from "#/services/sync/parse.js";
+import {RefAndRecord} from "#/services/sync/types.js";
 import { Transaction } from "kysely";
-import { DB } from "prisma/generated/types";
-import {unique} from "#/utils/arrays";
+import { DB } from "prisma/generated/types.js";
+import {unique} from "#/utils/arrays.js";
 
 
 export class RecordProcessor<T> {

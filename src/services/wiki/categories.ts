@@ -1,8 +1,8 @@
-import {AppContext} from "#/setup";
-import {getTopicCategories} from "#/services/wiki/utils";
+import {AppContext} from "#/setup.js";
+import {getTopicCategories} from "#/services/wiki/utils.js";
 import {
     TopicProp
-} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
 
 export async function updateTopicsCategories(ctx: AppContext) {
     const topics = await ctx.kysely

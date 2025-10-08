@@ -1,7 +1,7 @@
-import {ProfileViewBasic as CAProfileViewBasic, ProfileView as CAProfileView} from "#/lex-api/types/ar/cabildoabierto/actor/defs";
-import {Dataplane} from "#/services/hydration/dataplane";
-import {AppContext} from "#/setup";
-import {ArCabildoabiertoActorDefs} from "#/lex-api"
+import {ProfileViewBasic as CAProfileViewBasic, ProfileView as CAProfileView} from "#/lex-api/types/ar/cabildoabierto/actor/defs.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {AppContext} from "#/setup.js";
+import {ArCabildoabiertoActorDefs} from "#/lex-api/index.js"
 import {EditorStatus} from "@prisma/client";
 
 

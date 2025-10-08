@@ -1,16 +1,18 @@
-import {SessionAgent} from "#/utils/session-agent";
+import {SessionAgent} from "#/utils/session-agent.js";
 import {$Typed} from "@atproto/api";
-import {ATProtoStrongRef} from "#/lib/types";
-import {Image} from "#/lex-api/types/app/bsky/embed/images";
-import {uploadImageBlob} from "#/services/blob";
-import {CAHandler} from "#/utils/handler";
-import {View as ExternalEmbedView} from "#/lex-server/types/app/bsky/embed/external"
-import {Main as EmbedRecord} from "#/lex-server/types/app/bsky/embed/record"
-import {Main as EmbedRecordWithMedia} from "#/lex-server/types/app/bsky/embed/recordWithMedia"
-import {Main as Visualization} from "#/lex-server/types/ar/cabildoabierto/embed/visualization"
-import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post"
-import {getParsedPostContent} from "#/services/write/rich-text";
-import {PostRecordProcessor} from "#/services/sync/event-processing/post";
+import {ATProtoStrongRef} from "#/lib/types.js";
+import {Image} from "#/lex-api/types/app/bsky/embed/images.js";
+import {uploadImageBlob} from "#/services/blob.js";
+import {CAHandler} from "#/utils/handler.js";
+import {View as ExternalEmbedView} from "#/lex-server/types/app/bsky/embed/external.js"
+import {Main as EmbedRecord} from "#/lex-server/types/app/bsky/embed/record.js"
+import {Main as EmbedRecordWithMedia} from "#/lex-server/types/app/bsky/embed/recordWithMedia.js"
+import {Main as Visualization} from "#/lex-server/types/ar/cabildoabierto/embed/visualization.js"
+import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post.js"
+import {getParsedPostContent} from "#/services/write/rich-text.js";
+import {PostRecordProcessor} from "#/services/sync/event-processing/post.js";
+import {AppContext} from "#/setup.js";
+import {deleteRecords} from "#/services/delete.js";
 
 function createQuotePostEmbed(post: ATProtoStrongRef): $Typed<EmbedRecord> {
     return {
@@ -24,9 +26,9 @@ function createQuotePostEmbed(post: ATProtoStrongRef): $Typed<EmbedRecord> {
 }
 
 
-async function externalEmbedViewToMain(agent: SessionAgent, embed: ExternalEmbedView){
+async function externalEmbedViewToMain(agent: SessionAgent, embed: ExternalEmbedView) {
     const external = embed.external
-    if(external.thumb){
+    if (external.thumb) {
         const {ref} = await uploadImageBlob(agent, {$type: "url", src: external.thumb})
         return {
             $type: "app.bsky.embed.external",
@@ -95,21 +97,21 @@ async function getPostEmbed(agent: SessionAgent, post: CreatePostProps): Promise
         }
     } else if (post.images && post.images.length > 0) {
         const imagesEmbed = await getImagesEmbed(agent, post.images)
-        if(!post.quotedPost){
+        if (!post.quotedPost) {
             return imagesEmbed
         } else {
             return getRecordWithMedia(post.quotedPost, imagesEmbed)
         }
-    } else if(post.externalEmbedView) {
+    } else if (post.externalEmbedView) {
         const externalEmbed = await externalEmbedViewToMain(agent, post.externalEmbedView)
-        if(!post.quotedPost){
+        if (!post.quotedPost) {
             return externalEmbed
         } else {
             return getRecordWithMedia(post.quotedPost, externalEmbed)
         }
-    } else if(post.quotedPost){
+    } else if (post.quotedPost) {
         return createQuotePostEmbed(post.quotedPost)
-    } else if(post.visualization){
+    } else if (post.visualization) {
         return {
             ...post.visualization,
             $type: "ar.cabildoabierto.embed.visualization"
@@ -120,9 +122,11 @@ async function getPostEmbed(agent: SessionAgent, post: CreatePostProps): Promise
 
 
 export async function createPostAT({
+    ctx,
                                        agent,
                                        post
                                    }: {
+    ctx: AppContext
     agent: SessionAgent
     post: CreatePostProps
 }): Promise<{ ref: ATProtoStrongRef, record: PostRecord }> {
@@ -137,7 +141,10 @@ export async function createPostAT({
         createdAt: new Date().toISOString(),
         reply: post.reply,
         embed,
-        labels: post.enDiscusion ? {$type: "com.atproto.label.defs#selfLabels", values: [{val: "ca:en discusión"}]} : undefined
+        labels: post.enDiscusion ? {
+            $type: "com.atproto.label.defs#selfLabels",
+            values: [{val: "ca:en discusión"}]
+        } : undefined
     }
 
     const ref = await agent.bsky.post({...record})
@@ -161,11 +168,55 @@ export type CreatePostProps = {
     externalEmbedView?: $Typed<ExternalEmbedView>
     quotedPost?: ATProtoStrongRef
     visualization?: Visualization
+    uri?: string
+}
+
+
+export async function isContentReferenced(ctx: AppContext, uri: string) {
+    const references = await ctx.kysely
+        .selectFrom("Content")
+        .innerJoin("Record", "Content.uri", "Record.uri")
+        .select(eb => [
+            "Content.uri",
+            eb.exists(eb
+                .selectFrom("Reaction")
+                .select([])
+                .whereRef("Reaction.subjectId", "=", "Content.uri")
+            ).as("reactions"),
+            eb.exists(eb
+                .selectFrom("Post")
+                .select([])
+                .whereRef("Post.replyToId", "=", "Content.uri")
+            ).as("replies"),
+            eb.exists(eb
+                .selectFrom("Post")
+                .select([])
+                .whereRef("Post.quoteToId", "=", "Content.uri")
+            ).as("quotes")
+        ])
+        .where("Content.uri", "=", uri)
+        .executeTakeFirst()
+
+    if(!references) return {error: "No se encontró la publicación que se está editando."}
+    return {
+        data: references.reactions || references.replies || references.quotes
+    }
 }
 
 
 export const createPost: CAHandler<CreatePostProps, ATProtoStrongRef> = async (ctx, agent, post) => {
-    const {ref, record} = await createPostAT({agent, post})
+    if(post.uri) {
+        // se está editando un post
+        const {data: referenced, error} = await isContentReferenced(ctx, post.uri)
+        if(error) return {error}
+        if(referenced){
+            return {error: "La publicación ya fue referenciada y no se puede editar. Si querés, podés eliminarla."}
+        } else {
+            await deleteRecords({ctx, agent, uris: [post.uri], atproto: true})
+        }
+    }
+
+    const {ref, record} = await createPostAT({ctx, agent, post})
 
     await new PostRecordProcessor(ctx).processValidated([{ref, record}])
 

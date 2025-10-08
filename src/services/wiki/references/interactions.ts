@@ -1,8 +1,8 @@
-import {AppContext} from "#/setup";
-import {getTimestamp, updateTimestamp} from "#/services/admin/status";
+import {AppContext} from "#/setup.js";
+import {getTimestamp, updateTimestamp} from "#/services/admin/status.js";
 import {v4 as uuidv4} from "uuid";
-import {getCollectionFromUri, isPost} from "#/utils/uri";
-import {isReactionCollection} from "#/utils/type-utils";
+import {getCollectionFromUri, isPost} from "#/utils/uri.js";
+import {isReactionCollection} from "#/utils/type-utils.js";
 
 
 export async function restartLastTopicInteractionsUpdate(ctx: AppContext) {

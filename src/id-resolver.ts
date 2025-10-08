@@ -1,5 +1,5 @@
 import {IdResolver, MemoryCache} from '@atproto/identity'
-import Redis from "ioredis"
+import {type Redis} from "ioredis";
 
 const HOUR = 60e3 * 60
 const DAY = HOUR * 24

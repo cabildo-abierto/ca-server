@@ -1,103 +1,42 @@
-import {RedisCache} from "#/services/redis/cache";
-import {getRecordProcessor} from "#/services/sync/event-processing/get-record-processor";
-import {AppContext, setupKysely, setupRedis, setupResolver} from "#/setup";
-import {Logger} from "#/utils/logger";
-import {AppBskyFeedPost, AppBskyGraphFollow, AtpBaseClient} from "@atproto/api";
-import {getCollectionFromUri, getDidFromUri, getRkeyFromUri} from "#/utils/uri";
-import {deleteUser} from "#/services/delete";
+import {AppContext} from "#/setup.js";
+import {getDidFromUri, getRkeyFromUri} from "#/utils/uri.js";
 import {
     ReadChunks,
     ReadSession,
     storeReadSession
-} from "#/services/monetization/read-tracking";
-import {BaseAgent, bskyPublicAPI, SessionAgent} from "#/utils/session-agent";
-import {env} from "#/lib/env";
-import {sql} from "kysely";
+} from "#/services/monetization/read-tracking.js";
+import {
+    cleanUpAfterTests,
+    cleanUPTestDataFromDB,
+    createTestContext,
+    generateUserDid, getFollowRefAndRecord, getLikeRefAndRecord,
+    getPostRefAndRecord,
+    getSuiteId,
+    MockSessionAgent,
+    processRecordsInTest
+} from "./test-utils.js";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
 
-async function createTestContext(): Promise<AppContext> {
-    const ioredis = setupRedis(1)
-    const logger = new Logger("test")
-    const mirrorId = "test"
-    const ctx: AppContext = {
-        logger,
-        kysely: setupKysely(process.env.TEST_DB),
-        ioredis,
-        resolver: setupResolver(ioredis),
-        mirrorId,
-        worker: undefined,
-        storage: undefined,
-        xrpc: undefined,
-        oauthClient: undefined,
-        redisCache: new RedisCache(ioredis, mirrorId, logger)
-    }
+const testSuite = getSuiteId(__filename);
 
-    const result = await sql<{ dbName: string }>`SELECT current_database() as "dbName"`.execute(ctx.kysely);
-
-    expect(result.rows[0].dbName).toBe('ca-sql-dev')
-
-    return ctx
-}
-
-function getTestUser(i: number) {
-    return `did:plc:test-${i}`
-}
-
-
-function getRefAndRecord<T>(collection: string, rkey: string, record: T) {
-    return {
-        ref: {
-            uri: `at://${getTestUser(0)}/${collection}/${rkey}`,
-            cid: "123"
-        },
-        record
-    }
-}
-
-
-function getFollowRefAndRecord(subject: number, rkey: string = "test") {
-    const record: AppBskyGraphFollow.Record = {
-        $type: "app.bsky.graph.follow",
-        subject: getTestUser(subject),
-        createdAt: new Date().toISOString()
-    }
-
-    return getRefAndRecord("app.bsky.graph.follow", rkey, record)
-}
-
-
-async function cleanUpDBForTests(ctx: AppContext) {
-    await deleteUser(ctx, getTestUser(0))
-    await deleteUser(ctx, getTestUser(1))
-
-}
-
-async function cleanUpAfterTests(ctx: AppContext) {
-    ctx.ioredis.disconnect()
-    ctx.kysely.destroy()
-}
 
 describe('Process follow', () => {
-    let follow: ReturnType<typeof getFollowRefAndRecord>
     let ctx : AppContext | undefined
 
     beforeAll(async () => {
         ctx = await createTestContext()
 
-        await cleanUpDBForTests(ctx)
+        await cleanUPTestDataFromDB(ctx, testSuite)
 
-        const processor = getRecordProcessor(ctx, "app.bsky.graph.follow")
 
-        follow = getFollowRefAndRecord(1)
-        const records = [
-            follow,
-        ]
-
-        await processor.process(records)
     })
 
     it("should create a record", async () => {
-        const inserted = follow
+        const did = generateUserDid(testSuite)
+        const follow = await getFollowRefAndRecord(did, testSuite)
+        await processRecordsInTest(ctx!, [follow])
+
         expect(ctx).not.toBeFalsy()
 
         const record = await ctx!.kysely
@@ -105,18 +44,18 @@ describe('Process follow', () => {
             .where(
                 "uri",
                 "=",
-                inserted.ref.uri
+                follow.ref.uri
             )
             .selectAll()
             .executeTakeFirst()
 
-        expect(record).not.toBeNull()
-        expect(record!.uri).toBe(inserted.ref.uri)
-        expect(record!.cid).toBe(inserted.ref.cid)
-        expect(record!.rkey).toBe(getRkeyFromUri(inserted.ref.uri))
-        expect(record!.authorId).toBe(getDidFromUri(inserted.ref.uri))
+        expect(record).not.toBeFalsy()
+        expect(record!.uri).toBe(follow.ref.uri)
+        expect(record!.cid).toBe(follow.ref.cid)
+        expect(record!.rkey).toBe(getRkeyFromUri(follow.ref.uri))
+        expect(record!.authorId).toBe(getDidFromUri(follow.ref.uri))
         expect(record!.created_at_tz!.toISOString())
-            .toBe(new Date(inserted.record.createdAt).toISOString())
+            .toBe(new Date(follow.record.createdAt).toISOString())
         expect(record!.CAIndexedAt_tz).not.toBeNull()
     })
 
@@ -124,39 +63,8 @@ describe('Process follow', () => {
 })
 
 
-function getPostRecord(): AppBskyFeedPost.Record {
-    return {
-        $type: "app.bsky.feed.post",
-        createdAt: new Date().toISOString(),
-        text: "hola!"
-    }
-}
-
-
-function getPostRefAndRecord() {
-    const record = getPostRecord()
-
-    return getRefAndRecord("app.bsky.feed.post", "test", record)
-}
-
-
-export class MockSessionAgent extends BaseAgent {
-    did: string
-    constructor(did: string){
-        const CAAgent = new AtpBaseClient(`${env.HOST}:${env.PORT}`)
-        super(CAAgent, new AtpBaseClient(bskyPublicAPI))
-        this.did = did
-    }
-
-    hasSession(): this is SessionAgent {
-        return true
-    }
-}
-
-
 describe('Create read session', () => {
-    const post = getPostRefAndRecord()
-    const agent = new MockSessionAgent(getTestUser(0))
+    const agent = new MockSessionAgent(generateUserDid(testSuite))
 
     let ctx : AppContext | undefined
     beforeAll(async () => {
@@ -164,12 +72,36 @@ describe('Create read session', () => {
     })
 
     beforeEach(async () => {
-        await cleanUpDBForTests(ctx!)
+        await cleanUPTestDataFromDB(ctx!, testSuite)
     })
 
     it("should create a read session", async () => {
         expect(ctx).not.toBeFalsy()
-        let id: string | undefined
+
+        const post = await getPostRefAndRecord(
+            "hola!",
+            new Date(),
+            testSuite,
+            {
+                did: agent.did
+            }
+        )
+
+        await processRecordsInTest(ctx!, [post])
+
+        const user = await ctx!.kysely
+            .selectFrom("User")
+            .select("did")
+            .where("User.did", "=", getDidFromUri(post.ref.uri))
+            .executeTakeFirst()
+        const post_db = await ctx!.kysely
+            .selectFrom("Post")
+            .select("uri")
+            .where("Post.uri", "=", post.ref.uri)
+            .executeTakeFirst()
+
+        expect(user).not.toBeFalsy()
+        expect(post_db).not.toBeFalsy()
         let created_at = new Date()
 
         const chunks: ReadChunks = []
@@ -179,10 +111,10 @@ describe('Create read session', () => {
             totalChunks: 10
         }
 
-        await getRecordProcessor(ctx!, getCollectionFromUri(post.ref.uri)).process([post])
-        id = (await storeReadSession(ctx!, agent, rs, created_at)).id
+        const {id} = await storeReadSession(ctx!, agent, rs, created_at)
 
-        expect(id).not.toBeNull()
+        expect(id).not.toBeFalsy()
+
         const db_rs = await ctx!.kysely
             .selectFrom("ReadSession")
             .where(
@@ -200,6 +132,49 @@ describe('Create read session', () => {
         expect(db_rs!.readContentId).toEqual(post.ref.uri)
         expect(db_rs!.userId).toEqual(getDidFromUri(post.ref.uri))
         expect(db_rs!.topicId).toBeNull()
+    })
+
+    it("should get liked if created before", async () => {
+        expect(ctx).not.toBeFalsy()
+
+        const post = await getPostRefAndRecord("hola!", new Date(), testSuite)
+        const like = await getLikeRefAndRecord(post.ref, new Date(), testSuite)
+
+        await processRecordsInTest(ctx!, [post, like])
+
+        const record = await ctx!.kysely
+            .selectFrom("Record")
+            .where("Record.uri", "=", post.ref.uri)
+            .select("uniqueLikesCount")
+            .executeTakeFirst()
+
+        expect(record).not.toBeFalsy()
+        expect(record!.uniqueLikesCount).toEqual(1)
+    })
+
+    it("should get liked if created later", async () => {
+        expect(ctx).not.toBeFalsy()
+
+        const post = await getPostRefAndRecord(
+            "hola!",
+            new Date(),
+            testSuite
+        )
+
+        const like = await getLikeRefAndRecord(
+            post.ref, new Date(), testSuite
+        )
+
+        await processRecordsInTest(ctx!, [like, post])
+
+        const record = await ctx!.kysely
+            .selectFrom("Record")
+            .where("Record.uri", "=", post.ref.uri)
+            .select("uniqueLikesCount")
+            .executeTakeFirst()
+
+        expect(record).not.toBeFalsy()
+        expect(record!.uniqueLikesCount).toEqual(1)
     })
 
     afterAll(async () => cleanUpAfterTests(ctx!))

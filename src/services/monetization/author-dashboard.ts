@@ -1,14 +1,14 @@
-import {CAHandler} from "#/utils/handler";
-import {getTopicTitle} from "#/services/wiki/utils";
-import {TopicProp, TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
+import {CAHandler} from "#/utils/handler.js";
+import {getTopicTitle} from "#/services/wiki/utils.js";
+import {TopicProp, TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
 import {sql} from "kysely";
-import {getSessionData} from "#/services/user/users";
-import {isVersionAccepted} from "#/services/wiki/current-version";
-import {getCollectionFromUri, getDidFromUri} from "#/utils/uri";
-import {AppContext} from "#/setup";
-import {orderNumberDesc, sortByKey, sum} from "#/utils/arrays";
-import {ReadChunks, ReadChunksAttr} from "#/services/monetization/read-tracking";
-import {FULL_READ_DURATION, joinManyChunks} from "#/services/monetization/user-months";
+import {getSessionData} from "#/services/user/users.js";
+import {isVersionAccepted} from "#/services/wiki/current-version.js";
+import {getCollectionFromUri, getDidFromUri} from "#/utils/uri.js";
+import {AppContext} from "#/setup.js";
+import {orderNumberDesc, sortByKey, sum} from "#/utils/arrays.js";
+import {ReadChunks, ReadChunksAttr} from "#/services/monetization/read-tracking.js";
+import {FULL_READ_DURATION, joinManyChunks} from "#/services/monetization/user-months.js";
 
 type ArticleStats = {
     uri: string

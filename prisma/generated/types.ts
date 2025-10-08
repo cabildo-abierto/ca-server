@@ -88,6 +88,7 @@ export type Content = {
     interactionsScore: number | null;
     likesScore: number | null;
     relativePopularityScore: number | null;
+    edited: Generated<boolean>;
 };
 export type ContentToDataset = {
     A: string;
@@ -182,14 +183,18 @@ export type Post = {
     facets: string | null;
     embed: string | null;
     replyToId: string | null;
+    replyToCid: string | null;
     rootId: string | null;
+    rootCid: string | null;
     uri: string;
     langs: string[];
     quoteToId: string | null;
+    quoteToCid: string | null;
 };
 export type Reaction = {
     uri: string;
     subjectId: string | null;
+    subjectCid: string | null;
 };
 export type ReadSession = {
     id: string;

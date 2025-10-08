@@ -1,13 +1,13 @@
-import {CAHandler} from "#/utils/handler"
-import {AppContext} from "#/setup";
-import {Dataplane, getBlobKey} from "#/services/hydration/dataplane";
-import {BlobRef} from "#/services/hydration/hydrate";
-import {nodesCharDiff} from "#/services/wiki/diff";
-import {decompress} from "#/utils/compression";
-import {unique} from "#/utils/arrays";
-import {isVersionAccepted} from "#/services/wiki/current-version";
-import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard";
-import {getNumWords} from "#/services/wiki/content";
+import {CAHandler} from "#/utils/handler.js"
+import {AppContext} from "#/setup.js";
+import {Dataplane, getBlobKey} from "#/services/hydration/dataplane.js";
+import {BlobRef} from "#/services/hydration/hydrate.js";
+import {nodesCharDiff} from "#/services/wiki/diff.js";
+import {decompress} from "#/utils/compression.js";
+import {unique} from "#/utils/arrays.js";
+import {isVersionAccepted} from "#/services/wiki/current-version.js";
+import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard.js";
+import {getNumWords} from "#/services/wiki/content.js";
 import { sql } from "kysely";
 
 

@@ -1,19 +1,19 @@
 import type {OAuthClient} from '@atproto/oauth-client-node'
-import {createClient} from '#/auth/client'
-import {createBidirectionalResolver, createIdResolver, BidirectionalResolver} from '#/id-resolver'
-import {createServer} from "../src/lex-server";
-import {Server as XrpcServer} from "../src/lex-server"
-import Redis from "ioredis"
-import {CAWorker} from "#/jobs/worker";
+import {createClient} from '#/auth/client.js'
+import {createBidirectionalResolver, createIdResolver, BidirectionalResolver} from '#/id-resolver.js'
+import {createServer} from "#/lex-server/index.js"
+import {Server as XrpcServer} from "#/lex-server/index.js"
+import {type Redis, Redis as IORedis} from "ioredis"
+import {CAWorker, RedisCAWorker} from "#/jobs/worker.js";
 import { Kysely, PostgresDialect } from 'kysely'
 import { Pool } from 'pg'
-import { DB } from '#/../prisma/generated/types'
+import { DB } from '#/../prisma/generated/types.js'
 import 'dotenv/config'
-import {RedisCache} from "#/services/redis/cache";
-import {Logger} from "#/utils/logger";
-import { env } from './lib/env';
-import { S3Storage } from './services/storage/storage';
-import {getCAUsersDids} from "#/services/user/users";
+import {RedisCache} from "#/services/redis/cache.js";
+import {Logger} from "#/utils/logger.js";
+import { env } from './lib/env.js';
+import { S3Storage } from './services/storage/storage.js';
+import {getCAUsersDids} from "#/services/user/users.js";
 
 
 export type AppContext = {
@@ -51,7 +51,7 @@ export function setupKysely(dbUrl?: string) {
 
 
 export function setupRedis(db: number) {
-    return new Redis(redisUrl, {
+    return new IORedis(redisUrl, {
         maxRetriesPerRequest: null,
         family: 6,
         db
@@ -82,7 +82,7 @@ export async function setupAppContext(roles: Role[]) {
 
     let worker: CAWorker | undefined
     if(roles.length > 0){
-        worker = new CAWorker(
+        worker = new RedisCAWorker(
             ioredis,
             roles.includes("worker"),
             logger
@@ -94,7 +94,7 @@ export async function setupAppContext(roles: Role[]) {
     logger.pino.info("xrpc server created")
 
     const mirrorId = `mirror-${envName}`
-    logger.pino.info("Mirror ID", mirrorId)
+    logger.pino.info({mirrorId}, "Mirror ID")
 
     const redisCache = new RedisCache(ioredis, mirrorId, logger)
     logger.pino.info("redis cache created")
@@ -104,7 +104,7 @@ export async function setupAppContext(roles: Role[]) {
         oauthClient,
         resolver,
         xrpc,
-        ioredis: ioredis,
+        ioredis,
         redisCache,
         kysely,
         worker,

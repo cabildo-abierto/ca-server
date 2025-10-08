@@ -1,9 +1,9 @@
-import {AppContext} from "#/setup";
-import {CommitEvent, JetstreamEvent} from "#/lib/types";
-import {getUri, isCAProfile} from "#/utils/uri";
-import {getRecordProcessor} from "#/services/sync/event-processing/get-record-processor";
-import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor";
-import {RefAndRecord} from "#/services/sync/types";
+import {AppContext} from "#/setup.js";
+import {CommitEvent, JetstreamEvent} from "#/lib/types.js";
+import {getUri, isCAProfile} from "#/utils/uri.js";
+import {getRecordProcessor} from "#/services/sync/event-processing/get-record-processor.js";
+import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor.js";
+import {RefAndRecord} from "#/services/sync/types.js";
 
 
 

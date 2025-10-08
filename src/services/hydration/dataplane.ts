@@ -1,12 +1,12 @@
-import {AppContext} from "#/setup";
-import {bskyPublicAPI, NoSessionAgent, SessionAgent} from "#/utils/session-agent";
-import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs";
-import {ProfileViewBasic, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+import {AppContext} from "#/setup.js";
+import {bskyPublicAPI, NoSessionAgent, SessionAgent} from "#/utils/session-agent.js";
+import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs.js";
+import {ProfileViewBasic, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs.js";
 import {
     BlobRef, ThreadSkeleton
-} from "#/services/hydration/hydrate";
-import {FeedSkeleton} from "#/services/feed/feed";
-import {getObjectKey, removeNullValues, unique} from "#/utils/arrays";
+} from "#/services/hydration/hydrate.js";
+import {FeedSkeleton} from "#/services/feed/feed.js";
+import {getObjectKey, removeNullValues, unique} from "#/utils/arrays.js";
 import {
     getCollectionFromUri,
     getDidFromUri,
@@ -15,38 +15,38 @@ import {
     isPost,
     postUris,
     topicVersionUris
-} from "#/utils/uri";
+} from "#/utils/uri.js";
 import {$Typed, AtpBaseClient} from "@atproto/api";
-import {TopicVersionQueryResultBasic} from "#/services/wiki/topics";
-import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
+import {TopicVersionQueryResultBasic} from "#/services/wiki/topics.js";
+import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
 import {
     FeedViewPost,
     isPostView, isReasonRepost,
     isSkeletonReasonRepost, isThreadViewPost,
     PostView, ThreadViewPost
-} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
-import {fetchTextBlobs} from "#/services/blob";
-import {env} from "#/lib/env";
-import {RepostQueryResult} from "#/services/feed/inicio/following";
-import {isView as isEmbedRecordView} from "#/lex-api/types/app/bsky/embed/record"
-import {isView as isEmbedRecordWithMediaView} from "#/lex-api/types/app/bsky/embed/recordWithMedia"
-import {isViewNotFound, isViewRecord} from "#/lex-api/types/app/bsky/embed/record";
-import {NotificationQueryResult, NotificationsSkeleton} from "#/services/notifications/notifications";
-import {equalFilterCond, inFilterCond, stringListIncludes} from "#/services/dataset/read";
-import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article"
-import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
+} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
+import {fetchTextBlobs} from "#/services/blob.js";
+import {env} from "#/lib/env.js";
+import {RepostQueryResult} from "#/services/feed/inicio/following.js";
+import {isView as isEmbedRecordView} from "#/lex-api/types/app/bsky/embed/record.js"
+import {isView as isEmbedRecordWithMediaView} from "#/lex-api/types/app/bsky/embed/recordWithMedia.js"
+import {isViewNotFound, isViewRecord} from "#/lex-api/types/app/bsky/embed/record.js";
+import {NotificationQueryResult, NotificationsSkeleton} from "#/services/notifications/notifications.js";
+import {equalFilterCond, inFilterCond, stringListIncludes} from "#/services/dataset/read.js";
+import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
+import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
 import {jsonArrayFrom} from 'kysely/helpers/postgres'
 import {
     ColumnFilter,
     isColumnFilter
-} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
-import {getUrisFromThreadSkeleton} from "#/services/thread/thread";
-import {prettyPrintJSON} from "#/utils/strings";
-import {getValidationState} from "../user/users";
+} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
+import {getUrisFromThreadSkeleton} from "#/services/thread/thread.js";
+import {prettyPrintJSON} from "#/utils/strings.js";
+import {getValidationState} from "#/services/user/users.js";
 import {AppBskyActorDefs} from "@atproto/api"
-import {AppBskyFeedPost, ArCabildoabiertoActorDefs} from "#/lex-api/index"
-import {CAProfileDetailed, CAProfile} from "#/lib/types";
-import {hydrateProfileViewDetailed} from "#/services/hydration/profile";
+import {AppBskyFeedPost, ArCabildoabiertoActorDefs} from "#/lex-api/index.js"
+import {CAProfileDetailed, CAProfile} from "#/lib/types.js";
+import {hydrateProfileViewDetailed} from "#/services/hydration/profile.js";
 
 
 export type FeedElementQueryResult = {

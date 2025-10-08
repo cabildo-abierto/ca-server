@@ -1,10 +1,10 @@
-import {CAHandlerNoAuth} from "#/utils/handler"
-import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-import {Agent} from "#/utils/session-agent"
-import {CategoryVotes, TopicHistory, TopicVersionStatus, VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-import {getCollectionFromUri} from "#/utils/uri"
-import {dbUserToProfileViewBasic} from "#/services/wiki/topics"
-import {AppContext} from "#/setup";
+import {CAHandlerNoAuth} from "#/utils/handler.js"
+import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
+import {Agent} from "#/utils/session-agent.js"
+import {CategoryVotes, TopicHistory, TopicVersionStatus, VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
+import {getCollectionFromUri} from "#/utils/uri.js"
+import {dbUserToProfileViewBasic} from "#/services/wiki/topics.js"
+import {AppContext} from "#/setup.js";
 import {jsonArrayFrom} from "kysely/helpers/postgres";
 
 

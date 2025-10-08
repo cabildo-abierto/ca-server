@@ -1,11 +1,11 @@
-import {max, unique} from "#/utils/arrays";
-import {TopicProp, TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {getUri} from "#/utils/uri";
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {getTopicCategories, getTopicTitle} from "#/services/wiki/utils";
-import {AppContext} from "#/setup";
-import {DB} from "../../../prisma/generated/types";
-import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard";
+import {max, unique} from "#/utils/arrays.js";
+import {TopicProp, TopicVersionStatus} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
+import {getUri} from "#/utils/uri.js";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
+import {getTopicCategories, getTopicTitle} from "#/services/wiki/utils.js";
+import {AppContext} from "#/setup.js";
+import {DB} from "../../../prisma/generated/types.js";
+import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard.js";
 import {sql, Transaction} from "kysely";
 
 

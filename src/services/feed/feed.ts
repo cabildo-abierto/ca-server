@@ -1,21 +1,21 @@
-import {FeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {getFollowingFeedPipeline} from "#/services/feed/inicio/following";
-import {Agent} from "#/utils/session-agent";
-import {hydrateFeed} from "#/services/hydration/hydrate";
-import {listOrderDesc, sortByKey} from "#/utils/arrays";
-import {AppContext} from "#/setup";
+import {FeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {getFollowingFeedPipeline} from "#/services/feed/inicio/following.js";
+import {Agent} from "#/utils/session-agent.js";
+import {hydrateFeed} from "#/services/hydration/hydrate.js";
+import {listOrderDesc, sortByKey} from "#/utils/arrays.js";
+import {AppContext} from "#/setup.js";
 import {
     EnDiscusionMetric,
     EnDiscusionTime,
     FeedFormatOption,
     getEnDiscusionFeedPipeline
-} from "#/services/feed/inicio/discusion";
-import {discoverFeedPipeline} from "#/services/feed/inicio/discover";
-import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
-import {Dataplane} from "#/services/hydration/dataplane";
-import {articlesFeedPipeline} from "#/services/feed/inicio/articles";
-import {clearFollowsHandler, getProfile, getSessionData} from "#/services/user/users";
-import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
+} from "#/services/feed/inicio/discusion.js";
+import {discoverFeedPipeline} from "#/services/feed/inicio/discover.js";
+import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {articlesFeedPipeline} from "#/services/feed/inicio/articles.js";
+import {clearFollowsHandler, getProfile, getSessionData} from "#/services/user/users.js";
+import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
 
 
 export type FollowingFeedFilter = "Todos" | "Solo Cabildo Abierto"

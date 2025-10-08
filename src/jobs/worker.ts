@@ -1,40 +1,40 @@
-import {updateCategoriesGraph} from "#/services/wiki/graph";
+import {updateCategoriesGraph} from "#/services/wiki/graph.js";
 import {Worker} from 'bullmq';
-import {AppContext} from "#/setup";
-import {syncAllUsers, syncUserJobHandler, updateRecordsCreatedAt} from "#/services/sync/sync-user";
-import {updateAuthorStatus} from "#/services/user/users";
+import {AppContext} from "#/setup.js";
+import {syncAllUsers, syncUserJobHandler, updateRecordsCreatedAt} from "#/services/sync/sync-user.js";
+import {updateAuthorStatus} from "#/services/user/users.js";
 import {
     recreateAllReferences,
     updatePopularitiesOnContentsChange,
     updateReferences,
     updatePopularitiesOnTopicsChange,
     updatePopularitiesOnNewReactions, recomputeTopicInteractionsAndPopularities
-} from "#/services/wiki/references/references";
-import {updateEngagementCounts} from "#/services/feed/getUserEngagement";
-import {deleteCollection} from "#/services/delete";
-import {updateTopicsCategories} from "#/services/wiki/categories";
+} from "#/services/wiki/references/references.js";
+import {updateEngagementCounts} from "#/services/feed/getUserEngagement.js";
+import {deleteCollection} from "#/services/delete.js";
+import {updateTopicsCategories} from "#/services/wiki/categories.js";
 import {
     updateAllTopicContributions,
     updateTopicContributions,
     updateTopicContributionsRequired
-} from "#/services/wiki/contributions";
-import {createUserMonths} from "#/services/monetization/user-months";
+} from "#/services/wiki/contributions.js";
+import {createUserMonths} from "#/services/monetization/user-months.js";
 import {Queue} from "bullmq";
-import Redis from "ioredis";
-import {createNotificationsJob} from "#/services/notifications/notifications";
-import {CAHandler} from "#/utils/handler";
-import {assignInviteCodesToUsers} from "#/services/user/access";
-import {resetContentsFormat, updateContentsNumWords, updateContentsText} from "#/services/wiki/content";
-import {updatePostLangs} from "#/services/admin/posts";
-import {createPaymentPromises} from "#/services/monetization/promise-creation";
-import {updateFollowSuggestions} from "#/services/user/follow-suggestions";
-import {updateInteractionsScore} from "#/services/feed/feed-scores";
-import {updateAllTopicsCurrentVersions} from "#/services/wiki/current-version";
-import {Logger} from "#/utils/logger";
-import {env} from "#/lib/env";
-import {reprocessCollection} from "#/services/sync/reprocess";
-import {runTestJob} from "#/services/admin/status";
-import {clearAllRedis} from "#/services/redis/cache";
+import {createNotificationsJob} from "#/services/notifications/notifications.js";
+import {CAHandler} from "#/utils/handler.js";
+import {assignInviteCodesToUsers} from "#/services/user/access.js";
+import {resetContentsFormat, updateContentsNumWords, updateContentsText} from "#/services/wiki/content.js";
+import {updatePostLangs} from "#/services/admin/posts.js";
+import {createPaymentPromises} from "#/services/monetization/promise-creation.js";
+import {updateFollowSuggestions} from "#/services/user/follow-suggestions.js";
+import {updateInteractionsScore} from "#/services/feed/feed-scores.js";
+import {updateAllTopicsCurrentVersions} from "#/services/wiki/current-version.js";
+import {Logger} from "#/utils/logger.js";
+import {env} from "#/lib/env.js";
+import {reprocessCollection} from "#/services/sync/reprocess.js";
+import {runTestJob} from "#/services/admin/status.js";
+import {clearAllRedis} from "#/services/redis/cache.js";
+import {type Redis} from "ioredis"
 
 const mins = 60 * 1000
 const seconds = 1000
@@ -49,57 +49,12 @@ type CAJobDefinition<T> = {
 
 
 export class CAWorker {
-    worker?: Worker
-    ioredis: Redis
-    queue: Queue
     jobs: CAJobDefinition<any>[] = []
     logger: Logger
 
-    constructor(ioredis: Redis, worker: boolean, logger: Logger) {
+    constructor(logger: Logger) {
         this.logger = logger
-        const envName = env.NODE_ENV
-        const queueName = `${envName}-queue`
-        const queuePrefix = undefined
-        this.ioredis = ioredis
-        this.logger.pino.info({queueName, queuePrefix}, `starting queue`)
-        this.queue = new Queue(queueName, {
-            prefix: queuePrefix,
-            connection: ioredis
-        })
 
-        if (worker) {
-            this.logger.pino.info({queueName, queuePrefix}, "starting worker")
-            this.worker = new Worker(queueName, async (job) => {
-                    for (let i = 0; i < this.jobs.length; i++) {
-                        if (job.name.startsWith(this.jobs[i].name)) {
-                            try {
-                                await this.jobs[i].handler(job.data)
-                            } catch (error) {
-                                this.logger.pino.error({job: job.name, error}, "error running job")
-                            }
-                            return
-                        }
-                    }
-                    this.logger.pino.warn({name: job.name}, "no handler for job")
-                },
-                {
-                    connection: ioredis,
-                    lockDuration: 60 * 1000 * 5
-                }
-            )
-            this.worker.on('failed', (job, err) => {
-                this.logger.pino.error({name: job?.name, error: err}, `job failed`);
-            })
-            this.worker.on('error', (err) => {
-                this.logger.pino.error({error: err}, 'worker error');
-            })
-            this.worker.on('active', (job) => {
-                this.logger.pino.info({name: job.name}, `job started`)
-            })
-            this.worker.on('completed', (job) => {
-                this.logger.pino.info({name: job.name}, `job completed`)
-            })
-        }
     }
 
     runCrons() {
@@ -108,6 +63,20 @@ export class CAWorker {
 
     registerJob(jobName: string, handler: (data: any) => Promise<void>, batchable: boolean = false) {
         this.jobs.push({name: jobName, handler, batchable})
+    }
+
+    async runJob(name: string, data: any) {
+        for (let i = 0; i < this.jobs.length; i++) {
+            if (name.startsWith(this.jobs[i].name)) {
+                try {
+                    await this.jobs[i].handler(data)
+                } catch (error) {
+                    this.logger.pino.error({job: name, error}, "error running job")
+                }
+                return
+            }
+        }
+        this.logger.pino.warn({name}, "no handler for job")
     }
 
     async setup(ctx: AppContext) {
@@ -263,19 +232,90 @@ export class CAWorker {
             this.logger.pino.info("not running cron jobs")
         }
 
-        const waitingJobs = await this.queue.getJobs(['waiting'])
-        const delayedJobs = await this.queue.getJobs(['delayed'])
+        await this.logState()
 
-        this.logger.pino.info({
-            waitingJobsCount: waitingJobs.length,
-            delayedJobsCount: delayedJobs.length,
-            waitingJobs: waitingJobs.map(j => (j ? {id: j.id, name: j.name} : null)),
-            delayedJobs: delayedJobs.map(j => (j ? {id: j.id, name: j.name} : null)),
-        }, "current jobs")
-
-        await this.queue.waitUntilReady()
+        await this.waitUntilReady()
     }
 
+    async batchJobs() {
+        throw Error("Sin implementar!")
+    }
+
+    async removeAllRepeatingJobs() {
+        throw Error("Sin implementar!")
+    }
+
+    async addJob(name: string, data: any, priority: number = 10) {
+        throw Error("Sin implementar!")
+    }
+
+    async waitUntilReady() {
+        throw Error("Sin implementar!")
+    }
+
+    async logState() {
+        throw Error("Sin implementar!")
+    }
+
+    async addRepeatingJob(name: string, every: number, delay: number, priority: number = 10) {
+        throw Error("Sin implementar!")
+    }
+
+    async runAllJobs() {
+        throw Error("Sin implementar!")
+    }
+
+    async clear() {
+        throw Error("Sin implementar!")
+    }
+}
+
+
+
+export class RedisCAWorker extends CAWorker {
+    worker?: Worker
+    ioredis: Redis
+    queue: Queue
+    jobs: CAJobDefinition<any>[] = []
+    logger: Logger
+
+    constructor(ioredis: Redis, worker: boolean, logger: Logger) {
+        super(logger)
+        this.logger = logger
+        const envName = env.NODE_ENV
+        const queueName = `${envName}-queue`
+        const queuePrefix = undefined
+        this.ioredis = ioredis
+        this.logger.pino.info({queueName, queuePrefix}, `starting queue`)
+        this.queue = new Queue(queueName, {
+            prefix: queuePrefix,
+            connection: ioredis
+        })
+
+        if (worker) {
+            this.logger.pino.info({queueName, queuePrefix}, "starting worker")
+            this.worker = new Worker(queueName, async (job) => {
+                    await this.runJob(job.name, job.data)
+                },
+                {
+                    connection: ioredis,
+                    lockDuration: 60 * 1000 * 5
+                }
+            )
+            this.worker.on('failed', (job, err) => {
+                this.logger.pino.error({name: job?.name, error: err}, `job failed`);
+            })
+            this.worker.on('error', (err) => {
+                this.logger.pino.error({error: err}, 'worker error');
+            })
+            this.worker.on('active', (job) => {
+                this.logger.pino.info({name: job.name}, `job started`)
+            })
+            this.worker.on('completed', (job) => {
+                this.logger.pino.info({name: job.name}, `job completed`)
+            })
+        }
+    }
 
     // priority va de 1 a 2097152, más bajo significa mayor prioridad
     async addJob(name: string, data: any, priority: number = 10) {
@@ -360,6 +400,22 @@ export class CAWorker {
             const batchData = jobData.slice(i, i + batchSize)
             await this.addJob(name, batchData)
         }
+    }
+
+    async logState() {
+        const waitingJobs = await this.queue.getJobs(['waiting'])
+        const delayedJobs = await this.queue.getJobs(['delayed'])
+
+        this.logger.pino.info({
+            waitingJobsCount: waitingJobs.length,
+            delayedJobsCount: delayedJobs.length,
+            waitingJobs: waitingJobs.map(j => (j ? {id: j.id, name: j.name} : null)),
+            delayedJobs: delayedJobs.map(j => (j ? {id: j.id, name: j.name} : null)),
+        }, "current jobs")
+    }
+
+    async waitUntilReady() {
+        await this.queue.waitUntilReady()
     }
 }
 

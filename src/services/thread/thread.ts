@@ -1,6 +1,6 @@
-import {ThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {AppContext} from "#/setup";
-import {Agent} from "#/utils/session-agent";
+import {ThreadViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {AppContext} from "#/setup.js";
+import {Agent} from "#/utils/session-agent.js";
 import {
     getCollectionFromUri,
     getDidFromUri,
@@ -9,18 +9,18 @@ import {
     isDataset,
     isPost,
     shortCollectionToCollection
-} from "#/utils/uri";
+} from "#/utils/uri.js";
 import {
     hydrateThreadViewContent,
     threadPostRepliesSortKey,
     ThreadSkeleton
-} from "#/services/hydration/hydrate";
-import {isThreadViewPost} from "#/lex-server/types/app/bsky/feed/defs";
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {handleToDid} from "#/services/user/users";
-import {Dataplane} from "#/services/hydration/dataplane";
-import {ThreadViewPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs";
-import {listOrderDesc, sortByKey} from "#/utils/arrays";
+} from "#/services/hydration/hydrate.js";
+import {isThreadViewPost} from "#/lex-server/types/app/bsky/feed/defs.js";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
+import {handleToDid} from "#/services/user/users.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {ThreadViewPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
+import {listOrderDesc, sortByKey} from "#/utils/arrays.js";
 
 function threadViewPostToThreadSkeleton(thread: ThreadViewPost, isAncestor: boolean = false): ThreadSkeleton {
     return {

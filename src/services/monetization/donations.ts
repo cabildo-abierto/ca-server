@@ -1,10 +1,10 @@
-import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
-import MercadoPagoConfig, {Preference} from "mercadopago";
-import {AppContext} from "#/setup";
-import {getUsersWithReadSessions, UserWithReadSessions} from "#/services/monetization/user-months";
-import {count, max} from "#/utils/arrays";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler.js";
+import {MercadoPagoConfig, Preference} from "mercadopago";
+import {AppContext} from "#/setup.js";
+import {getUsersWithReadSessions, UserWithReadSessions} from "#/services/monetization/user-months.js";
+import {count, max} from "#/utils/arrays.js";
 import {v4 as uuidv4} from "uuid";
-import {env} from "#/lib/env";
+import {env} from "#/lib/env.js";
 
 type Donation = {
     date: Date

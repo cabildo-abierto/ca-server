@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { Server } from './server'
+import { Server } from './server.js'
 
 export type Role = "worker" | "web" | "mirror"
 

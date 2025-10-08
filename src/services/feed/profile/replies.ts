@@ -1,10 +1,10 @@
-import {GetSkeletonProps} from "#/services/feed/feed";
-import {sortByKey} from "#/utils/arrays";
-import {SessionAgent} from "#/utils/session-agent";
-import {FeedSkeletonWithDate, getSkeletonFromTimeline} from "#/services/feed/inicio/following";
-import {Dataplane} from "#/services/hydration/dataplane";
-import {getMainProfileFeedSkeletonCA} from "#/services/feed/profile/main";
-import {AppContext} from "#/setup";
+import {GetSkeletonProps} from "#/services/feed/feed.js";
+import {sortByKey} from "#/utils/arrays.js";
+import {SessionAgent} from "#/utils/session-agent.js";
+import {FeedSkeletonWithDate, getSkeletonFromTimeline} from "#/services/feed/inicio/following.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {getMainProfileFeedSkeletonCA} from "#/services/feed/profile/main.js";
+import {AppContext} from "#/setup.js";
 
 
 const getRepliesProfileFeedSkeletonBsky = async (ctx: AppContext, agent: SessionAgent, data: Dataplane, did: string, cursor?: string): Promise<{skeleton: FeedSkeletonWithDate, cursor?: string}> => {

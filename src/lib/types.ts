@@ -1,6 +1,6 @@
 import {EditorStatus} from "@prisma/client";
-import {AlgorithmConfig} from "#/services/user/users";
-import {MirrorStatus} from "#/services/redis/cache";
+import {AlgorithmConfig} from "#/services/user/users.js";
+import {MirrorStatus} from "#/services/redis/cache.js";
 
 
 export type ATProtoStrongRef = {

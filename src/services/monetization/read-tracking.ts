@@ -1,9 +1,9 @@
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {getDidFromUri, getUri, isTopicVersion, splitUri} from "#/utils/uri";
-import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
+import {getDidFromUri, getUri, isTopicVersion, splitUri} from "#/utils/uri.js";
+import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version.js";
 import {v4 as uuidv4} from "uuid";
-import {AppContext} from "#/setup";
-import {Agent} from "#/utils/session-agent";
+import {AppContext} from "#/setup.js";
+import {Agent} from "#/utils/session-agent.js";
 
 export type ReadChunk = {
     chunk: number
@@ -44,7 +44,7 @@ export type ReadSession = {
 
 export async function storeReadSession(ctx: AppContext, agent: Agent, readSession: ReadSession, created_at: Date) {
     const {did, collection, rkey} = splitUri(readSession.contentUri)
-
+    ctx.logger.pino.info("storing read session")
     let topicId: string | null = null
     if(isTopicVersion(collection)){
         topicId = await getTopicIdFromTopicVersionUri(ctx, did, rkey)
@@ -52,27 +52,27 @@ export async function storeReadSession(ctx: AppContext, agent: Agent, readSessio
 
     const id = uuidv4()
 
+    const rs = {
+        id,
+        readChunks: {
+            chunks: readSession.chunks,
+            totalChunks: readSession.totalChunks
+        },
+        userId: agent.hasSession() ? agent.did : "anonymous",
+        readContentId: readSession.contentUri,
+        contentAuthorId: getDidFromUri(readSession.contentUri),
+        topicId: topicId ?? undefined,
+        created_at,
+        created_at_tz: created_at
+    }
     try {
         await ctx.kysely
             .insertInto("ReadSession")
-            .values([
-                {
-                    id,
-                    readChunks: {
-                        chunks: readSession.chunks,
-                        totalChunks: readSession.totalChunks
-                    },
-                    userId: agent.hasSession() ? agent.did : "anonymous",
-                    readContentId: readSession.contentUri,
-                    contentAuthorId: getDidFromUri(readSession.contentUri),
-                    topicId: topicId ?? undefined,
-                    created_at,
-                    created_at_tz: created_at
-                }
-            ])
+            .values([rs])
             .execute()
 
-    } catch {
+    } catch (error) {
+        ctx.logger.pino.error({rs, error}, "error creating a read session")
         return {error: "Ocurrió un error al actualizar la base de datos."}
     }
     return {id}

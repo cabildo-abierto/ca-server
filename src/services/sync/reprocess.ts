@@ -1,6 +1,6 @@
-import {AppContext} from "#/setup";
-import {getRecordProcessor} from "#/services/sync/event-processing/get-record-processor";
-import {RefAndRecord} from "#/services/sync/types";
+import {AppContext} from "#/setup.js";
+import {getRecordProcessor} from "#/services/sync/event-processing/get-record-processor.js";
+import {RefAndRecord} from "#/services/sync/types.js";
 
 
 async function countCollectionRecords(ctx: AppContext, collection: string): Promise<number> {

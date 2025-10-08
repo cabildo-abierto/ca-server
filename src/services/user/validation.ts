@@ -1,10 +1,10 @@
-import {CAHandler} from "#/utils/handler";
-import {Dataplane} from "#/services/hydration/dataplane";
-import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {ProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
+import {CAHandler} from "#/utils/handler.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
+import {ProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs.js"
 import {createHash} from "crypto";
 import {v4 as uuidv4} from "uuid";
-import { FilePayload } from "../storage/storage";
+import { FilePayload } from "../storage/storage.js";
 
 type OrgType = "creador-individual" | "empresa" | "medio" | "fundacion" | "consultora" | "otro"
 

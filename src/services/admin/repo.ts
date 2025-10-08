@@ -1,6 +1,6 @@
-import {CAHandler} from "#/utils/handler";
-import {getServiceEndpointForDid} from "#/services/blob";
-import {allCollections, getUserRepo} from "#/services/sync/sync-user";
+import {CAHandler} from "#/utils/handler.js";
+import {getServiceEndpointForDid} from "#/services/blob.js";
+import {allCollections, getUserRepo} from "#/services/sync/sync-user.js";
 
 type UserRepoCounts = {
     counts: {

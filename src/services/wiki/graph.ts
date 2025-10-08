@@ -1,9 +1,9 @@
-import {getCategoriesWithCounts} from "./topics";
-import {AppContext} from "#/setup";
-import {TopicsGraph} from "#/lib/types";
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
-import {unique} from "#/utils/arrays";
+import {getCategoriesWithCounts} from "./topics.js";
+import {AppContext} from "#/setup.js";
+import {TopicsGraph} from "#/lib/types.js";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
+import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read.js";
+import {unique} from "#/utils/arrays.js";
 
 
 async function clearEmptyCategories(ctx: AppContext) {

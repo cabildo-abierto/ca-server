@@ -1,11 +1,11 @@
-import {SessionAgent} from "#/utils/session-agent";
-import {AppContext} from "#/setup";
+import {SessionAgent} from "#/utils/session-agent.js";
+import {AppContext} from "#/setup.js";
 import {isValidHandle} from "@atproto/syntax";
-import {CAHandler, CAHandlerNoAuth} from "#/utils/handler";
-import {Record as CAProfileRecord} from "#/lex-server/types/ar/cabildoabierto/actor/caProfile"
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler.js";
+import {Record as CAProfileRecord} from "#/lex-server/types/ar/cabildoabierto/actor/caProfile.js"
 import {v4 as uuidv4} from "uuid";
-import {range} from "#/utils/arrays";
-import {BskyProfileRecordProcessor, CAProfileRecordProcessor} from "#/services/sync/event-processing/profile";
+import {range} from "#/utils/arrays.js";
+import {BskyProfileRecordProcessor, CAProfileRecordProcessor} from "#/services/sync/event-processing/profile.js";
 import {AppBskyActorProfile} from "@atproto/api"
 
 async function getCAStatus(ctx: AppContext, did: string): Promise<{inCA: boolean, hasAccess: boolean} | null> {

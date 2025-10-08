@@ -1,10 +1,10 @@
 import { NodeOAuthClient } from '@atproto/oauth-client-node'
-import {createSessionLock, SessionStore, StateStore} from './storage'
-import {env} from "#/lib/env";
-import IORedis from "ioredis";
+import {createSessionLock, SessionStore, StateStore} from './storage.js'
+import {env} from "#/lib/env.js";
+import {type Redis} from "ioredis";
 
 
-export const createClient = async (redis: IORedis) => {
+export const createClient = async (redis: Redis) => {
   const publicUrl = env.PUBLIC_URL
   const url = publicUrl || `http://127.0.0.1:${env.PORT}`
   const enc = encodeURIComponent

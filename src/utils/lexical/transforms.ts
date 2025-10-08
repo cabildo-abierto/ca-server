@@ -1,8 +1,8 @@
-import {decompress} from "../compression";
+import {decompress} from "../compression.js";
+import {JSDOM} from "jsdom"
 
 
 export function htmlToMarkdown(html: string){
-    const { JSDOM } = require('jsdom');
 
     const dom = new JSDOM(html);
     const document = dom.window.document;

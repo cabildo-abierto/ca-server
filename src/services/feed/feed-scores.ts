@@ -1,4 +1,4 @@
-import {AppContext} from "#/setup";
+import {AppContext} from "#/setup.js";
 import { sql } from "kysely";
 
 
@@ -140,7 +140,7 @@ export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) 
         }
 
         const t3 = Date.now()
-        ctx.logger.pino.info(`update interaction scores for batch ${offset} with size ${scores.length} (total=${uris?.length})`, [t1, t2, t3])
+        ctx.logger.logTimes("update interaction scores batch", [t1, t2, t3], {offset, size: scores.length, total: uris?.length})
         offset += batchSize
         if(scores.length < batchSize) break
     }

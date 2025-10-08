@@ -1,4 +1,4 @@
-import {AppContext} from "#/setup";
+import {AppContext} from "#/setup.js";
 
 
 export async function updateActiveUsers(ctx: AppContext): Promise<void> {

@@ -1,19 +1,19 @@
-import {decompress} from "#/utils/compression";
-import {Column, DatasetView, DatasetViewBasic, TopicsDatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {getDidFromUri, getUri} from "#/utils/uri";
-import {AppContext} from "#/setup";
-import {Dataplane} from "#/services/hydration/dataplane";
-import {getObjectKey, listOrderDesc, sortByKey} from "#/utils/arrays";
+import {decompress} from "#/utils/compression.js";
+import {Column, DatasetView, DatasetViewBasic, TopicsDatasetView} from "#/lex-api/types/ar/cabildoabierto/data/dataset.js";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
+import {getDidFromUri, getUri} from "#/utils/uri.js";
+import {AppContext} from "#/setup.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {getObjectKey, listOrderDesc, sortByKey} from "#/utils/arrays.js";
 import {
     ColumnFilter,
     isColumnFilter,
     Main as Visualization
-} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
+} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
 import {sql} from "kysely";
 import {$Typed} from "@atproto/api";
-import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {hydrateProfileViewBasic} from "#/services/hydration/profile";
+import {TopicProp, validateTopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
 
 
 export function hydrateTopicsDatasetView(ctx: AppContext, filters: $Typed<ColumnFilter>[], dataplane: Dataplane): $Typed<TopicsDatasetView> | null {

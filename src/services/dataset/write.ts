@@ -1,10 +1,10 @@
-import {SessionAgent} from "#/utils/session-agent";
-import {CAHandler} from "#/utils/handler";
-import {uploadStringBlob} from "#/services/blob";
-import {Record as DatasetRecord} from "#/lex-api/types/ar/cabildoabierto/data/dataset";
+import {SessionAgent} from "#/utils/session-agent.js";
+import {CAHandler} from "#/utils/handler.js";
+import {uploadStringBlob} from "#/services/blob.js";
+import {Record as DatasetRecord} from "#/lex-api/types/ar/cabildoabierto/data/dataset.js";
 import {BlobRef} from "@atproto/lexicon";
-import {compress} from "#/utils/compression";
-import {DatasetRecordProcessor} from "#/services/sync/event-processing/dataset";
+import {compress} from "#/utils/compression.js";
+import {DatasetRecordProcessor} from "#/services/sync/event-processing/dataset.js";
 
 
 export async function createDatasetATProto(agent: SessionAgent, params: CreateDatasetProps) {

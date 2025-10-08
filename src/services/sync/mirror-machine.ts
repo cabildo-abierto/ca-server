@@ -1,14 +1,14 @@
 import WebSocket, {RawData} from 'ws';
-import {getCAUsersDids} from "#/services/user/users";
-import {AppContext} from "#/setup";
-import {getUri, isCAProfile, isFollow} from "#/utils/uri";
-import {addPendingEvent, getCAUsersAndFollows} from "#/services/sync/sync-user";
-import {CommitEvent, JetstreamEvent} from "#/lib/types";
+import {getCAUsersDids} from "#/services/user/users.js";
+import {AppContext} from "#/setup.js";
+import {getUri, isCAProfile, isFollow} from "#/utils/uri.js";
+import {addPendingEvent, getCAUsersAndFollows} from "#/services/sync/sync-user.js";
+import {CommitEvent, JetstreamEvent} from "#/lib/types.js";
 import {AppBskyGraphFollow} from "@atproto/api"
-import {processEventsBatch} from "#/services/sync/event-processing/event-processor";
+import {processEventsBatch} from "#/services/sync/event-processing/event-processor.js";
 import {LRUCache} from 'lru-cache'
-import {env} from "#/lib/env";
-import {updateTimestamp} from "#/services/admin/status";
+import {env} from "#/lib/env.js";
+import {updateTimestamp} from "#/services/admin/status.js";
 
 function formatEventsPerSecond(events: number, elapsed: number) {
     return (events / (elapsed / 1000)).toFixed(2)

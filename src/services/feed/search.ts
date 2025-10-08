@@ -1,6 +1,6 @@
-import {cleanText} from "#/utils/strings";
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {FeedPipelineProps, getFeed, GetFeedOutput, GetSkeletonProps} from "#/services/feed/feed";
+import {cleanText} from "#/utils/strings.js";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
+import {FeedPipelineProps, getFeed, GetFeedOutput, GetSkeletonProps} from "#/services/feed/feed.js";
 import {sql} from "kysely";
 
 

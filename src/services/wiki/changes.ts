@@ -1,12 +1,12 @@
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article";
-import {diff, nodesCharDiff} from "#/services/wiki/diff";
-import {getDidFromUri, getUri} from "#/utils/uri";
-import {getTopicVersion} from "#/services/wiki/topics";
-import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
-import {ProfileViewBasic as ProfileViewBasicCA} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
-import { Dataplane } from "../hydration/dataplane";
-import {hydrateProfileViewBasic} from "#/services/hydration/profile";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
+import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article.js";
+import {diff, nodesCharDiff} from "#/services/wiki/diff.js";
+import {getDidFromUri, getUri} from "#/utils/uri.js";
+import {getTopicVersion} from "#/services/wiki/topics.js";
+import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms.js";
+import {ProfileViewBasic as ProfileViewBasicCA} from "#/lex-api/types/ar/cabildoabierto/actor/defs.js"
+import { Dataplane } from "../hydration/dataplane.js";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
 
 
 export const getNewVersionDiff: CAHandlerNoAuth<{currentText: string, currentFormat: string, markdown: string, embeds: ArticleEmbed[]}, {charsAdded: number, charsDeleted: number}> = async (ctx, agent, params) => {

@@ -1,4 +1,4 @@
-import {FeedPipelineProps} from "#/services/feed/feed";
+import {FeedPipelineProps} from "#/services/feed/feed.js";
 
 
 export const discoverFeedPipeline: FeedPipelineProps = {

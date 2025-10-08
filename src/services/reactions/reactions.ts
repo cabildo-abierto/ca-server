@@ -1,15 +1,15 @@
-import {AppContext} from "#/setup";
-import {ATProtoStrongRef} from "#/lib/types";
-import {CAHandler} from "#/utils/handler";
-import {getCollectionFromUri, getUri} from "#/utils/uri";
+import {AppContext} from "#/setup.js";
+import {ATProtoStrongRef} from "#/lib/types.js";
+import {CAHandler} from "#/utils/handler.js";
+import {getCollectionFromUri, getUri} from "#/utils/uri.js";
 import {AppBskyFeedLike, AppBskyFeedRepost} from "@atproto/api"
-import {Record as VoteAcceptRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept";
-import {Record as VoteRejectRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject";
-import {SessionAgent} from "#/utils/session-agent";
+import {Record as VoteAcceptRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept.js";
+import {Record as VoteRejectRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject.js";
+import {SessionAgent} from "#/utils/session-agent.js";
 import {$Typed} from "@atproto/api";
-import {createVoteAcceptAT, createVoteRejectAT, VoteRejectProps} from "#/services/wiki/votes";
-import {deleteRecordAT} from "#/services/delete";
-import {ReactionDeleteProcessor, ReactionRecordProcessor} from "#/services/sync/event-processing/reaction";
+import {createVoteAcceptAT, createVoteRejectAT, VoteRejectProps} from "#/services/wiki/votes.js";
+import {deleteRecordAT} from "#/services/delete.js";
+import {ReactionDeleteProcessor, ReactionRecordProcessor} from "#/services/sync/event-processing/reaction.js";
 
 
 

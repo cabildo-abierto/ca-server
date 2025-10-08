@@ -1,5 +1,5 @@
-import { assignment } from "./min-cost-flow"
-import {areArraysEqual, makeMatrix, range} from "#/utils/arrays";
+import { assignment } from "./min-cost-flow.js"
+import {areArraysEqual, makeMatrix, range} from "#/utils/arrays.js";
 
 
 export function getAllText(node: any){

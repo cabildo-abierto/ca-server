@@ -1,6 +1,6 @@
-import {gett, unique} from "#/utils/arrays";
-import {cleanText} from "#/utils/strings";
-import {AppContext} from "#/setup";
+import {gett, unique} from "#/utils/arrays.js";
+import {cleanText} from "#/utils/strings.js";
+import {AppContext} from "#/setup.js";
 import {sql} from "kysely";
 
 

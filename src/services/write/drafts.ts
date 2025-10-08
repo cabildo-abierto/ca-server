@@ -1,11 +1,11 @@
-import {CAHandler} from "#/utils/handler";
-import {EmbedContext} from "#/services/write/topic";
-import {ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article";
+import {CAHandler} from "#/utils/handler.js";
+import {EmbedContext} from "#/services/write/topic.js";
+import {ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article.js";
 import {v4 as uuidv4} from "uuid";
-import {getArticleSummary} from "#/services/hydration/hydrate";
-import {isView as isImageEmbedView} from "#/lex-api/types/app/bsky/embed/images"
+import {getArticleSummary} from "#/services/hydration/hydrate.js";
+import {isView as isImageEmbedView} from "#/lex-api/types/app/bsky/embed/images.js"
 import {sql} from "kysely";
-import {FilePayload} from "#/services/storage/storage";
+import {FilePayload} from "#/services/storage/storage.js";
 
 export type Draft = {
     text: string
@@ -144,7 +144,7 @@ export const getDraft: CAHandler<{params: {id: string}}, Draft> = async (ctx, ag
         const embeds = draft.embeds as EmbedsInDB
         if(embeds.sbPaths){
             const sbPaths = embeds.sbPaths.flat().filter(x => x != null)
-            const {data} = await ctx.storage.getSignedUrlsFromPaths(sbPaths, "draft-embeds")
+            const {data} = await ctx.storage!.getSignedUrlsFromPaths(sbPaths, "draft-embeds")
             if(data){
                 data.forEach((r, i) => {
                     signedUrls.set(sbPaths[i], r)
@@ -189,7 +189,7 @@ export const saveDraft: CAHandler<CreateDraftParams, {id: string}> = async (ctx,
                     fileName: getDraftEmbedSbUrl(id, i),
                     base64: e.base64files[0]
                 }
-                const {path, error} = await ctx.storage.upload(file, "draft-embeds")
+                const {path, error} = await ctx.storage!.upload(file, "draft-embeds")
                 if(error){
                     return {error: "Ocurrió un error al guardar el borrador"}
                 }

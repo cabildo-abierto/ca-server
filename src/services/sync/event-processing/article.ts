@@ -1,13 +1,13 @@
-import {processContentsBatch} from "#/services/sync/event-processing/content";
-import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
-import {getDidFromUri} from "#/utils/uri";
-import {SyncContentProps} from "#/services/sync/types";
-import {ATProtoStrongRef} from "#/lib/types";
-import * as Article from "#/lex-api/types/ar/cabildoabierto/feed/article"
-import {getCidFromBlobRef} from "#/services/sync/utils";
-import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
-import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
-import {unique} from "#/utils/arrays";
+import {processContentsBatch} from "#/services/sync/event-processing/content.js";
+import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs.js";
+import {getDidFromUri} from "#/utils/uri.js";
+import {SyncContentProps} from "#/services/sync/types.js";
+import {ATProtoStrongRef} from "#/lib/types.js";
+import * as Article from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
+import {getCidFromBlobRef} from "#/services/sync/utils.js";
+import {RecordProcessor} from "#/services/sync/event-processing/record-processor.js";
+import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor.js";
+import {unique} from "#/utils/arrays.js";
 
 
 export class ArticleRecordProcessor extends RecordProcessor<Article.Record> {
@@ -23,7 +23,7 @@ export class ArticleRecordProcessor extends RecordProcessor<Article.Record> {
                     authorId: getDidFromUri(r.ref.uri)
                 },
                 embeds: r.record.embeds ?? [],
-                selfLabels: isSelfLabels(r.record.labels) ? r.record.labels.values.map(l => l.val) : undefined,
+                selfLabels: isSelfLabels(r.record.labels) ? r.record.labels.values.map((l: any) => l.val) : undefined,
             },
             ref: r.ref
         }))
@@ -35,7 +35,7 @@ export class ArticleRecordProcessor extends RecordProcessor<Article.Record> {
 
         await this.ctx.kysely.transaction().execute(async (trx) => {
             await this.processRecordsBatch(trx, records)
-            await processContentsBatch(trx, contents)
+            await processContentsBatch(this.ctx, trx, contents)
 
             await trx
                 .insertInto("Article")

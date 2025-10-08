@@ -5,10 +5,10 @@ import type {
     NodeSavedStateStore,
     RuntimeLock,
 } from '@atproto/oauth-client-node';
-import IORedis from "ioredis";
+import {type Redis} from "ioredis";
 
 export class StateStore implements NodeSavedStateStore {
-    constructor(private db: IORedis) {}
+    constructor(private db: Redis) {}
 
     async get(key: string): Promise<NodeSavedState | undefined> {
         const result = await this.db.get(`authState:${key}`);
@@ -27,7 +27,7 @@ export class StateStore implements NodeSavedStateStore {
 }
 
 export class SessionStore implements NodeSavedSessionStore {
-    constructor(private db: IORedis) {}
+    constructor(private db: Redis) {}
 
     async get(key: string): Promise<NodeSavedSession | undefined> {
         const result = await this.db.get(`authSession:${key}`);
@@ -48,7 +48,7 @@ export class SessionStore implements NodeSavedSessionStore {
 
 const LOCK_TIMEOUT = 10; // ms
 
-export const createSessionLock = (redis: IORedis): RuntimeLock => {
+export const createSessionLock = (redis: Redis): RuntimeLock => {
     return async (name, fn) => {
         const lockKey = `sessionLock:${name}`;
         const token = Math.random().toString(36).slice(2);

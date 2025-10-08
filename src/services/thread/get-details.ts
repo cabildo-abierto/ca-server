@@ -1,12 +1,12 @@
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {ProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs";
-import {Dataplane} from "#/services/hydration/dataplane";
-import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {Agent} from "#/utils/session-agent";
-import {getUri} from "#/utils/uri";
-import {hydratePostView} from "#/services/hydration/hydrate";
-import {PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {AppContext} from "#/setup";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
+import {ProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
+import {Agent} from "#/utils/session-agent.js";
+import {getUri} from "#/utils/uri.js";
+import {hydratePostView} from "#/services/hydration/hydrate.js";
+import {PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {AppContext} from "#/setup.js";
 
 
 async function getLikesSkeleton(ctx: AppContext, agent: Agent, uri: string, dataplane: Dataplane, limit: number, cursor: string | undefined): Promise<{

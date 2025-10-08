@@ -1,12 +1,12 @@
-import {AppContext} from "#/setup";
-import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
-import {ArticleDeleteProcessor} from "#/services/sync/event-processing/article";
-import {DatasetDeleteProcessor} from "#/services/sync/event-processing/dataset";
-import {PostDeleteProcessor} from "#/services/sync/event-processing/post";
-import {FollowDeleteProcessor} from "#/services/sync/event-processing/follow";
-import {CAProfileDeleteProcessor} from "#/services/sync/event-processing/profile";
-import {TopicVersionDeleteProcessor} from "#/services/sync/event-processing/topic";
-import {ReactionDeleteProcessor} from "#/services/sync/event-processing/reaction";
+import {AppContext} from "#/setup.js";
+import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor.js";
+import {ArticleDeleteProcessor} from "#/services/sync/event-processing/article.js";
+import {DatasetDeleteProcessor} from "#/services/sync/event-processing/dataset.js";
+import {PostDeleteProcessor} from "#/services/sync/event-processing/post.js";
+import {FollowDeleteProcessor} from "#/services/sync/event-processing/follow.js";
+import {CAProfileDeleteProcessor} from "#/services/sync/event-processing/profile.js";
+import {TopicVersionDeleteProcessor} from "#/services/sync/event-processing/topic.js";
+import {ReactionDeleteProcessor} from "#/services/sync/event-processing/reaction.js";
 
 export function getDeleteProcessor(ctx: AppContext, collection: string) {
     const processor = collectionToProcessorMap[collection]

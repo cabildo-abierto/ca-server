@@ -9,15 +9,15 @@ import {
   type MethodConfigOrHandler,
   createServer as createXrpcServer,
 } from '@atproto/xrpc-server'
-import { schemas } from './lexicons'
-import * as ArCabildoabiertoNotificationGetUnreadCount from './types/ar/cabildoabierto/notification/getUnreadCount'
-import * as ArCabildoabiertoNotificationListNotifications from './types/ar/cabildoabierto/notification/listNotifications'
-import * as ArCabildoabiertoNotificationUpdateSeen from './types/ar/cabildoabierto/notification/updateSeen'
-import * as ComAtprotoRepoCreateRecord from './types/com/atproto/repo/createRecord'
-import * as ComAtprotoRepoDeleteRecord from './types/com/atproto/repo/deleteRecord'
-import * as ComAtprotoRepoGetRecord from './types/com/atproto/repo/getRecord'
-import * as ComAtprotoRepoListRecords from './types/com/atproto/repo/listRecords'
-import * as ComAtprotoRepoPutRecord from './types/com/atproto/repo/putRecord'
+import { schemas } from './lexicons.js'
+import * as ArCabildoabiertoNotificationGetUnreadCount from './types/ar/cabildoabierto/notification/getUnreadCount.js'
+import * as ArCabildoabiertoNotificationListNotifications from './types/ar/cabildoabierto/notification/listNotifications.js'
+import * as ArCabildoabiertoNotificationUpdateSeen from './types/ar/cabildoabierto/notification/updateSeen.js'
+import * as ComAtprotoRepoCreateRecord from './types/com/atproto/repo/createRecord.js'
+import * as ComAtprotoRepoDeleteRecord from './types/com/atproto/repo/deleteRecord.js'
+import * as ComAtprotoRepoGetRecord from './types/com/atproto/repo/getRecord.js'
+import * as ComAtprotoRepoListRecords from './types/com/atproto/repo/listRecords.js'
+import * as ComAtprotoRepoPutRecord from './types/com/atproto/repo/putRecord.js'
 
 export const APP_BSKY_FEED = {
   DefsRequestLess: 'app.bsky.feed.defs#requestLess',
@@ -47,15 +47,63 @@ export function createServer(options?: XrpcOptions): Server {
 
 export class Server {
   xrpc: XrpcServer
+  app: AppNS
   ar: ArNS
   com: ComNS
-  app: AppNS
 
   constructor(options?: XrpcOptions) {
     this.xrpc = createXrpcServer(schemas, options)
+    this.app = new AppNS(this)
     this.ar = new ArNS(this)
     this.com = new ComNS(this)
-    this.app = new AppNS(this)
+  }
+}
+
+export class AppNS {
+  _server: Server
+  bsky: AppBskyNS
+
+  constructor(server: Server) {
+    this._server = server
+    this.bsky = new AppBskyNS(server)
+  }
+}
+
+export class AppBskyNS {
+  _server: Server
+  embed: AppBskyEmbedNS
+  feed: AppBskyFeedNS
+  richtext: AppBskyRichtextNS
+
+  constructor(server: Server) {
+    this._server = server
+    this.embed = new AppBskyEmbedNS(server)
+    this.feed = new AppBskyFeedNS(server)
+    this.richtext = new AppBskyRichtextNS(server)
+  }
+}
+
+export class AppBskyEmbedNS {
+  _server: Server
+
+  constructor(server: Server) {
+    this._server = server
+  }
+}
+
+export class AppBskyFeedNS {
+  _server: Server
+
+  constructor(server: Server) {
+    this._server = server
+  }
+}
+
+export class AppBskyRichtextNS {
+  _server: Server
+
+  constructor(server: Server) {
+    this._server = server
   }
 }
 
@@ -75,8 +123,8 @@ export class ArCabildoabiertoNS {
   data: ArCabildoabiertoDataNS
   embed: ArCabildoabiertoEmbedNS
   feed: ArCabildoabiertoFeedNS
-  wiki: ArCabildoabiertoWikiNS
   notification: ArCabildoabiertoNotificationNS
+  wiki: ArCabildoabiertoWikiNS
 
   constructor(server: Server) {
     this._server = server
@@ -84,8 +132,8 @@ export class ArCabildoabiertoNS {
     this.data = new ArCabildoabiertoDataNS(server)
     this.embed = new ArCabildoabiertoEmbedNS(server)
     this.feed = new ArCabildoabiertoFeedNS(server)
-    this.wiki = new ArCabildoabiertoWikiNS(server)
     this.notification = new ArCabildoabiertoNotificationNS(server)
+    this.wiki = new ArCabildoabiertoWikiNS(server)
   }
 }
 
@@ -114,14 +162,6 @@ export class ArCabildoabiertoEmbedNS {
 }
 
 export class ArCabildoabiertoFeedNS {
-  _server: Server
-
-  constructor(server: Server) {
-    this._server = server
-  }
-}
-
-export class ArCabildoabiertoWikiNS {
   _server: Server
 
   constructor(server: Server) {
@@ -170,6 +210,14 @@ export class ArCabildoabiertoNotificationNS {
   ) {
     const nsid = 'ar.cabildoabierto.notification.updateSeen' // @ts-ignore
     return this._server.xrpc.method(nsid, cfg)
+  }
+}
+
+export class ArCabildoabiertoWikiNS {
+  _server: Server
+
+  constructor(server: Server) {
+    this._server = server
   }
 }
 
@@ -258,53 +306,5 @@ export class ComAtprotoRepoNS {
   ) {
     const nsid = 'com.atproto.repo.putRecord' // @ts-ignore
     return this._server.xrpc.method(nsid, cfg)
-  }
-}
-
-export class AppNS {
-  _server: Server
-  bsky: AppBskyNS
-
-  constructor(server: Server) {
-    this._server = server
-    this.bsky = new AppBskyNS(server)
-  }
-}
-
-export class AppBskyNS {
-  _server: Server
-  feed: AppBskyFeedNS
-  embed: AppBskyEmbedNS
-  richtext: AppBskyRichtextNS
-
-  constructor(server: Server) {
-    this._server = server
-    this.feed = new AppBskyFeedNS(server)
-    this.embed = new AppBskyEmbedNS(server)
-    this.richtext = new AppBskyRichtextNS(server)
-  }
-}
-
-export class AppBskyFeedNS {
-  _server: Server
-
-  constructor(server: Server) {
-    this._server = server
-  }
-}
-
-export class AppBskyEmbedNS {
-  _server: Server
-
-  constructor(server: Server) {
-    this._server = server
-  }
-}
-
-export class AppBskyRichtextNS {
-  _server: Server
-
-  constructor(server: Server) {
-    this._server = server
   }
 }

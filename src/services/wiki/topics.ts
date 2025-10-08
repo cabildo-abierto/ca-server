@@ -1,25 +1,25 @@
-import {fetchTextBlobs} from "../blob";
-import {getDidFromUri, getUri} from "#/utils/uri";
-import {AppContext} from "#/setup";
-import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler";
-import {TopicProp, TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion";
-import {getTopicCurrentVersion, getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version";
-import {Agent} from "#/utils/session-agent";
-import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms";
-import {Dataplane} from "#/services/hydration/dataplane";
+import {fetchTextBlobs} from "../blob.js";
+import {getDidFromUri, getUri} from "#/utils/uri.js";
+import {AppContext} from "#/setup.js";
+import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler.js";
+import {TopicProp, TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
+import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion.js";
+import {getTopicCurrentVersion, getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version.js";
+import {Agent} from "#/utils/session-agent.js";
+import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
 import {$Typed} from "@atproto/api";
-import {getTopicSynonyms} from "#/services/wiki/utils";
-import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs"
-import {getTopicHistory} from "#/services/wiki/history";
-import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion"
-import {ArticleEmbed, ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article"
-import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
-import {isMain as isImagesEmbed, View as ImagesEmbedView} from "#/lex-api/types/app/bsky/embed/images"
-import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read"
-import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
-import {cleanText} from "#/utils/strings";
-import {getTopicsReferencedInText} from "#/services/wiki/references/references";
+import {getTopicSynonyms} from "#/services/wiki/utils.js";
+import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js"
+import {getTopicHistory} from "#/services/wiki/history.js";
+import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
+import {ArticleEmbed, ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
+import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
+import {isMain as isImagesEmbed, View as ImagesEmbedView} from "#/lex-api/types/app/bsky/embed/images.js"
+import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read.js"
+import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs.js"
+import {cleanText} from "#/utils/strings.js";
+import {getTopicsReferencedInText} from "#/services/wiki/references/references.js";
 
 export type TimePeriod = "day" | "week" | "month" | "all"
 
@@ -328,7 +328,7 @@ export function hydrateEmbedViews(authorId: string, embeds: ArticleEmbed[]): Art
             const embed = e.value
             const imagesView: $Typed<ImagesEmbedView> = {
                 $type: "app.bsky.embed.images#view",
-                images: embed.images.map(i => {
+                images: embed.images.map((i: any) => {
                     return {
                         $type: "app.bsky.embed.images#viewImage",
                         alt: i.alt,

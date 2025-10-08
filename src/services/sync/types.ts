@@ -1,5 +1,5 @@
-import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article"
-import {ATProtoStrongRef} from "#/lib/types";
+import {ArticleEmbed} from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
+import {ATProtoStrongRef} from "#/lib/types.js";
 
 
 export type SyncContentProps = {

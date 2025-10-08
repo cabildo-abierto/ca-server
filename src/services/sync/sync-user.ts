@@ -1,14 +1,14 @@
-import {AppContext} from "#/setup";
-import {dbHandleToDid, getCAUsersDids, handleToDid} from "#/services/user/users";
-import {ATProtoStrongRef, JetstreamEvent} from "#/lib/types";
+import {AppContext} from "#/setup.js";
+import {dbHandleToDid, getCAUsersDids, handleToDid} from "#/services/user/users.js";
+import {ATProtoStrongRef, JetstreamEvent} from "#/lib/types.js";
 import {RepoReader} from "@atcute/car/v4"
-import {getServiceEndpointForDid} from "#/services/blob";
-import {getUri, shortCollectionToCollection} from "#/utils/uri";
-import {CAHandler} from "#/utils/handler";
-import {processEventsBatch} from "#/services/sync/event-processing/event-processor";
-import {batchDeleteRecords, getRecordProcessor} from "#/services/sync/event-processing/get-record-processor";
-import {RefAndRecord} from "#/services/sync/types";
-import {env} from "#/lib/env";
+import {getServiceEndpointForDid} from "#/services/blob.js";
+import {getUri, shortCollectionToCollection} from "#/utils/uri.js";
+import {CAHandler} from "#/utils/handler.js";
+import {processEventsBatch} from "#/services/sync/event-processing/event-processor.js";
+import {batchDeleteRecords, getRecordProcessor} from "#/services/sync/event-processing/get-record-processor.js";
+import {RefAndRecord} from "#/services/sync/types.js";
+import {env} from "#/lib/env.js";
 
 
 export async function syncAllUsers(ctx: AppContext, mustUpdateCollections?: string[]) {
@@ -340,7 +340,7 @@ export async function getUserRepo(ctx: AppContext, did: string, doc: string, col
                 }
             }
 
-            ctx.logger.pino.info(`${did} finished fetching repo with size`, receivedBytes)
+            ctx.logger.pino.info({receivedBytes, did}, `finished fetching repo`)
 
             return { repo };
         } catch {
@@ -466,7 +466,7 @@ export const syncAllUsersHandler: CAHandler<{
 }, {}> = async (ctx, agent, {query}) => {
     const data = {collectionsMustUpdate: query.c ? (typeof query.c == "string" ? [query.c] : query.c) : []}
     await ctx.worker?.addJob("sync-all-users", data)
-    ctx.logger.pino.info("Added sync all users to queue with data", data)
+    ctx.logger.pino.info({data}, "Added sync all users to queue")
     return {data: {}}
 }
 
@@ -475,7 +475,7 @@ export async function updateRecordsCreatedAt(ctx: AppContext) {
     let offset = 0
     const bs = 10000
     while(true){
-        ctx.logger.pino.info("updating records created at batch", offset)
+        ctx.logger.pino.info({offset}, "updating records created at batch")
 
         const t1 = Date.now()
         const res = await ctx.kysely

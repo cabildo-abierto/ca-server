@@ -1,6 +1,6 @@
-import {FeedViewContent, isPostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs";
-import {ThreadViewContent} from "#/lex-server/types/ar/cabildoabierto/feed/defs";
-import {isKnownContent} from "#/utils/type-utils";
+import {FeedViewContent, isPostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {ThreadViewContent} from "#/lex-server/types/ar/cabildoabierto/feed/defs.js";
+import {isKnownContent} from "#/utils/type-utils.js";
 
 
 function getRootCreationDate(p: FeedViewContent): Date | null {

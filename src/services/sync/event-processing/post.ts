@@ -1,28 +1,28 @@
-import {ATProtoStrongRef} from "#/lib/types";
+import {ATProtoStrongRef} from "#/lib/types.js";
 import {
     getCollectionFromUri,
     getDidFromUri,
     isArticle,
     isTopicVersion
-} from "#/utils/uri";
-import * as Post from "#/lex-api/types/app/bsky/feed/post"
+} from "#/utils/uri.js";
+import * as Post from "#/lex-api/types/app/bsky/feed/post.js"
 import {
     isMain as isVisualizationEmbed,
     isDatasetDataSource
-} from "#/lex-api/types/ar/cabildoabierto/embed/visualization"
-import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs";
+} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
+import {isSelfLabels} from "@atproto/api/dist/client/types/com/atproto/label/defs.js";
 import {
     RefAndRecord,
     SyncContentProps
-} from "#/services/sync/types";
-import {NotificationJobData} from "#/services/notifications/notifications";
-import {processContentsBatch} from "#/services/sync/event-processing/content";
-import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
-import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
-import {isMain as isMainRecordEmbed} from "#/lex-api/types/app/bsky/embed/record";
-import {isMain as isMainRecordEmbedWithMedia} from "#/lex-api/types/app/bsky/embed/recordWithMedia";
+} from "#/services/sync/types.js";
+import {NotificationJobData} from "#/services/notifications/notifications.js";
+import {processContentsBatch} from "#/services/sync/event-processing/content.js";
+import {RecordProcessor} from "#/services/sync/event-processing/record-processor.js";
+import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor.js";
+import {isMain as isMainRecordEmbed} from "#/lex-api/types/app/bsky/embed/record.js";
+import {isMain as isMainRecordEmbedWithMedia} from "#/lex-api/types/app/bsky/embed/recordWithMedia.js";
 import {Transaction} from "kysely";
-import {DB} from "../../../../prisma/generated/types";
+import {DB} from "../../../../prisma/generated/types.js";
 
 
 export class PostRecordProcessor extends RecordProcessor<Post.Record> {
@@ -54,14 +54,14 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
                 record: {
                     format: "plain-text",
                     text: r.record.text,
-                    selfLabels: isSelfLabels(r.record.labels) ? r.record.labels.values.map(l => l.val) : undefined,
+                    selfLabels: isSelfLabels(r.record.labels) ? r.record.labels.values.map((l: any) => l.val) : undefined,
                     datasetsUsed,
                     embeds: []
                 }
             }
         })
 
-        await processContentsBatch(trx, contents)
+        await processContentsBatch(this.ctx, trx, contents)
     }
 
     getQuotedPostRef(r: Post.Record){
@@ -83,6 +83,7 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
     }
 
     async addRecordsToDB(records: RefAndRecord<Post.Record>[], reprocess: boolean = false) {
+        this.ctx.logger.pino.info({records}, "processing posts")
         const insertedPosts = await this.ctx.kysely.transaction().execute(async (trx) => {
             await this.processRecordsBatch(trx, records)
             await this.createReferences(records, trx)
@@ -93,8 +94,10 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
                     facets: r.facets ? JSON.stringify(r.facets) : null,
                     embed: r.embed ? JSON.stringify(r.embed) : null,
                     uri: ref.uri,
-                    replyToId: r.reply ? r.reply.parent.uri as string : null,
+                    replyToId: r.reply ? r.reply.parent.uri : null,
+                    replyToCid: r.reply ? r.reply.parent.cid : null,
                     quoteToId: this.getQuotedPostRef(r)?.uri,
+                    quoteToCid: this.getQuotedPostRef(r)?.cid,
                     rootId: r.reply && r.reply.root ? r.reply.root.uri : null,
                     langs: r.langs ?? []
                 }

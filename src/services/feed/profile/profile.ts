@@ -1,11 +1,11 @@
-import {handleToDid} from "#/services/user/users";
-import {getMainProfileFeedSkeleton} from "#/services/feed/profile/main";
-import {getRepliesProfileFeedSkeleton} from "#/services/feed/profile/replies";
-import {FeedPipelineProps, getFeed, GetFeedOutput} from "#/services/feed/feed";
-import {getEditsProfileFeedSkeleton} from "#/services/feed/profile/edits";
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {filterFeed} from "#/services/feed/inicio/following";
-import {getArticlesProfileFeedSkeleton} from "#/services/feed/profile/articles";
+import {handleToDid} from "#/services/user/users.js";
+import {getMainProfileFeedSkeleton} from "#/services/feed/profile/main.js";
+import {getRepliesProfileFeedSkeleton} from "#/services/feed/profile/replies.js";
+import {FeedPipelineProps, getFeed, GetFeedOutput} from "#/services/feed/feed.js";
+import {getEditsProfileFeedSkeleton} from "#/services/feed/profile/edits.js";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
+import {filterFeed} from "#/services/feed/inicio/following.js";
+import {getArticlesProfileFeedSkeleton} from "#/services/feed/profile/articles.js";
 
 
 export const getProfileFeed: CAHandlerNoAuth<{params: {handleOrDid: string, kind: string}, query: {cursor?: string}}, GetFeedOutput> = async (ctx, agent, {params, query}) => {

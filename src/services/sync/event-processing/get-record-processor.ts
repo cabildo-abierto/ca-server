@@ -1,23 +1,23 @@
-import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
+import {RecordProcessor} from "#/services/sync/event-processing/record-processor.js";
 import {
     BskyProfileRecordProcessor,
     CAProfileRecordProcessor,
     OldCAProfileRecordProcessor
-} from "#/services/sync/event-processing/profile";
+} from "#/services/sync/event-processing/profile.js";
 import {
     LikeRecordProcessor,
     RepostRecordProcessor,
     VoteAcceptRecordProcessor,
     VoteRejectRecordProcessor
-} from "#/services/sync/event-processing/reaction";
-import {ArticleRecordProcessor} from "#/services/sync/event-processing/article";
-import {FollowRecordProcessor} from "#/services/sync/event-processing/follow";
-import {TopicVersionRecordProcessor} from "#/services/sync/event-processing/topic";
-import {DatasetRecordProcessor} from "#/services/sync/event-processing/dataset";
-import {PostRecordProcessor} from "#/services/sync/event-processing/post";
-import {getCollectionFromUri} from "#/utils/uri";
-import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor";
-import {AppContext} from "#/setup";
+} from "#/services/sync/event-processing/reaction.js";
+import {ArticleRecordProcessor} from "#/services/sync/event-processing/article.js";
+import {FollowRecordProcessor} from "#/services/sync/event-processing/follow.js";
+import {TopicVersionRecordProcessor} from "#/services/sync/event-processing/topic.js";
+import {DatasetRecordProcessor} from "#/services/sync/event-processing/dataset.js";
+import {PostRecordProcessor} from "#/services/sync/event-processing/post.js";
+import {getCollectionFromUri} from "#/utils/uri.js";
+import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor.js";
+import {AppContext} from "#/setup.js";
 
 type RecordProcessorConstructor = new (ctx: AppContext) => RecordProcessor<any>;
 

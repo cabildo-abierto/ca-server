@@ -1,5 +1,5 @@
-import {AppContext} from "#/setup";
-import {getCollectionFromUri} from "#/utils/uri";
+import {AppContext} from "#/setup.js";
+import {getCollectionFromUri} from "#/utils/uri.js";
 
 
 export class DeleteProcessor {

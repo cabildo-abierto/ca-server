@@ -1,12 +1,12 @@
-import {CAHandler} from "#/utils/handler";
-import {Dataplane} from "#/services/hydration/dataplane";
-import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {ProfileViewBasic as ProfileViewBasicCA} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
-import {AppContext} from "#/setup";
-import {SessionAgent} from "#/utils/session-agent";
-import {getUsersWithReadSessions} from "#/services/monetization/user-months";
-import {isWeeklyActiveUser} from "#/services/monetization/donations";
-import {count, listOrderDesc, sortByKey} from "#/utils/arrays";
+import {CAHandler} from "#/utils/handler.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
+import {ProfileViewBasic as ProfileViewBasicCA} from "#/lex-api/types/ar/cabildoabierto/actor/defs.js"
+import {AppContext} from "#/setup.js";
+import {SessionAgent} from "#/utils/session-agent.js";
+import {getUsersWithReadSessions} from "#/services/monetization/user-months.js";
+import {isWeeklyActiveUser} from "#/services/monetization/donations.js";
+import {count, listOrderDesc, sortByKey} from "#/utils/arrays.js";
 import {sql} from "kysely";
 import {jsonArrayFrom} from "kysely/helpers/postgres";
 

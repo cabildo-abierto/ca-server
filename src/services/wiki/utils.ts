@@ -2,9 +2,9 @@ import {
     isStringListProp,
     isStringProp,
     TopicProp
-} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {gett, unique} from "#/utils/arrays";
-import {cleanText} from "#/utils/strings";
+} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
+import {gett, unique} from "#/utils/arrays.js";
+import {cleanText} from "#/utils/strings.js";
 
 
 export function getTopicCategories(props?: TopicProp[], topicCategories?: string[], currentVersionCategories?: string): string[] {

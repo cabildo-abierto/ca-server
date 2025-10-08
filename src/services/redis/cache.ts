@@ -1,14 +1,14 @@
-import Redis from "ioredis"
-import {getCollectionFromUri, getDidFromUri, isCAProfile, isFollow, splitUri} from "#/utils/uri";
-import {unique} from "#/utils/arrays";
-import {FollowingFeedSkeletonElement} from "#/services/feed/inicio/following";
-import {CAHandler} from "#/utils/handler";
-import {Logger} from "#/utils/logger";
-import { ArCabildoabiertoActorDefs } from "#/lex-api";
-import {RefAndRecord} from "#/services/sync/types";
+import {getCollectionFromUri, getDidFromUri, isCAProfile, isFollow, splitUri} from "#/utils/uri.js";
+import {unique} from "#/utils/arrays.js";
+import {FollowingFeedSkeletonElement} from "#/services/feed/inicio/following.js";
+import {CAHandler} from "#/utils/handler.js";
+import {Logger} from "#/utils/logger.js";
+import { ArCabildoabiertoActorDefs } from "#/lex-api/index.js";
+import {RefAndRecord} from "#/services/sync/types.js";
 import {AppBskyGraphFollow} from "@atproto/api";
-import {NextMeeting} from "#/services/admin/meetings";
-import {AppContext} from "#/setup";
+import {NextMeeting} from "#/services/admin/meetings.js";
+import {AppContext} from "#/setup.js";
+import {type Redis} from "ioredis";
 
 
 class CacheKey {
@@ -67,7 +67,6 @@ class ProfileCacheKey extends CacheKey {
         } else if(isCAProfile(collection)){
             await this.del(did)
         } else if(isFollow(collection)){
-            console.log("deleting did", did)
             await this.del(did)
             const follow: AppBskyGraphFollow.Record = r.record
             await this.del(follow.subject)
@@ -86,7 +85,6 @@ class ProfileCacheKey extends CacheKey {
     }
 
     private del(did: string) {
-        this.cache.logger.pino.info({did}, "deleting did")
         return this.cache.redis.del(this.key(did))
     }
 
@@ -272,9 +270,10 @@ class FollowSuggestionsDirtyCacheKey extends CacheKey {
 
     async getDirty() {
         const dirty = await this.cache.redis.smembers("follow-suggestions-dirty")
-        const requested = new Set((await this.cache.getKeysByPrefix(`follow-suggestions:`)).map(k => k.replace("follow-suggestions:", "")))
+        const keys: string[] = await this.cache.getKeysByPrefix(`follow-suggestions:`)
+        const requested = new Set(keys.map(k => k.replace("follow-suggestions:", "")))
 
-        return dirty.filter(did => requested.has(did))
+        return dirty.filter((did: string) => requested.has(did))
     }
 }
 

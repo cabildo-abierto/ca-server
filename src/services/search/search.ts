@@ -1,21 +1,20 @@
-import {CAHandlerNoAuth} from "#/utils/handler";
-import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs";
-import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs"
-import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {cleanText} from "#/utils/strings";
-import {TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion";
-import {AppContext} from "#/setup";
-import {hydrateTopicViewBasicFromUri} from "#/services/wiki/topics";
-import {Dataplane, joinMaps} from "#/services/hydration/dataplane";
-import {Agent} from "#/utils/session-agent";
-import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
+import {ProfileViewBasic} from "#/lex-api/types/app/bsky/actor/defs.js";
+import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs.js"
+import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
+import {cleanText} from "#/utils/strings.js";
+import {TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
+import {AppContext} from "#/setup.js";
+import {hydrateTopicViewBasicFromUri} from "#/services/wiki/topics.js";
+import {Dataplane, joinMaps} from "#/services/hydration/dataplane.js";
+import {Agent} from "#/utils/session-agent.js";
+import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read.js";
 import {$Typed} from "@atproto/api";
 import {sql} from "kysely";
-import {sortByKey, unique} from "#/utils/arrays";
-import {ArCabildoabiertoActorDefs} from "#/lex-api"
-import {getTopicTitle} from "#/services/wiki/utils";
+import {sortByKey, unique} from "#/utils/arrays.js";
+import {ArCabildoabiertoActorDefs} from "#/lex-api/index.js"
+import {getTopicTitle} from "#/services/wiki/utils.js";
 import dice from "fast-dice-coefficient"
-
 
 
 export async function searchUsersInCA(ctx: AppContext, query: string, limit: number): Promise<string[]> {

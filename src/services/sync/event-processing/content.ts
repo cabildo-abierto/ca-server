@@ -1,12 +1,13 @@
-import {ATProtoStrongRef} from "#/lib/types";
+import {ATProtoStrongRef} from "#/lib/types.js";
 import {Transaction} from "kysely";
-import {DB} from "../../../../prisma/generated/types";
+import {DB} from "../../../../prisma/generated/types.js";
 import {
     SyncContentProps
-} from "#/services/sync/types";
+} from "#/services/sync/types.js";
+import {AppContext} from "#/setup.js";
 
 
-export const processContentsBatch = async (trx: Transaction<DB>, records: {
+export const processContentsBatch = async (ctx: AppContext, trx: Transaction<DB>, records: {
     ref: ATProtoStrongRef,
     record: SyncContentProps
 }[]) => {
@@ -43,7 +44,14 @@ export const processContentsBatch = async (trx: Transaction<DB>, records: {
         }
     })
 
+    let existing: {uri: string}[] = []
+
     if (contentData.length > 0) {
+        existing = await trx
+            .selectFrom("Content")
+            .select("uri")
+            .where("Content.uri", "in", contentData.map(d => d.uri))
+            .execute()
         await trx
             .insertInto("Content")
             .values(contentData)

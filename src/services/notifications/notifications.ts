@@ -1,14 +1,14 @@
-import {CAHandler} from "#/utils/handler";
-import {AppContext} from "#/setup";
+import {CAHandler} from "#/utils/handler.js";
+import {AppContext} from "#/setup.js";
 import {v4 as uuidv4} from "uuid";
-import {NotificationType} from "../../../prisma/generated/types";
-import {Dataplane} from "#/services/hydration/dataplane";
-import {hydrateProfileViewBasic} from "#/services/hydration/profile";
-import {sortByKey, unique} from "#/utils/arrays";
-import {sortDatesDescending} from "#/utils/dates";
-import {SessionAgent} from "#/utils/session-agent";
-import {getDidFromUri} from "#/utils/uri";
-import {ArCabildoabiertoNotificationListNotifications} from "#/lex-api/index"
+import {NotificationType} from "../../../prisma/generated/types.js";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
+import {sortByKey, unique} from "#/utils/arrays.js";
+import {sortDatesDescending} from "#/utils/dates.js";
+import {SessionAgent} from "#/utils/session-agent.js";
+import {getDidFromUri} from "#/utils/uri.js";
+import {ArCabildoabiertoNotificationListNotifications} from "#/lex-api/index.js"
 
 
 export type NotificationQueryResult = {

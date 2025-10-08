@@ -1,8 +1,8 @@
-import {AppContext} from "#/setup";
-import {getMonthlyValue} from "#/services/monetization/donations";
-import {getDidFromUri} from "#/utils/uri";
-import {sum} from "#/utils/arrays";
-import {ReadChunks, ReadChunksAttr} from "#/services/monetization/read-tracking";
+import {AppContext} from "#/setup.js";
+import {getMonthlyValue} from "#/services/monetization/donations.js";
+import {getDidFromUri} from "#/utils/uri.js";
+import {sum} from "#/utils/arrays.js";
+import {ReadChunks, ReadChunksAttr} from "#/services/monetization/read-tracking.js";
 import {jsonArrayFrom} from "kysely/helpers/postgres";
 import {v4 as uuidv4} from "uuid";
 

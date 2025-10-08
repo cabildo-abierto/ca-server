@@ -2,9 +2,8 @@ import type {IncomingMessage, ServerResponse} from "node:http";
 import {getIronSession, SessionOptions} from "iron-session";
 import express from "express";
 import {AtpBaseClient, Agent as BskyAgent} from "@atproto/api";
-import {env} from "#/lib/env";
-import {AppContext} from "#/setup";
-import {MockSessionAgent} from "#/tests/processing.test";
+import {env} from "#/lib/env.js";
+import {AppContext} from "#/setup.js";
 
 export type Session = { did: string }
 

@@ -1,7 +1,7 @@
 import {AppBskyGraphFollow} from "@atproto/api"
-import {RecordProcessor} from "#/services/sync/event-processing/record-processor";
-import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor";
-import {RefAndRecord} from "#/services/sync/types";
+import {RecordProcessor} from "#/services/sync/event-processing/record-processor.js";
+import {DeleteProcessor} from "#/services/sync/event-processing/delete-processor.js";
+import {RefAndRecord} from "#/services/sync/types.js";
 
 
 

@@ -1,5 +1,5 @@
-import {FeedPipelineProps, GetSkeletonProps} from "#/services/feed/feed";
-import {rootCreationDateSortKey} from "#/services/feed/utils";
+import {FeedPipelineProps, GetSkeletonProps} from "#/services/feed/feed.js";
+import {rootCreationDateSortKey} from "#/services/feed/utils.js";
 
 const getArticlesFeedSkeleton: GetSkeletonProps = async (ctx, agent) => {
     const skeleton = await ctx.kysely

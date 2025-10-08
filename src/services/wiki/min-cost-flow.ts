@@ -1,4 +1,4 @@
-import {makeMatrix} from "#/utils/arrays";
+import {makeMatrix} from "#/utils/arrays.js";
 
 
 const INF = 1e9

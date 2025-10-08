@@ -1,26 +1,26 @@
 import express from 'express'
-import type {AppContext} from '#/setup'
-import {CAHandler, CAHandlerNoAuth, makeHandler} from "#/utils/handler";
-import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user";
-import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete";
-import {createInviteCodes, getAccessRequests, markAccessRequestSent} from "#/services/user/access";
-import {getUsers} from "#/services/user/users";
+import type {AppContext} from '#/setup.js'
+import {CAHandler, CAHandlerNoAuth, makeHandler} from "#/utils/handler.js";
+import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user.js";
+import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete.js";
+import {createInviteCodes, getAccessRequests, markAccessRequestSent} from "#/services/user/access.js";
+import {getUsers} from "#/services/user/users.js";
 import {
     getAllTopics,
     getTopicsInCategoryForBatchEditing,
     getTopicsWhereTitleIsNotSetAsSynonym
-} from "#/services/wiki/topics";
-import {sessionAgent} from "#/utils/session-agent";
-import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration/migration";
-import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation";
-import {updateTopicContributionsHandler} from "#/services/wiki/contributions";
-import {getActivityStats, getStatsDashboard} from "#/services/admin/stats";
-import {getRepoCounts} from "#/services/admin/repo";
-import {getRegisteredJobs, startJob} from "#/jobs/worker";
+} from "#/services/wiki/topics.js";
+import {sessionAgent} from "#/utils/session-agent.js";
+import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration/migration.js";
+import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation.js";
+import {updateTopicContributionsHandler} from "#/services/wiki/contributions.js";
+import {getActivityStats, getStatsDashboard} from "#/services/admin/stats.js";
+import {getRepoCounts} from "#/services/admin/repo.js";
+import {getRegisteredJobs, startJob} from "#/jobs/worker.js";
 
-import {clearRedisHandler} from "#/services/redis/cache";
-import {env} from "#/lib/env";
-import {getServerStatus} from "#/services/admin/status";
+import {clearRedisHandler} from "#/services/redis/cache.js";
+import {env} from "#/lib/env.js";
+import {getServerStatus} from "#/services/admin/status.js";
 
 
 function isAdmin(did: string) {
@@ -73,7 +73,7 @@ export const adminRoutes = (ctx: AppContext) => {
 
 
     router.post(
-        "/sync-user/:handleOrDid",
+        "/sync-user.js/:handleOrDid",
         makeAdminHandler(ctx, syncUserHandler)
     )
     router.post(
