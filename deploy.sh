@@ -47,6 +47,10 @@ ssh $SERVER_USER@$SERVER_IP "
   # Navigate to the new release directory
   cd $REMOTE_RELEASE_PATH
 
+  echo '>>> Writing version file...'
+  # This is the new line you're adding
+  echo '${RELEASE_DIR_NAME}' > ./public/version.txt
+
   echo '>>> Installing dependencies...'
   npm ci --omit=dev --legacy-peer-deps
 

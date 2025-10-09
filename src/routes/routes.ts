@@ -38,7 +38,7 @@ import {getTopicFeed, getTopicMentionsInTopicsFeed, getTopicQuoteReplies} from "
 import {deleteCAProfile, deleteRecordHandler, deleteRecordsHandler} from "#/services/delete.js";
 import {getCategoriesGraph, getCategoryGraph} from "#/services/wiki/graph.js";
 import {createTopicVersion} from "#/services/write/topic.js";
-import path from "path";
+import path, { join } from "path";
 import {cancelEditVote, voteEdit} from "#/services/wiki/votes.js";
 import { adminRoutes } from './admin-routes.js';
 import { fetchURLMetadataHandler, getContentMetadata } from '#/services/write/metadata.js';
@@ -66,7 +66,6 @@ import { getAuthorDashboardHandler } from '#/services/monetization/author-dashbo
 import { getFollowSuggestions, setNotInterested } from '#/services/user/follow-suggestions.js';
 import {AppContext} from "#/setup.js";
 
-
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
     return {data: "live"}
 }
@@ -78,6 +77,11 @@ export const createRouter = (ctx: AppContext) => {
     router.get('/client-metadata.json', (req, res, next) => {
         res.setHeader('Content-Type', 'application/json')
         return res.sendFile(path.join(process.cwd(), 'public', 'client-metadata.json'))
+    })
+
+    router.get('/version.txt', (req, res, next) => {
+        res.setHeader('Content-Type', 'text/plain')
+        return res.sendFile(path.join(process.cwd(), 'public', 'version.txt'))
     })
 
     router.post('/login', makeHandlerNoAuth(ctx, login))

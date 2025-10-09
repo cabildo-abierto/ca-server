@@ -217,11 +217,9 @@ export async function isContentReferenced(ctx: AppContext, uri: string) {
 
 
 export const createPost: CAHandler<CreatePostProps, ATProtoStrongRef> = async (ctx, agent, post) => {
-    ctx.logger.pino.info({post}, "creating post")
     if(post.uri) {
         // se está editando un post
         const {data: referenced, error} = await isContentReferenced(ctx, post.uri)
-        ctx.logger.pino.info({referenced}, "post referenced?")
         if(error) return {error}
         if(referenced){
             if(!post.forceEdit){

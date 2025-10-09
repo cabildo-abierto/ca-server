@@ -4,9 +4,9 @@ import {Dataplane} from "#/services/hydration/dataplane.js";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
 import {Agent} from "#/utils/session-agent.js";
 import {getUri} from "#/utils/uri.js";
-import {hydratePostView} from "#/services/hydration/hydrate.js";
 import {PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
 import {AppContext} from "#/setup.js";
+import {hydratePostView} from "#/services/hydration/post-view.js";
 
 
 async function getLikesSkeleton(ctx: AppContext, agent: Agent, uri: string, dataplane: Dataplane, limit: number, cursor: string | undefined): Promise<{
