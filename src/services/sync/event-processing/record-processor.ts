@@ -4,7 +4,7 @@ import {getCollectionFromUri, getDidFromUri, getRkeyFromUri, splitUri} from "#/u
 import {ValidationResult} from "@atproto/lexicon";
 import {parseRecord} from "#/services/sync/parse.js";
 import {RefAndRecord} from "#/services/sync/types.js";
-import { Transaction } from "kysely";
+import {Transaction} from "kysely";
 import { DB } from "prisma/generated/types.js";
 import {unique} from "#/utils/arrays.js";
 
@@ -64,16 +64,29 @@ export class RecordProcessor<T> {
     }[] {
         const parsedRecords: RefAndRecord<T>[] = []
         for (const {ref, record} of records) {
-            const parsedRecord = parseRecord(record)
-            const res = this.validateRecord(parsedRecord)
+            const res = this.validateRecord(record)
             if (res.success) {
                 parsedRecords.push({
                     ref,
                     record: res.value
                 })
             } else {
-                console.log("Invalid record:", ref.uri)
-                console.log("Reason:", res.error.message)
+                const parsedRecord = parseRecord(this.ctx, record)
+                const res = this.validateRecord(parsedRecord)
+                if(res.success) {
+                    parsedRecords.push({
+                        ref,
+                        record: res.value
+                    })
+                } else {
+                    this.ctx.logger.pino.warn({
+                        reason: res.error.message,
+                        stack: res.error.stack,
+                        uri: ref.uri,
+                        record,
+                        text: record.text.constructor.name
+                    }, "invalid record")
+                }
             }
         }
         return parsedRecords
@@ -130,7 +143,10 @@ export class RecordProcessor<T> {
                             created_at_tz: eb.ref('excluded.created_at_tz'),
                             authorId: eb.ref('excluded.authorId'),
                             record: eb.ref('excluded.record'),
-                            lastUpdatedAt: eb.ref('excluded.lastUpdatedAt') // CAIndexedAt no se actualiza
+                            lastUpdatedAt: eb.ref('excluded.lastUpdatedAt'), // CAIndexedAt no se actualiza
+                            editedAt: eb.case()
+                                .when("Record.cid", "!=", eb.ref("excluded.cid"))
+                                .then(new Date()).else(eb.ref("Record.editedAt")).end()
                         }))
                     )
                     .execute()

@@ -6,8 +6,7 @@ import {ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article.j
 import {EmbedContext, getEmbedsFromEmbedViews} from "#/services/write/topic.js";
 import {ArticleRecordProcessor} from "#/services/sync/event-processing/article.js";
 import {getRkeyFromUri} from "#/utils/uri.js";
-import {deleteRecords} from "#/services/delete.js";
-import {isContentReferenced} from "#/services/write/post.js";
+
 
 export type CreateArticleProps = {
     title: string
@@ -60,18 +59,6 @@ export const createArticleAT = async (agent: SessionAgent, article: CreateArticl
 }
 
 export const createArticle: CAHandler<CreateArticleProps> = async (ctx, agent, article) => {
-    if(article.uri) {
-        // se está editando un artículo
-        const {data: referenced, error} = await isContentReferenced(ctx, article.uri)
-        if(error) return {error}
-        if(referenced){
-            return {error: "El artículo ya fue referenciado y no se puede editar. Si querés, podés eliminarlo."}
-        } else {
-            await deleteRecords({ctx, agent, uris: [article.uri], atproto: true})
-        }
-    }
-
-
     try {
         const res = await createArticleAT(agent, article)
         if(res.error || !res.ref || !res.record) return {error: res.error}

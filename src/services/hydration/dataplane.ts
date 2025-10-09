@@ -68,6 +68,7 @@ export type FeedElementQueryResult = {
     topicId: string | null
     embeds: unknown
     datasetsUsed: { uri: string }[]
+    editedAt: Date | null
 }
 
 
@@ -244,6 +245,7 @@ export class Dataplane {
                 "Article.title",
                 "TopicVersion.topicId",
                 "TopicVersion.props",
+                "Record.editedAt",
                 eb => jsonArrayFrom(eb
                     .selectFrom("_ContentToDataset")
                     .select("_ContentToDataset.B as uri")

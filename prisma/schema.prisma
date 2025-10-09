@@ -84,7 +84,6 @@ model Content {
   TopicVersion            TopicVersion?
   Dataset                 Dataset[]
   text_tsv                Unsupported("tsvector")?
-  edited                  Boolean                  @default(false)
 
   @@index([text_tsv], map: "content_text_fts_idx", type: Gin)
   @@index([created_at(sort: Desc)])
@@ -304,6 +303,8 @@ model Record {
 
   lastUpdatedAt    DateTime  @default(now())
   lastUpdatedAt_tz DateTime? @db.Timestamptz(3)
+
+  editedAt DateTime? @db.Timestamptz(3)
 
   quotesCount                         Int                @default(0)
   Content                             Content?

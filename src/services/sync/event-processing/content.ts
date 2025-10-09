@@ -43,15 +43,7 @@ export const processContentsBatch = async (ctx: AppContext, trx: Transaction<DB>
             embeds: c.record.embeds ?? [],
         }
     })
-
-    let existing: {uri: string}[] = []
-
     if (contentData.length > 0) {
-        existing = await trx
-            .selectFrom("Content")
-            .select("uri")
-            .where("Content.uri", "in", contentData.map(d => d.uri))
-            .execute()
         await trx
             .insertInto("Content")
             .values(contentData)
@@ -60,7 +52,7 @@ export const processContentsBatch = async (ctx: AppContext, trx: Transaction<DB>
                     text: (eb) => eb.ref('excluded.text'),
                     textBlobId: (eb) => eb.ref('excluded.textBlobId'),
                     format: (eb) => eb.ref('excluded.format'),
-                    selfLabels: (eb) => eb.ref('excluded.selfLabels')
+                    selfLabels: (eb) => eb.ref('excluded.selfLabels'),
                 })
             )
             .execute()

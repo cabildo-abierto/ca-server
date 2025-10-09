@@ -223,6 +223,7 @@ export type Record = {
     CAIndexedAt_tz: Timestamp | null;
     lastUpdatedAt: Generated<Timestamp>;
     lastUpdatedAt_tz: Timestamp | null;
+    editedAt: Timestamp | null;
     quotesCount: Generated<number>;
 };
 export type Reference = {

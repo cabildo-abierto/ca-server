@@ -83,7 +83,6 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
     }
 
     async addRecordsToDB(records: RefAndRecord<Post.Record>[], reprocess: boolean = false) {
-        this.ctx.logger.pino.info({records}, "processing posts")
         const insertedPosts = await this.ctx.kysely.transaction().execute(async (trx) => {
             await this.processRecordsBatch(trx, records)
             await this.createReferences(records, trx)

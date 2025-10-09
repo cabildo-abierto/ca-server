@@ -16,7 +16,10 @@ import {randomBytes} from "crypto";
 import * as path from 'path';
 import { sha256 } from 'multiformats/hashes/sha2'
 import { encode, code } from '@ipld/dag-cbor'
+import {ArCabildoabiertoFeedArticle } from "#/lex-api/index.js";
+import {BlobRef} from "@atproto/lexicon";
 import {CID} from "multiformats/cid";
+import {getBlobKey} from "#/services/hydration/dataplane.js";
 
 
 export function generateRkey(): string {
@@ -187,6 +190,57 @@ export function getPostRefAndRecord(
 }
 
 
+async function getArticleRecord(ctx: AppContext, title: string, text: string, created_at: Date = new Date(), authorId: string): Promise<ArCabildoabiertoFeedArticle.Record> {
+    const cid = await generateCid(text)
+    const mimeType = "text/plain"
+    const blob = new BlobRef(
+        CID.parse(cid),
+        mimeType,
+        text.length
+    )
+    await ctx.ioredis.set(getBlobKey({cid, authorId}), text)
+    return {
+        $type: "ar.cabildoabierto.feed.article",
+        createdAt: created_at.toISOString(),
+        text: blob,
+        format: "markdown",
+        title
+    }
+}
+
+
+export async function getArticleRefAndRecord(
+    ctx: AppContext,
+    title: string,
+    text: string,
+    created_at: Date = new Date(),
+    testSuite: string,
+    uri?: {
+        did?: string
+        rkey?: string
+    },
+) {
+    const authorId = uri?.did ?? generateUserDid(testSuite)
+    const record = await getArticleRecord(
+        ctx,
+        title,
+        text,
+        created_at,
+        authorId
+    )
+
+    return getRefAndRecord(
+        record,
+        testSuite,
+        {
+            ...uri,
+            did: authorId,
+            collection: "ar.cabildoabierto.feed.article"
+        }
+    )
+}
+
+
 function getLikeRecord(ref: ATProtoStrongRef, created_at: Date = new Date()): AppBskyFeedLike.Record {
     return {
         $type: "app.bsky.feed.like",
@@ -235,6 +289,7 @@ export async function processRecordsInTest(ctx: AppContext, records: RefAndRecor
         const processor = getRecordProcessor(ctx, getCollectionFromUri(r.ref.uri))
         await processor.process([r])
     }
+    await ctx!.worker?.runAllJobs()
 }
 
 

@@ -35,7 +35,7 @@ rsync -avz \
   --exclude 'node_modules' \
   --exclude '.git' \
   --exclude '.env' \
-  ./dist ./public ./ecosystem.config.prod.js ./ecosystem.config.test.js ./package*.json \
+  ./dist ./public ./ecosystem.config.prod.cjs ./package*.json \
   $SERVER_USER@$SERVER_IP:$REMOTE_RELEASE_PATH
 
 echo_blue "Preparing release on server..."
@@ -53,10 +53,10 @@ ssh $SERVER_USER@$SERVER_IP "
   echo '>>> Setting up environment-specific files...'
   if [ "$ENV" = "prod" ]; then
     cp ./public/client-metadata.prod.json ./public/client-metadata.json
-    cp ./ecosystem.config.prod.js ./ecosystem.config.js
+    cp ./ecosystem.config.prod.cjs ./ecosystem.config.cjs
   else
     cp ./public/client-metadata.test.json ./public/client-metadata.json
-    cp ./ecosystem.config.test.js ./ecosystem.config.js
+    cp ./ecosystem.config.test.cjs ./ecosystem.config.cjs
   fi
 
   echo '>>> New release is ready!'
@@ -70,7 +70,7 @@ ssh $SERVER_USER@$SERVER_IP "
   export PATH=/root/.nvm/versions/node/v22.19.0/bin:\$PATH
   # cd into the symlinked directory to ensure PM2 uses the correct path context
   cd $SYMLINK_PATH
-  pm2 reload ecosystem.config.js --env production
+  pm2 reload ecosystem.config.cjs --env production
   pm2 save
 "
 

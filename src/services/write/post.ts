@@ -13,6 +13,7 @@ import {getParsedPostContent} from "#/services/write/rich-text.js";
 import {PostRecordProcessor} from "#/services/sync/event-processing/post.js";
 import {AppContext} from "#/setup.js";
 import {deleteRecords} from "#/services/delete.js";
+import {getDidFromUri, getRkeyFromUri} from "#/utils/uri.js";
 
 function createQuotePostEmbed(post: ATProtoStrongRef): $Typed<EmbedRecord> {
     return {
@@ -147,8 +148,18 @@ export async function createPostAT({
         } : undefined
     }
 
-    const ref = await agent.bsky.post({...record})
-    return {ref, record}
+    if(!post.uri) {
+        const ref = await agent.bsky.post({...record})
+        return {ref, record}
+    } else {
+        const {data} = await agent.bsky.com.atproto.repo.putRecord({
+            repo: getDidFromUri(post.uri),
+            collection: 'app.bsky.feed.post',
+            rkey: getRkeyFromUri(post.uri),
+            record: record,
+        })
+        return {ref: {uri: data.uri, cid: data.cid}, record}
+    }
 }
 
 
@@ -169,6 +180,7 @@ export type CreatePostProps = {
     quotedPost?: ATProtoStrongRef
     visualization?: Visualization
     uri?: string
+    forceEdit?: boolean
 }
 
 
@@ -205,14 +217,22 @@ export async function isContentReferenced(ctx: AppContext, uri: string) {
 
 
 export const createPost: CAHandler<CreatePostProps, ATProtoStrongRef> = async (ctx, agent, post) => {
+    ctx.logger.pino.info({post}, "creating post")
     if(post.uri) {
         // se está editando un post
         const {data: referenced, error} = await isContentReferenced(ctx, post.uri)
+        ctx.logger.pino.info({referenced}, "post referenced?")
         if(error) return {error}
         if(referenced){
-            return {error: "La publicación ya fue referenciada y no se puede editar. Si querés, podés eliminarla."}
+            if(!post.forceEdit){
+                return {error: "La publicación ya fue referenciada."}
+            }
         } else {
-            await deleteRecords({ctx, agent, uris: [post.uri], atproto: true})
+            ctx.logger.pino.info({uri: post.uri}, "deleting edited post")
+            // edición de un post que todavía no fue referenciado
+            const {error} = await deleteRecords({ctx, agent, uris: [post.uri], atproto: true})
+            if(error) return {error: "Ocurrió un error al editar."}
+            post.uri = undefined
         }
     }
 

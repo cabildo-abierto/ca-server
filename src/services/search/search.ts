@@ -218,8 +218,6 @@ export const searchUsersAndTopics: CAHandlerNoAuth<{
         (a, b) => b-a
     )
 
-    // ctx.logger.pino.info({results: data.map(d => ({s: score(d), d}))}, "data")
-
     const t4 = Date.now()
     ctx.logger.logTimes("search users and topics", [t1, t2, t3, t4])
     return {data: data}

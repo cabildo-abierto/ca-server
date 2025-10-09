@@ -1,7 +1,8 @@
 import {BlobRef} from "@atproto/lexicon";
 import {CID} from 'multiformats/cid'
+import {AppContext} from "#/setup.js";
 
-export function parseRecord(obj: any): any {
+export function parseRecord(ctx: AppContext, obj: any): any {
 
     if (Array.isArray(obj)) {
         return obj.map(parseRecord);
@@ -13,13 +14,13 @@ export function parseRecord(obj: any): any {
                 const cid = CID.parse(obj.ref.$link);
                 return new BlobRef(cid, obj.mimeType, obj.size)
             } else {
-                throw Error("Invalid blob object")
+                return obj
             }
         }
 
         const newObj: any = {};
         for (const key in obj) {
-            newObj[key] = parseRecord(obj[key]);
+            newObj[key] = parseRecord(ctx, obj[key]);
         }
 
         return newObj

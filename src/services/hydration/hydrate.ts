@@ -124,7 +124,8 @@ export function hydrateFullArticleView(ctx: AppContext, uri: string, data: Datap
                 title: getTopicTitle({id: m.id, props: m.props as TopicProp[] | undefined}),
                 id: m.id
             })),
-            embeds
+            embeds,
+            editedAt: e.editedAt?.toISOString()
         }
     }
 }
@@ -420,6 +421,7 @@ export function hydratePostView(ctx: AppContext, uri: string, data: Dataplane): 
         bskyQuoteCount: post.quoteCount,
         replyCount: post.replyCount,
         rootCreationDate: rootCreationDate?.toISOString(),
+        editedAt: caData?.editedAt?.toISOString(),
         viewer
     }
     return {data: postView}

@@ -2798,6 +2798,10 @@ export const schemaDict = {
             type: 'string',
             format: 'datetime',
           },
+          editedAt: {
+            type: 'string',
+            format: 'datetime',
+          },
         },
       },
       articleView: {
@@ -2984,6 +2988,10 @@ export const schemaDict = {
               type: 'ref',
               ref: 'lex:ar.cabildoabierto.feed.article#articleEmbedView',
             },
+          },
+          editedAt: {
+            type: 'string',
+            format: 'datetime',
           },
         },
       },
