@@ -149,14 +149,14 @@ function hydrateRecordEmbedView(ctx: AppContext, embed: $Typed<CARecordEmbed> | 
             }
         }
     } else {
-        console.log(`Warning: Hidratación sin implementar para ${collection}.`)
+        ctx.logger.pino.warn({collection}, `hydration not implemented for collection`)
     }
 
     return null
 }
 
 function hydrateImageInImagesEmbed(ctx: AppContext, authorId: string, i: Image): ViewImage {
-    const cid = i.image.ref.$link
+    const cid = i.image ? (i.image.ref.$link ?? i.image.ref.toString()) : undefined
     return {
         $type: "app.bsky.embed.images#viewImage",
         thumb: `https://cdn.bsky.app/img/feed_thumbnail/plain/${authorId}/${cid}@jpeg`,
@@ -177,12 +177,8 @@ function hydrateImageEmbedView(ctx: AppContext, embed: ImagesEmbed, authorId: st
 
 function hydrateExternalEmbedView(ctx: AppContext, embed: ExternalEmbed, authorId: string): $Typed<ExternalEmbedView> {
     const thumb = embed.external.thumb
-    const cid = thumb ? thumb.ref.toString() : undefined
+    const cid = thumb ? (thumb.ref.$link ?? thumb.ref.toString()) : undefined
 
-    ctx.logger.pino.info({
-        cid,
-        embed,
-        thumb: `https://cdn.bsky.app/img/feed_thumbnail/plain/${authorId}/${cid}@jpeg`}, "hydrating external")
     return {
         $type: "app.bsky.embed.external#view",
         external: {

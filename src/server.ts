@@ -78,13 +78,21 @@ export class Server {
         await events.once(server, 'listening')
         ctx.logger.pino.info(`Server (${env.NODE_ENV}) running on port http://${env.HOST}:${env.PORT}`)
 
-        return new Server(app, server, ctx)
+        const serverInstance = new Server(app, server, ctx)
+
+        process.on('SIGINT', async () => {
+            await serverInstance.close()
+            process.exit(0)
+        })
+
+        return serverInstance
     }
 
     async close() {
         this.ctx.logger.pino.info('sigint received, shutting down')
         return new Promise<void>((resolve) => {
             this.server.close(() => {
+                this.ctx.kysely.destroy()
                 this.ctx.logger.pino.info('server closed')
                 resolve()
             })

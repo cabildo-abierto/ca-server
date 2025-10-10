@@ -88,7 +88,6 @@ export type Content = {
     interactionsScore: number | null;
     likesScore: number | null;
     relativePopularityScore: number | null;
-    edited: Generated<boolean>;
 };
 export type ContentToDataset = {
     A: string;
@@ -144,6 +143,15 @@ export type InviteCode = {
     recommenderId: string | null;
     created_at: Generated<Timestamp | null>;
     created_at_tz: Timestamp | null;
+};
+export type JobApplication = {
+    id: string;
+    created_at: Generated<Timestamp>;
+    name: string;
+    email: string;
+    comment: string;
+    cv: string | null;
+    job: string;
 };
 export type Meeting = {
     id: string;
@@ -360,6 +368,7 @@ export type DB = {
     Follow: Follow;
     HasReacted: HasReacted;
     InviteCode: InviteCode;
+    JobApplication: JobApplication;
     Meeting: Meeting;
     Notification: Notification;
     NotInterested: NotInterested;

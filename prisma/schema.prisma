@@ -541,6 +541,16 @@ model Timestamps {
   date_tz DateTime? @db.Timestamptz(3)
 }
 
+model JobApplication {
+  id         String   @id
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  name       String
+  email      String
+  comment    String
+  cv         String?
+  job        String
+}
+
 enum EditorStatus {
   Beginner
   Editor

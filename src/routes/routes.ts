@@ -38,7 +38,7 @@ import {getTopicFeed, getTopicMentionsInTopicsFeed, getTopicQuoteReplies} from "
 import {deleteCAProfile, deleteRecordHandler, deleteRecordsHandler} from "#/services/delete.js";
 import {getCategoriesGraph, getCategoryGraph} from "#/services/wiki/graph.js";
 import {createTopicVersion} from "#/services/write/topic.js";
-import path, { join } from "path";
+import path from "path";
 import {cancelEditVote, voteEdit} from "#/services/wiki/votes.js";
 import { adminRoutes } from './admin-routes.js';
 import { fetchURLMetadataHandler, getContentMetadata } from '#/services/write/metadata.js';
@@ -65,6 +65,7 @@ import { getNextMeeting } from '#/services/admin/meetings.js';
 import { getAuthorDashboardHandler } from '#/services/monetization/author-dashboard.js';
 import { getFollowSuggestions, setNotInterested } from '#/services/user/follow-suggestions.js';
 import {AppContext} from "#/setup.js";
+import { jobApplicationHandler } from '#/services/admin/jobs.js';
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
     return {data: "live"}
@@ -421,6 +422,11 @@ export const createRouter = (ctx: AppContext) => {
     router.get("/quotes/:did/:collection/:rkey", makeHandlerNoAuth(ctx, getQuotes))
 
     router.post("/not-interested/:subject", makeHandler(ctx, setNotInterested))
+
+    router.post("/job-application", makeHandlerNoAuth(
+        ctx,
+        jobApplicationHandler
+    ))
 
     router.use(adminRoutes(ctx))
 

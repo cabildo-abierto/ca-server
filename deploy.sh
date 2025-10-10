@@ -86,4 +86,4 @@ ssh $SERVER_USER@$SERVER_IP "
   xargs -r rm -rf
 "
 
-echo_blue "✅ Backend deployment successful!"
+echo_blue "✅ Backend deployment successful! Release number ${RELEASE_DIR_NAME}"
