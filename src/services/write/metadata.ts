@@ -47,11 +47,6 @@ export const fetchURLMetadataHandler: CAHandler<{ url: string }, Partial<Metadat
 }
 
 
-function getUsername(user: { displayName: string | null, handle: string | null }) {
-    return user.displayName ? user.displayName : user.handle ? "@" + user.handle : null
-}
-
-
 const banner = "https://cabildoabierto.ar/banners/99.jpg"
 
 
@@ -60,7 +55,6 @@ export const getContentMetadata: CAHandlerNoAuth<{
 }, Metadata> = async (ctx, agent, {params}) => {
     const c = params.collection
     const uri = getUri(params.did, c, params.rkey)
-
     if (isArticle(c)) {
         const article = await ctx.kysely
             .selectFrom("Article")
@@ -82,22 +76,30 @@ export const getContentMetadata: CAHandlerNoAuth<{
             }
         }
     } else if (isPost(c)) {
-        const post = await ctx.kysely
-            .selectFrom("Content")
-            .innerJoin("Record", "Record.uri", "Content.uri")
-            .innerJoin("User", "Record.authorId", "User.did")
-            .select(["text", "User.displayName", "User.handle"])
-            .where("Record.uri", "=", uri)
-            .execute()
-
-        if (post.length > 0) {
-            return {
-                data: {
-                    title: `${getUsername(post[0])}: "${post[0].text}"`,
-                    description: post[0].text as string,
+        try {
+            const post = await ctx.kysely
+                .selectFrom("Content")
+                .innerJoin("Record", "Record.uri", "Content.uri")
+                .innerJoin("User", "Record.authorId", "User.did")
+                .select(["text", "User.displayName", "User.handle"])
+                .where("Record.uri", "=", uri)
+                .executeTakeFirst()
+            if (post) {
+                const data = {
+                    title: post.displayName ? `${post.displayName} (@${post.handle})` : `@${post.handle}`,
+                    description: post.text as string,
                     thumbnail: banner
                 }
+                return {
+                    data
+                }
+            } else {
+                ctx.logger.pino.warn({uri}, "post metadata not found")
+                return {error: "No se encontró la publicación."}
             }
+        } catch (error) {
+            ctx.logger.pino.error({error}, "error getting post metadata")
+            return {error: "Ocurrió un error al obtener los metadatos."}
         }
     } else if (isDataset(c)) {
         const dataset = await ctx.kysely

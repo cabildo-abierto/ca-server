@@ -309,6 +309,8 @@ export class Dataplane {
         uris = uris.filter(u => !this.topicsByUri?.has(u))
         if (uris.length == 0) return
 
+        this.ctx.logger.pino.info({uris}, "fetching topic basics")
+
         const data: TopicVersionQueryResultBasic[] = await this.ctx.kysely
             .selectFrom("TopicVersion")
             .innerJoin("Topic", "Topic.id", "TopicVersion.topicId")
@@ -928,8 +930,6 @@ export class Dataplane {
             })
             return
         }
-
-        const t1 = Date.now()
 
         const follows = await ctx.kysely
             .selectFrom("Follow")

@@ -67,13 +67,46 @@ ssh $SERVER_USER@$SERVER_IP "
 "
 
 echo_blue "Activating new release..."
-ssh $SERVER_USER@$SERVER_IP "ln -sfn $REMOTE_RELEASE_PATH $SYMLINK_PATH"
-
-echo_blue "Gracefully reloading and saving PM2..."
 ssh $SERVER_USER@$SERVER_IP "
+  set -e
+  # Make sure Node/NPM are in the PATH
   export PATH=/root/.nvm/versions/node/v22.19.0/bin:\$PATH
-  # cd into the symlinked directory to ensure PM2 uses the correct path context
-  cd $SYMLINK_PATH
+
+  # 1. Define paths for clarity
+  TMP_SYMLINK_PATH=\"${SYMLINK_PATH}_tmp\"
+
+  # 2. Create the new symlink with a temporary name
+  echo '>>> Creating temporary symlink...'
+  ln -sfn ${REMOTE_RELEASE_PATH} \${TMP_SYMLINK_PATH}
+
+  # 3. Atomically move the new symlink into place
+  echo '>>> Atomically switching to new release...'
+  mv -Tf \${TMP_SYMLINK_PATH} ${SYMLINK_PATH}
+
+  # 4. Verify the link for debugging (optional but recommended)
+  echo '>>> Verifying new symlink:'
+  ls -l /var/www/ca-server
+
+  # 5. cd into the symlinked directory to ensure PM2 uses the correct path
+  cd ${SYMLINK_PATH}
+
+  # 6. Gracefully reload the application
+  echo '>>> Reloading PM2 services...'
+  pm2 reload ecosystem.config.cjs --env production
+  pm2 save
+"
+
+echo_blue "Reloading application..."
+ssh $SERVER_USER@$SERVER_IP "
+  set -e
+  # Make sure Node/NPM are in the PATH
+  export PATH=/root/.nvm/versions/node/v22.19.0/bin:\$PATH
+
+  # 5. cd into the symlinked directory to ensure PM2 uses the correct path
+  cd ${SYMLINK_PATH}
+
+  # 6. Gracefully reload the application
+  echo '>>> Reloading PM2 services...'
   pm2 reload ecosystem.config.cjs --env production
   pm2 save
 "

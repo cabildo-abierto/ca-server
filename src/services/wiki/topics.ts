@@ -46,7 +46,10 @@ export type TopicVersionQueryResultBasic = TopicQueryResultBasic & {uri: string}
 
 export function hydrateTopicViewBasicFromUri(uri: string, data: Dataplane): {data?: $Typed<TopicViewBasic>, error?: string} {
     const q = data.topicsByUri.get(uri)
-    if(!q) return {error: "No se pudo encontrar el tema."}
+    if(!q) {
+        data.ctx.logger.pino.warn({uri}, "data for topic basic not found")
+        return {error: "No se pudo encontrar el tema."}
+    }
 
     return {data: topicQueryResultToTopicViewBasic(q)}
 }

@@ -9,8 +9,8 @@ import {
   is$typed as _is$typed,
   type OmitKey,
 } from '../../../../util.js'
-import type * as AppBskyFeedDefs from '../../../app/bsky/feed/defs.js'
 import type * as ArCabildoabiertoWikiTopicVersion from '../wiki/topicVersion.js'
+import type * as AppBskyFeedDefs from '../../../app/bsky/feed/defs.js'
 import type * as ArCabildoabiertoDataDataset from '../data/dataset.js'
 import type * as ArCabildoabiertoActorDefs from '../actor/defs.js'
 import type * as AppBskyEmbedImages from '../../../app/bsky/embed/images.js'
@@ -30,7 +30,11 @@ const id = 'ar.cabildoabierto.feed.defs'
 /** a feed is always a list of feedViewContents */
 export interface FeedViewContent {
   $type?: 'ar.cabildoabierto.feed.defs#feedViewContent'
-  content: $Typed<PostView> | $Typed<ArticleView> | { $type: string }
+  content:
+    | $Typed<PostView>
+    | $Typed<ArticleView>
+    | $Typed<ArCabildoabiertoWikiTopicVersion.TopicViewBasic>
+    | { $type: string }
   reply?: AppBskyFeedDefs.ReplyRef
   reason?:
     | $Typed<AppBskyFeedDefs.ReasonRepost>

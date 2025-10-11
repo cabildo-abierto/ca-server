@@ -217,12 +217,14 @@ export async function isContentReferenced(ctx: AppContext, uri: string) {
 
 
 export const createPost: CAHandler<CreatePostProps, ATProtoStrongRef> = async (ctx, agent, post) => {
+    ctx.logger.pino.info({text: post.text, author: getDidFromUri(agent.did)}, "creating post")
     if(post.uri) {
         // se está editando un post
         const {data: referenced, error} = await isContentReferenced(ctx, post.uri)
         if(error) return {error}
         if(referenced){
             if(!post.forceEdit){
+                ctx.logger.pino.info({text: post.text, author: getDidFromUri(agent.did)}, "referenced edit")
                 return {error: "La publicación ya fue referenciada."}
             }
         } else {
@@ -234,9 +236,16 @@ export const createPost: CAHandler<CreatePostProps, ATProtoStrongRef> = async (c
         }
     }
 
-    const {ref, record} = await createPostAT({ctx, agent, post})
+    try {
+        const {ref, record} = await createPostAT({ctx, agent, post})
+        ctx.logger.pino.info({uri: ref.uri}, "created post")
 
-    await new PostRecordProcessor(ctx).processValidated([{ref, record}])
+        await new PostRecordProcessor(ctx).processValidated([{ref, record}])
 
-    return {data: ref}
+        ctx.logger.pino.info({uri: ref.uri}, "processed created post")
+        return {data: ref}
+    } catch (error) {
+        ctx.logger.pino.error({error}, "error creating post")
+        return {error: "Ocurrió un error al crear la publicación."}
+    }
 }

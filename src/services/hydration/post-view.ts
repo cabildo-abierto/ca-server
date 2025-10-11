@@ -155,8 +155,9 @@ function hydrateRecordEmbedView(ctx: AppContext, embed: $Typed<CARecordEmbed> | 
     return null
 }
 
-function hydrateImageInImagesEmbed(ctx: AppContext, authorId: string, i: Image): ViewImage {
+function hydrateImageInImagesEmbed(ctx: AppContext, authorId: string, i: Image): ViewImage | null {
     const cid = i.image ? (i.image.ref.$link ?? i.image.ref.toString()) : undefined
+    if(!cid) return null
     return {
         $type: "app.bsky.embed.images#viewImage",
         thumb: `https://cdn.bsky.app/img/feed_thumbnail/plain/${authorId}/${cid}@jpeg`,
@@ -171,7 +172,7 @@ function hydrateImageEmbedView(ctx: AppContext, embed: ImagesEmbed, authorId: st
 
     return {
         $type: "app.bsky.embed.images#view",
-        images: images.map(i => hydrateImageInImagesEmbed(ctx, authorId, i))
+        images: images.map(i => hydrateImageInImagesEmbed(ctx, authorId, i)).filter(i => i != null)
     }
 }
 
@@ -185,7 +186,7 @@ function hydrateExternalEmbedView(ctx: AppContext, embed: ExternalEmbed, authorI
             uri: embed.external.uri,
             title: embed.external.title,
             description: embed.external.description,
-            thumb: `https://cdn.bsky.app/img/feed_thumbnail/plain/${authorId}/${cid}@jpeg`
+            thumb: cid ? `https://cdn.bsky.app/img/feed_thumbnail/plain/${authorId}/${cid}@jpeg` : undefined
         }
     }
 }

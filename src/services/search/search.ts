@@ -95,6 +95,26 @@ export const searchUsers: CAHandlerNoAuth<{
 
 
 async function searchTopicsSkeleton(ctx: AppContext, query: string, categories?: string[], limit?: number) {
+    const terms = query.trim().split(/\s+/).filter(Boolean); // Split into words and remove empty ones
+    const lastTerm = terms.pop(); // Get the last word
+
+    let tsQuery;
+
+    if (!lastTerm) {
+        return []
+    }
+
+    if (terms.length === 0) {
+        tsQuery = sql`to_tsquery('public.spanish_simple_unaccent', ${lastTerm} || ':*')`;
+    } else {
+        const baseQueryString = terms.join(' ');
+        const baseQuery = sql`websearch_to_tsquery('public.spanish_simple_unaccent', ${baseQueryString})`;
+        const prefixQuery = sql`to_tsquery('public.spanish_simple_unaccent', ${lastTerm} || ':*')`;
+        tsQuery = sql`(${baseQuery} && ${prefixQuery})`;
+    }
+
+    const tsVector = sql`to_tsvector('public.spanish_simple_unaccent', title)`;
+
     return await ctx.kysely
         .with('topics_with_titles', (eb) =>
             eb.selectFrom('Topic')
@@ -114,12 +134,14 @@ async function searchTopicsSkeleton(ctx: AppContext, query: string, categories?:
         .selectFrom('topics_with_titles')
         .select(["id", "title", "uri"])
         .select(eb => [
-            sql<number>`similarity(${eb.ref('title')}::text, ${eb.val(query)}::text)`.as('match_score')
+            // Rank the results by relevance using ts_rank_cd.
+            sql<number>`ts_rank(${tsVector}, ${tsQuery}, 1)`.as('match_score')
         ])
         .$if(categories != null, qb => qb.where(eb => categories!.includes("Sin categoría") ?
             eb.val(stringListIsEmpty("Categorías")) :
             eb.and(categories!.map(c => stringListIncludes("Categorías", c)))))
-        .where(eb => sql<number>`similarity(${eb.ref('title')}::text, ${eb.val(query)}::text)`, ">", 0.1)
+        .where(eb => sql`${tsVector} @@ ${tsQuery}`)
+        .where(sql<number>`ts_rank(${tsVector}, ${tsQuery}, 1)`, ">", 0)
         .orderBy('match_score', 'desc')
         .limit(limit ?? 20)
         .execute()
@@ -131,12 +153,18 @@ export const searchTopics: CAHandlerNoAuth<{params: {q: string}, query: {c: stri
     const categories = query.c == undefined ? undefined : (typeof query.c == "string" ? [query.c] : query.c);
     const searchQuery = cleanText(q)
 
-    const topics = await searchTopicsSkeleton(
-        ctx,
-        searchQuery,
-        categories,
-        20
-    )
+    let topics: {id: string, title: string, uri: string}[] = []
+    try {
+        topics = await searchTopicsSkeleton(
+            ctx,
+            searchQuery,
+            categories,
+            20
+        )
+    } catch (error) {
+        ctx.logger.pino.error({error, searchQuery, categories}, "error getting search topics skeleton")
+        return {error: "Error en la búsqueda."}
+    }
 
     const dataplane = new Dataplane(ctx, agent)
     await dataplane.fetchTopicsBasicByUris(topics.map(t => t.uri))
