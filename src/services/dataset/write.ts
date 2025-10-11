@@ -5,6 +5,7 @@ import {Record as DatasetRecord} from "#/lex-api/types/ar/cabildoabierto/data/da
 import {BlobRef} from "@atproto/lexicon";
 import {compress} from "#/utils/compression.js";
 import {DatasetRecordProcessor} from "#/services/sync/event-processing/dataset.js";
+import {getRkeyFromUri} from "#/utils/uri.js";
 
 
 export async function createDatasetATProto(agent: SessionAgent, params: CreateDatasetProps) {
@@ -38,15 +39,29 @@ export async function createDatasetATProto(agent: SessionAgent, params: CreateDa
     }
 
     try {
-        const {data: datasetData} = await agent.bsky.com.atproto.repo.createRecord({
-            repo: agent.did,
-            collection: "ar.cabildoabierto.data.dataset",
-            record: record
-        })
+        if(!params.uri) {
+            const {data: datasetData} = await agent.bsky.com.atproto.repo.createRecord({
+                repo: agent.did,
+                collection: "ar.cabildoabierto.data.dataset",
+                record: record
+            })
 
-        return {
-            record,
-            ref: {cid: datasetData.cid, uri: datasetData.uri}
+            return {
+                record,
+                ref: {cid: datasetData.cid, uri: datasetData.uri}
+            }
+        } else {
+            const {data: datasetData} = await agent.bsky.com.atproto.repo.putRecord({
+                repo: agent.did,
+                collection: "ar.cabildoabierto.data.dataset",
+                rkey: getRkeyFromUri(params.uri),
+                record: record
+            })
+
+            return {
+                record,
+                ref: {cid: datasetData.cid, uri: datasetData.uri}
+            }
         }
     } catch (e) {
         console.error(e)
@@ -54,19 +69,20 @@ export async function createDatasetATProto(agent: SessionAgent, params: CreateDa
     }
 }
 
-export type CreateDatasetProps = {
+type CreateDatasetProps = {
     name: string
     description: string
     columns: string[]
     data: string
     format?: string
+    uri?: string
 }
 
-export const createDataset: CAHandler<CreateDatasetProps> = async (ctx, agent, params) => {
+export const createDataset: CAHandler<CreateDatasetProps, {uri: string}> = async (ctx, agent, params) => {
     const {error, record, ref} = await createDatasetATProto(agent, params)
     if (error || !record || !ref) return {error}
 
     await new DatasetRecordProcessor(ctx).processValidated([{ref, record}])
 
-    return {}
+    return {data: {uri: ref.uri}}
 }

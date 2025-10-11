@@ -57,6 +57,11 @@ export class DatasetRecordProcessor extends RecordProcessor<Dataset.Record> {
                 .execute()
 
             await trx
+                .deleteFrom("DataBlock")
+                .where("datasetId", "in", records.map(r => r.ref.uri))
+                .execute()
+
+            await trx
                 .insertInto("DataBlock")
                 .values(blocks)
                 .onConflict((oc) => oc.column("cid").doNothing())

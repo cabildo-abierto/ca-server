@@ -234,6 +234,7 @@ export async function getTopicMentionsInTopics(ctx: AppContext, id: string){
             .where("Reference.referencedTopicId", "=", id)
             .whereRef("Reference.referencingContentId", "=", "TopicVersion.uri")
         ))
+        .where("TopicVersion.topicId", "!=", id)
         .innerJoin("Topic", "Topic.currentVersionId", "TopicVersion.uri")
         .select(["TopicVersion.topicId", "TopicVersion.props"])
         .orderBy("created_at", "desc")

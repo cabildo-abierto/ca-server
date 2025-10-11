@@ -83,6 +83,7 @@ export type DatasetQueryResult = {
         cid: string
         format: string | null
     }[]
+    editedAt: Date | null
 }
 
 
@@ -650,7 +651,8 @@ export class Dataplane {
                         "Blob.cid",
                         "DataBlock.format"
                     ])
-                ).as("dataBlocks")
+                ).as("dataBlocks"),
+                "Record.editedAt"
             ])
             .where("Dataset.uri", "in", uris)
             .execute()

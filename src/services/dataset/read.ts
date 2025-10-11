@@ -213,7 +213,8 @@ export const hydrateDatasetViewBasic = (ctx: AppContext, uri: string, data: Data
             columns: d.columns.map(c => ({
                 $type: "ar.cabildoabierto.data.dataset#column",
                 name: c
-            }))
+            })),
+            editedAt: d.editedAt ? d.editedAt.toISOString() : undefined
         }
     }
     return null
