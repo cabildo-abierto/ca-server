@@ -3,7 +3,7 @@ import type {AppContext} from '#/setup.js'
 import {CAHandler, CAHandlerNoAuth, makeHandler} from "#/utils/handler.js";
 import {syncAllUsersHandler, syncUserHandler} from "#/services/sync/sync-user.js";
 import {deleteCollectionHandler, deleteUserHandler} from "#/services/delete.js";
-import {createInviteCodes, getAccessRequests, markAccessRequestSent} from "#/services/user/access.js";
+import {createInviteCodesHandler, getAccessRequests, markAccessRequestSent} from "#/services/user/access.js";
 import {getUsers} from "#/services/user/users.js";
 import {
     getAllTopics,
@@ -83,7 +83,7 @@ export const adminRoutes = (ctx: AppContext) => {
 
     router.post(
         "/invite-code/create",
-        makeAdminHandler(ctx, createInviteCodes)
+        makeAdminHandler(ctx, createInviteCodesHandler)
     )
 
     router.post(

@@ -4,6 +4,11 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   : ColumnType<T, T | undefined, T>;
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export const MailingListSubscriptionStatus = {
+    Subscribed: "Subscribed",
+    Unsubscribed: "Unsubscribed"
+} as const;
+export type MailingListSubscriptionStatus = (typeof MailingListSubscriptionStatus)[keyof typeof MailingListSubscriptionStatus];
 export const EditorStatus = {
     Beginner: "Beginner",
     Editor: "Editor",
@@ -125,6 +130,17 @@ export type Draft = {
     text: string;
     title: string | null;
 };
+export type EmailSent = {
+    id: string;
+    recipientId: string;
+    sent_at: Generated<Timestamp>;
+    text: string;
+    html: string;
+    subject: string;
+    success: boolean;
+    from: string;
+    template_name: string;
+};
 export type Follow = {
     userFollowedId: string | null;
     uri: string;
@@ -152,6 +168,14 @@ export type JobApplication = {
     comment: string;
     cv: string | null;
     job: string;
+};
+export type MailingListSubscription = {
+    id: string;
+    email: string;
+    status: Generated<MailingListSubscriptionStatus>;
+    userId: string | null;
+    subscribedAt: Generated<Timestamp>;
+    updatedAt: Timestamp | null;
 };
 export type Meeting = {
     id: string;
@@ -365,10 +389,12 @@ export type DB = {
     Dataset: Dataset;
     Donation: Donation;
     Draft: Draft;
+    EmailSent: EmailSent;
     Follow: Follow;
     HasReacted: HasReacted;
     InviteCode: InviteCode;
     JobApplication: JobApplication;
+    MailingListSubscription: MailingListSubscription;
     Meeting: Meeting;
     Notification: Notification;
     NotInterested: NotInterested;

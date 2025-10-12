@@ -28,3 +28,6 @@ dist-ssr
 ecosystem.config.*
 *.sql
 prisma/generated
+src/components
+src/layouts
+src/services/emails/templates

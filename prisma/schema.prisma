@@ -439,25 +439,26 @@ model TopicVersion {
 }
 
 model User {
-  did                      String       @id @db.VarChar(255)
+  did                      String                   @id @db.VarChar(255)
   handle                   String?
   email                    String?
-  created_at               DateTime     @default(now())
-  created_at_tz            DateTime?    @db.Timestamptz(3)
-  editorStatus             EditorStatus @default(Beginner)
-  hasAccess                Boolean      @default(false)
+  mailingListSubs          MailingListSubscription?
+  created_at               DateTime                 @default(now())
+  created_at_tz            DateTime?                @db.Timestamptz(3)
+  editorStatus             EditorStatus             @default(Beginner)
+  hasAccess                Boolean                  @default(false)
   avatar                   String?
   banner                   String?
   description              String?
   displayName              String?
-  inCA                     Boolean      @default(false)
-  platformAdmin            Boolean      @default(false)
-  CAProfileUri             String?      @unique
-  seenTutorial             Boolean      @default(false)
+  inCA                     Boolean                  @default(false)
+  platformAdmin            Boolean                  @default(false)
+  CAProfileUri             String?                  @unique
+  seenTutorial             Boolean                  @default(false)
   orgValidation            String?
-  userValidationHash       String?      @unique
-  lastSeenNotifications    DateTime     @default(dbgenerated("'1970-01-01 00:00:00'::timestamp without time zone"))
-  lastSeenNotifications_tz DateTime?    @default(dbgenerated("'1970-01-01 00:00:00+00'::timestamptz")) @db.Timestamptz(3)
+  userValidationHash       String?                  @unique
+  lastSeenNotifications    DateTime                 @default(dbgenerated("'1970-01-01 00:00:00'::timestamp without time zone"))
+  lastSeenNotifications_tz DateTime?                @default(dbgenerated("'1970-01-01 00:00:00+00'::timestamptz")) @db.Timestamptz(3)
 
   moderationState                               ModerationState    @default(Ok)
   seenTopicMaximizedTutorial                    Boolean            @default(false)
@@ -549,6 +550,35 @@ model JobApplication {
   comment    String
   cv         String?
   job        String
+}
+
+enum MailingListSubscriptionStatus {
+  Subscribed
+  Unsubscribed
+}
+
+model MailingListSubscription {
+  id           String                        @id @default(cuid())
+  email        String                        @unique
+  status       MailingListSubscriptionStatus @default(Subscribed)
+  userId       String?                       @unique
+  user         User?                         @relation(fields: [userId], references: [did])
+  subscribedAt DateTime                      @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime?                     @updatedAt @db.Timestamptz(3)
+  emailsSent   EmailSent[]
+}
+
+model EmailSent {
+  id            String                  @id @default(cuid())
+  recipientId   String
+  recipient     MailingListSubscription @relation(fields: [recipientId], references: [id])
+  sent_at       DateTime                @default(now()) @db.Timestamptz(3)
+  text          String
+  html          String
+  subject       String
+  success       Boolean
+  from          String
+  template_name String
 }
 
 enum EditorStatus {

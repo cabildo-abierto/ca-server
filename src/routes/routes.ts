@@ -66,6 +66,7 @@ import { getAuthorDashboardHandler } from '#/services/monetization/author-dashbo
 import { getFollowSuggestions, setNotInterested } from '#/services/user/follow-suggestions.js';
 import {AppContext} from "#/setup.js";
 import { jobApplicationHandler } from '#/services/admin/jobs.js';
+import {unsubscribe, unsubscribeHandler} from "#/services/emails/sending.js";
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
     return {data: "live"}
@@ -427,6 +428,8 @@ export const createRouter = (ctx: AppContext) => {
         ctx,
         jobApplicationHandler
     ))
+
+    router.post("/unsubscribe", makeHandlerNoAuth(ctx, unsubscribeHandler))
 
     router.use(adminRoutes(ctx))
 

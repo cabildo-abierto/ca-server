@@ -121,10 +121,10 @@ export async function createCAUser(ctx: AppContext, agent: SessionAgent, code?: 
 }
 
 
-export const createInviteCodes: CAHandler<{query: {c: number}}, { inviteCodes: string[] }> = async (ctx, agent, {query}) => {
-    console.log(`Creating ${query.c} invite codes.`)
+export async function createInviteCodes(ctx: AppContext, count: number) {
+    ctx.logger.pino.info(`creating ${count} invite codes.`)
     try {
-        const values = range(query.c).map(i => {
+        const values = range(count).map(i => {
             return {
                 code: uuidv4()
             }
@@ -137,9 +137,14 @@ export const createInviteCodes: CAHandler<{query: {c: number}}, { inviteCodes: s
 
         return {data: {inviteCodes: values.map(c => c.code)}}
     } catch (err) {
-        console.error(`Error creating invite codes: ${err}`)
+        ctx.logger.pino.error({error: err}, `error creating invite codes`)
         return {error: "Ocurrió un error al crear los códigos de invitación"}
     }
+}
+
+
+export const createInviteCodesHandler: CAHandler<{query: {c: number}}, { inviteCodes: string[] }> = async (ctx, agent, {query}) => {
+    return await createInviteCodes(ctx, query.c)
 }
 
 
