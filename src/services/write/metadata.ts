@@ -1,17 +1,20 @@
-import {CAHandler, CAHandlerNoAuth} from "#/utils/handler.js";
-import got from 'got';
-import * as cheerio from 'cheerio';
-import {getUri, isArticle, isDataset, isPost} from "#/utils/uri.js";
+import { CAHandler, CAHandlerNoAuth } from "#/utils/handler.js";
+import * as cheerio from "cheerio";
+import { getUri, isArticle, isDataset, isPost } from "#/utils/uri.js";
 
 const getContent = async (url: string): Promise<Partial<Metadata>> => {
-    const {body: html} = await got(url);
-    const $ = cheerio.load(html);
+    const response = await fetch(url)
+    const html = await response.text()
+    const $ = cheerio.load(html)
 
     return {
-        title: $('meta[property="og:title"]').attr('content') || $('title').text(),
-        description: $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content'),
-        thumbnail: $('meta[property="og:image"]').attr('content'),
-    };
+        title:
+            $('meta[property="og:title"]').attr("content") || $("title").text(),
+        description:
+            $('meta[property="og:description"]').attr("content") ||
+            $('meta[name="description"]').attr("content"),
+        thumbnail: $('meta[property="og:image"]').attr("content"),
+    }
 }
 
 type Metadata = {

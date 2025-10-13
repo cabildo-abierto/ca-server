@@ -5,8 +5,7 @@ import {env} from '#/lib/env.js'
 import {createRouter} from '#/routes/routes.js'
 import cors from 'cors'
 import {MirrorMachine} from "#/services/sync/mirror-machine.js";
-import {AppContext, setupAppContext} from "#/setup.js";
-import {Role} from "#/index.js";
+import {AppContext, Role, setupAppContext} from "#/setup.js";
 import morgan from "morgan"
 
 
@@ -84,6 +83,11 @@ export class Server {
             await serverInstance.close()
             process.exit(0)
         })
+
+        if(process.send) {
+            process.send("ready")
+            ctx.logger.pino.info("process is ready")
+        }
 
         return serverInstance
     }

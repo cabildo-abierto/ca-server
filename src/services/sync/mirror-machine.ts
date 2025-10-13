@@ -165,6 +165,11 @@ export class MirrorMachine {
         this.connectToJetstream("jetstream2.us-east.bsky.network")
         this.connectToJetstream("jetstream1.us-west.bsky.network")
         this.connectToJetstream("jetstream2.us-west.bsky.network")
+        
+        if(process.send) {
+            process.send("ready")
+            this.ctx.logger.pino.info("mirror is ready")
+        }
     }
 
     async processEvent(ctx: AppContext, e: JetstreamEvent, inCA: boolean) {

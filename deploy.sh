@@ -3,10 +3,17 @@ set -e
 
 SERVER_USER="root"
 SERVER_IP="216.238.122.145"
-SYMLINK_PATH="/var/www/ca-server"
 RELEASES_PATH="/var/www/releases/ca-server"
 RELEASES_TO_KEEP=4
 ENV="${1:-prod}"
+
+if [ENV = "prod"]; then
+  RELEASES_PATH="/var/www/releases/ca-server"
+  SYMLINK_PATH="/var/www/ca-server"
+else
+  SYMLINK_PATH="/var/www/ca-server-test"
+  RELEASES_PATH="/var/www/releases/ca-server-test"
+fi
 
 
 echo_blue() {
@@ -16,7 +23,7 @@ echo_blue() {
 echo_blue "Deploying backend to ${ENV} environment"
 
 echo_blue "Building locally..."
-npm run build
+npm run build --max-old-space-size=2048
 
 echo_blue "Running tests..."
 npm test
@@ -35,20 +42,16 @@ rsync -avz \
   --exclude 'node_modules' \
   --exclude '.git' \
   --exclude '.env' \
-  ./dist ./public ./ecosystem.config.prod.cjs ./package*.json \
+  ./dist ./public ./ecosystem.config.prod.cjs ./ecosystem.config.test.cjs ./package*.json \
   $SERVER_USER@$SERVER_IP:$REMOTE_RELEASE_PATH
 
 echo_blue "Preparing release on server..."
 ssh $SERVER_USER@$SERVER_IP "
   set -e
-  # Make sure Node/NPM are in the PATH
   export PATH=/root/.nvm/versions/node/v22.19.0/bin:\$PATH
-
-  # Navigate to the new release directory
   cd $REMOTE_RELEASE_PATH
 
   echo '>>> Writing version file...'
-  # This is the new line you're adding
   echo '${RELEASE_DIR_NAME}' > ./public/version.txt
 
   echo '>>> Installing dependencies...'
@@ -66,51 +69,46 @@ ssh $SERVER_USER@$SERVER_IP "
   echo '>>> New release is ready!'
 "
 
-echo_blue "Activating new release..."
+echo_blue "Activating new release with rollback protection..."
 ssh $SERVER_USER@$SERVER_IP "
   set -e
-  # Make sure Node/NPM are in the PATH
   export PATH=/root/.nvm/versions/node/v22.19.0/bin:\$PATH
 
-  # 1. Define paths for clarity
-  TMP_SYMLINK_PATH=\"${SYMLINK_PATH}_tmp\"
+  # 1. (Remember) Get the path of the current release for rollback.
+  OLD_RELEASE_PATH=\$(readlink ${SYMLINK_PATH} || true)
+  echo \"Current release is: \$OLD_RELEASE_PATH\"
+  echo \"New release is: ${REMOTE_RELEASE_PATH}\"
 
-  # 2. Create the new symlink with a temporary name
-  echo '>>> Creating temporary symlink...'
-  ln -sfn ${REMOTE_RELEASE_PATH} \${TMP_SYMLINK_PATH}
+  # 2. Switch the symlink to point to the new code.
+  echo '>>> Atomically switching symlink to new release...'
+  ln -sfn ${REMOTE_RELEASE_PATH} ${SYMLINK_PATH}
 
-  # 3. Atomically move the new symlink into place
-  echo '>>> Atomically switching to new release...'
-  mv -Tf \${TMP_SYMLINK_PATH} ${SYMLINK_PATH}
-
-  # 4. Verify the link for debugging (optional but recommended)
-  echo '>>> Verifying new symlink:'
-  ls -l /var/www/ca-server
-
-  # 5. cd into the symlinked directory to ensure PM2 uses the correct path
+  # 3. (FIX) Change into the application directory.
+  echo '>>> Changing to application directory: ${SYMLINK_PATH}'
   cd ${SYMLINK_PATH}
 
-  # 6. Gracefully reload the application
-  echo '>>> Reloading PM2 services...'
-  pm2 reload ecosystem.config.cjs --env production
+  # 4. (Try) Attempt to reload services from the correct directory.
+  echo '>>> Reloading PM2 services and waiting for readiness...'
+  if ! pm2 reload ecosystem.config.cjs --env production; then
+      # --- CATCH & ROLLBACK ---
+      echo -e \"\e[31m❌ PM2 reload failed! Rolling back to previous release.\e[0m\"
+
+      if [ -n \"\$OLD_RELEASE_PATH\" ] && [ -d \"\$OLD_RELEASE_PATH\" ]; then
+          echo \"Reverting symlink to \$OLD_RELEASE_PATH...\"
+          ln -sfn \"\$OLD_RELEASE_PATH\" ${SYMLINK_PATH}
+          echo \"✅ Symlink rolled back successfully.\"
+      else
+          echo \"⚠️ No previous release to roll back to. Manual intervention may be needed.\"
+      fi
+      exit 1
+  fi
+
+  # --- SUCCESS ---
+  echo '>>> New release is live and healthy!'
   pm2 save
 "
 
-echo_blue "Reloading application..."
-ssh $SERVER_USER@$SERVER_IP "
-  set -e
-  # Make sure Node/NPM are in the PATH
-  export PATH=/root/.nvm/versions/node/v22.19.0/bin:\$PATH
-
-  # 5. cd into the symlinked directory to ensure PM2 uses the correct path
-  cd ${SYMLINK_PATH}
-
-  # 6. Gracefully reload the application
-  echo '>>> Reloading PM2 services...'
-  pm2 reload ecosystem.config.cjs --env production
-  pm2 save
-"
-
+# --- Final Cleanup ---
 echo_blue "Cleaning up old releases..."
 ssh $SERVER_USER@$SERVER_IP "
   cd $RELEASES_PATH && \

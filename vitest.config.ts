@@ -1,11 +1,15 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, configDefaults } from 'vitest/config'
 import tsconfigPaths from 'vite-tsconfig-paths'
 
 export default defineConfig({
-    plugins: [tsconfigPaths()], // This plugin handles your "#/*" aliases
+    plugins: [tsconfigPaths()],
     test: {
         globals: true,
         environment: 'node',
         clearMocks: true,
+        exclude: [
+            ...configDefaults.exclude,
+            '**/ecosystem.config.test.cjs'
+        ]
     },
 })

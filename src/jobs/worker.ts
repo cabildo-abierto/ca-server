@@ -317,6 +317,10 @@ export class RedisCAWorker extends CAWorker {
         }
     }
 
+    async setup(ctx: AppContext) {
+        await super.setup(ctx)
+    }
+
     // priority va de 1 a 2097152, más bajo significa mayor prioridad
     async addJob(name: string, data: any, priority: number = 10) {
         this.logger.pino.info({name}, "job added")

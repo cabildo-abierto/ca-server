@@ -1,18 +1,17 @@
 import type {OAuthClient} from '@atproto/oauth-client-node'
 import {createClient} from '#/auth/client.js'
-import {createBidirectionalResolver, createIdResolver, BidirectionalResolver} from '#/id-resolver.js'
-import {createServer} from "#/lex-server/index.js"
-import {Server as XrpcServer} from "#/lex-server/index.js"
+import {BidirectionalResolver, createBidirectionalResolver, createIdResolver} from '#/id-resolver.js'
+import {createServer, Server as XrpcServer} from "#/lex-server/index.js"
 import {type Redis, Redis as IORedis} from "ioredis"
 import {CAWorker, RedisCAWorker} from "#/jobs/worker.js";
-import { Kysely, PostgresDialect } from 'kysely'
-import { Pool } from 'pg'
-import { DB } from '#/../prisma/generated/types.js'
+import {Kysely, PostgresDialect} from 'kysely'
+import {Pool} from 'pg'
+import {DB} from '#/../prisma/generated/types.js'
 import 'dotenv/config'
 import {RedisCache} from "#/services/redis/cache.js";
 import {Logger} from "#/utils/logger.js";
-import { env } from './lib/env.js';
-import { S3Storage } from './services/storage/storage.js';
+import {env} from './lib/env.js';
+import {S3Storage} from './services/storage/storage.js';
 import {getCAUsersDids} from "#/services/user/users.js";
 
 

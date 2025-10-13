@@ -2,13 +2,11 @@ import {AppContext} from "#/setup.js";
 import {v4 as uuidv4} from "uuid";
 import nodemailer, {Transporter} from "nodemailer"
 import {CAHandlerNoAuth} from "#/utils/handler.js";
-import { render } from '@maizzle/framework'
 import path from 'path';
 import fs from "fs/promises";
 import {createInviteCodes} from "#/services/user/access.js";
 import jwt from 'jsonwebtoken';
 import tailwindcssPresetEmail from "tailwindcss-preset-email"
-import { generatePlaintext } from '@maizzle/framework'
 
 
 // Para cada usuario que tenga mail guardado pero no tenga una suscripción, creamos la suscripción
@@ -158,6 +156,8 @@ async function renderEmails(ctx: AppContext, template: string, locals: Record<st
     const templatePath = path.join(process.cwd(), `src/services/emails/templates/${template}.html`);
     const templateSource = await fs.readFile(templatePath, 'utf-8');
 
+    const { render } = await import('@maizzle/framework')
+
     const renderedResults: {html: string}[] = await Promise.all(locals.map(l =>
         render(templateSource, {
             templates: {
@@ -183,6 +183,8 @@ async function renderEmails(ctx: AppContext, template: string, locals: Record<st
             locals: l
         })
     ))
+
+    const { generatePlaintext } = await import('@maizzle/framework')
 
     return await Promise.all(renderedResults.map(async (r, i) => ({
         html: r.html,
