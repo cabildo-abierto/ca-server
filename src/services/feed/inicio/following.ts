@@ -118,7 +118,7 @@ export const getSkeletonFromTimeline = (ctx: AppContext, timeline: FeedViewPost[
 }
 
 
-export async function getArticlesForFollowingFeed(ctx: AppContext, agent: SessionAgent, data: Dataplane, startDate: Date): Promise<{
+export async function getArticlesForFollowingFeed(ctx: AppContext, agent: SessionAgent, data: Dataplane, startDate: Date, following: string[]): Promise<{
     created_at: Date,
     uri: string
 }[]> {
@@ -126,38 +126,32 @@ export async function getArticlesForFollowingFeed(ctx: AppContext, agent: Sessio
 
     const t1 = Date.now()
     const res = await ctx.kysely
-        .selectFrom("Record")
-        .select(["Record.created_at", "Record.uri"])
-        .where("Record.collection", "in", articleCollections)
-        .innerJoin("User", "User.did", "Record.authorId")
-        .leftJoin("Follow", "Follow.userFollowedId", "User.did")
-        .leftJoin("Record as FollowRecord", "FollowRecord.uri", "Follow.uri")
-        .where(eb => eb.or([
-            eb("FollowRecord.authorId", "=", agent.did),
-            eb("Record.authorId", "=", agent.did)
-        ]))
-        .where("Record.created_at", "<", startDate)
-        .orderBy("Record.created_at", "desc")
+        .selectFrom("Article")
+        .innerJoin("Record", "Record.uri", "Article.uri")
+        .select(["Record.created_at_tz as created_at", "Record.uri"])
+        .where("Record.authorId", "in", [agent.did, ...following])
+        .where("Record.created_at_tz", "<", startDate)
+        .orderBy("Record.created_at_tz", "desc")
         .limit(25)
         .execute()
     const t2 = Date.now()
     ctx.logger.logTimes("get articles", [t1, t2])
     return res
+        .map(x => x.created_at ? {...x, created_at: x.created_at} : null)
+        .filter(x => x != null)
 }
 
 
-export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: SessionAgent, dataplane: Dataplane, startDate: Date): Promise<RepostQueryResult[]> {
+export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: SessionAgent, dataplane: Dataplane, startDate: Date, following: string[]): Promise<RepostQueryResult[]> {
     const t1 = Date.now()
     const res = await ctx.kysely
         .selectFrom("Record")
         .innerJoin("Reaction", "Reaction.uri", "Record.uri")
         .innerJoin("Record as RepostedRecord", "RepostedRecord.uri", "Reaction.subjectId")
-        .innerJoin("Follow", "Follow.userFollowedId", "Record.authorId")
-        .innerJoin("Record as FollowRecord", "Follow.uri", "FollowRecord.uri")
         .select(["Record.uri as repostUri", "Record.created_at as repostCreatedAt", "RepostedRecord.uri as recordUri"])
+        .where("Record.authorId", "in", [agent.did, ...following])
         .where("Record.collection", "=", "app.bsky.feed.repost")
         .where("RepostedRecord.collection", "=", "ar.cabildoabierto.feed.article")
-        .where("FollowRecord.authorId", "=", agent.did)
         .orderBy("Record.created_at", "desc")
         .execute()
     const t2 = Date.now()
@@ -218,32 +212,33 @@ export async function getBskyTimeline(ctx: AppContext, agent: SessionAgent, limi
 
 
 async function getFollowingFeedSkeletonAllCASide(ctx: AppContext, agent: SessionAgent, data: Dataplane, startDate: Date) {
-    const t1 = Date.now()
 
+    const following = await getFollowsDids(ctx, agent.did)
     const articlesQuery = getArticlesForFollowingFeed(
         ctx,
         agent,
         data,
-        startDate
+        startDate,
+        following
     )
 
-    const t2 = Date.now()
     const articleRepostsQuery: Promise<RepostQueryResult[]> = getArticleRepostsForFollowingFeed(
         ctx,
         agent,
         data,
-        startDate
+        startDate,
+        following
     )
+    const t1 = Date.now()
 
-    const [articles, articleReposts, following] = await Promise.all([
+    const [articles, articleReposts] = await Promise.all([
         articlesQuery,
         articleRepostsQuery,
-        getFollowsDids(ctx, agent.did)
     ])
 
-    const t3 = Date.now()
+    const t2 = Date.now()
 
-    ctx.logger.logTimes("following ca side", [t1, t2, t3])
+    ctx.logger.logTimes("following ca side", [t1, t2])
     return {
         articles,
         articleReposts,
