@@ -350,7 +350,7 @@ export async function recomputeTopicInteractionsAndPopularities(ctx: AppContext,
 export async function getTopicsReferencedInText(ctx: AppContext, text: string): Promise<TopicMention[]> {
     if (!text.trim()) return []
 
-    const text_tsv = sql`to_tsvector('public.spanish_unaccent', ${text})`;
+    const text_tsv = sql`to_tsvector('public.spanish_simple_unaccent', ${text})`;
 
     const matches = await ctx.kysely
         .with("Synonyms", eb => eb
@@ -366,7 +366,7 @@ export async function getTopicsReferencedInText(ctx: AppContext, text: string): 
             "TopicVersion.props",
             sql<number>`ts_rank_cd(${text_tsv}, to_tsquery('public.spanish_simple_unaccent', regexp_replace(trim("Synonyms"."keyword"), '\\s+', ' <-> ', 'g')))`.as('rank')
         ])
-        .execute();
+        .execute()
 
     const topicsMap = new Map<string, TopicMention>()
     for (const match of matches) {

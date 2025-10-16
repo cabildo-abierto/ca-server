@@ -3,18 +3,17 @@ set -e
 
 SERVER_USER="root"
 SERVER_IP="216.238.122.145"
-RELEASES_PATH="/var/www/releases/ca-server"
-RELEASES_TO_KEEP=4
 ENV="${1:-prod}"
 
-if [ENV = "prod"]; then
+if [ "$ENV" = "prod" ]; then
   RELEASES_PATH="/var/www/releases/ca-server"
   SYMLINK_PATH="/var/www/ca-server"
+  RELEASES_TO_KEEP=10
 else
   SYMLINK_PATH="/var/www/ca-server-test"
   RELEASES_PATH="/var/www/releases/ca-server-test"
+  RELEASES_TO_KEEP=4
 fi
-
 
 echo_blue() {
     echo -e "\e[34m$1\e[0m"
