@@ -2,13 +2,17 @@ import {CAHandlerNoAuth} from "#/utils/handler.js"
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
 import {Agent} from "#/utils/session-agent.js"
 import {CategoryVotes, TopicHistory, TopicVersionStatus, VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
-import {getCollectionFromUri} from "#/utils/uri.js"
-import {dbUserToProfileViewBasic} from "#/services/wiki/topics.js"
+import {getCollectionFromUri, getDidFromUri} from "#/utils/uri.js"
+import {editorStatusToEn} from "#/services/wiki/topics.js"
 import {AppContext} from "#/setup.js";
 import {jsonArrayFrom} from "kysely/helpers/postgres";
+import {isVersionAccepted} from "#/services/wiki/current-version.js";
+import {EditorStatus} from "@prisma/client";
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
 
 
-function getViewerForTopicVersionInHistory(reactions: {uri: string}[]): VersionInHistory["viewer"] {
+export function getTopicVersionViewer(reactions: {uri: string}[]): VersionInHistory["viewer"] {
     let accept: string | undefined
     let reject: string | undefined
 
@@ -28,6 +32,28 @@ function getViewerForTopicVersionInHistory(reactions: {uri: string}[]): VersionI
 }
 
 
+export function getTopicVersionStatus(authorStatus: EditorStatus, protection: EditorStatus, v: {uniqueAcceptsCount: number, uniqueRejectsCount: number}) {
+    const voteCounts: CategoryVotes[] = [
+        {
+            accepts: v.uniqueAcceptsCount,
+            rejects: v.uniqueRejectsCount,
+            category: "Beginner" // TO DO (!)
+        }
+    ]
+
+    const status: TopicVersionStatus = {
+        voteCounts,
+        accepted: isVersionAccepted(
+            authorStatus,
+            protection,
+            voteCounts
+        )
+    }
+
+    return status
+}
+
+
 export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent) {
     const did = agent?.hasSession() ? agent.did : null
 
@@ -35,7 +61,7 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
         .selectFrom("TopicVersion")
         .innerJoin("Record", "Record.uri", "TopicVersion.uri")
         .innerJoin("Content", "Content.uri", "TopicVersion.uri")
-        .innerJoin("User", "User.did", "Record.authorId")
+        .innerJoin("Topic", "Topic.id", "TopicVersion.topicId")
         .select([
             "Record.uri",
             "Record.cid",
@@ -47,6 +73,7 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
             "charsAdded",
             "charsDeleted",
             "contribution",
+            "Topic.protection",
             "message",
             "accCharsAdded",
             "props",
@@ -54,20 +81,17 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
             "authorship",
             eb => jsonArrayFrom(eb
                 .selectFrom("Reaction")
-                .innerJoin("Record as ReactionRecord", "Record.uri", "Reaction.uri")
+                .innerJoin("Record as ReactionRecord", "Record.uri", "Reaction.subjectId")
                 .select([
                     "Reaction.uri"
                 ])
                 .whereRef("Reaction.subjectId", "=", "TopicVersion.uri")
                 .where("ReactionRecord.authorId", "=", did ?? "no did")
             ).as("reactions"),
-            "did",
-            "handle",
-            "displayName",
-            "avatar",
-            "CAProfileUri",
-            "userValidationHash",
-            "orgValidation"
+            eb => eb
+                .selectFrom("Post as Reply")
+                .select(eb => eb.fn.count<number>("Reply.uri").as("count"))
+                .whereRef("Reply.replyToId", "=", "Record.uri").as("replyCount")
         ])
         .where("Record.cid", "is not", null)
         .where("Record.record", "is not", null)
@@ -75,29 +99,21 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
         .orderBy("created_at asc")
         .execute()
 
+    const dataplane = new Dataplane(ctx, agent)
+    await dataplane.fetchProfileViewBasicHydrationData(versions.map(v => getDidFromUri(v.uri)))
+
     const topicHistory: TopicHistory = {
         id,
         versions: versions.map(v => {
             if (!v.cid) return null
 
-            const viewer = getViewerForTopicVersionInHistory(
+            const viewer = getTopicVersionViewer(
                 v.reactions
             )
-
-            const voteCounts: CategoryVotes[] = [
-                {
-                    accepts: v.uniqueAcceptsCount,
-                    rejects: v.uniqueRejectsCount,
-                    category: "Beginner" // TO DO
-                }
-            ]
-
-            const author = dbUserToProfileViewBasic(v) // TO DO: Usar el dataplane
+            const author = hydrateProfileViewBasic(ctx, getDidFromUri(v.uri), dataplane) // TO DO: Usar el dataplane
             if (!author) return null
 
-            const status: TopicVersionStatus = {
-                voteCounts
-            }
+            const status = getTopicVersionStatus(editorStatusToEn(author.editorStatus), v.protection, v)
 
             const contributionStr = v.contribution
             const contribution = contributionStr ? JSON.parse(contributionStr) : undefined
@@ -121,7 +137,8 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
                 createdAt: v.created_at_tz ? v.created_at_tz.toISOString() : v.created_at.toISOString(),
                 contribution,
                 prevAccepted: v.prevAcceptedUri ?? undefined,
-                claimsAuthorship: v.authorship ?? false
+                claimsAuthorship: v.authorship ?? false,
+                replyCount: v.replyCount ?? 0
             }
             return view
         }).filter(v => v != null)

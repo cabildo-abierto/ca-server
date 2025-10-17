@@ -7,6 +7,8 @@ import {AppContext} from "#/setup.js";
 import {DB} from "../../../prisma/generated/types.js";
 import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard.js";
 import {sql, Transaction} from "kysely";
+import {EditorStatus} from "@prisma/client";
+import {produce} from "immer";
 
 
 export async function getTopicIdFromTopicVersionUri(ctx: AppContext, did: string, rkey: string) {
@@ -22,29 +24,28 @@ export async function getTopicIdFromTopicVersionUri(ctx: AppContext, did: string
 }
 
 
-function getStatusWithAuthorVote(authorStatus: string, status?: TopicVersionStatus): TopicVersionStatus {
-    if (status) {
-        const idx = status.voteCounts
-            .findIndex(c => c.category == authorStatus)
+function addAuthorVoteToVoteCounts(authorStatus: EditorStatus, voteCounts?: TopicVersionStatus["voteCounts"]): TopicVersionStatus["voteCounts"] {
+    if (voteCounts) {
+        return produce(voteCounts, draft => {
+            const idx = voteCounts
+                .findIndex(c => c.category == authorStatus)
 
-        if (idx != -1) {
-            status.voteCounts[idx].accepts += 1
-        } else {
-            status.voteCounts.push({
-                category: authorStatus,
-                accepts: 1,
-                rejects: 0
-            })
-        }
-        return status
+            if (idx != -1) {
+                draft[idx].accepts += 1
+            } else {
+                draft.push({
+                    category: authorStatus,
+                    accepts: 1,
+                    rejects: 0
+                })
+            }
+        })
     } else {
-        return {
-            voteCounts: [{
-                category: authorStatus,
-                accepts: 1,
-                rejects: 0
-            }]
-        }
+        return [{
+            category: authorStatus,
+            accepts: 1,
+            rejects: 0
+        }]
     }
 }
 
@@ -57,19 +58,22 @@ function catToNumber(cat: string) {
 }
 
 
-export function isVersionAccepted(authorStatus: string, protection: string, status?: TopicVersionStatus) {
-    const statusWithAuthor = getStatusWithAuthorVote(authorStatus, status)
-    const relevantVotes = max(statusWithAuthor.voteCounts, x => catToNumber(x.category))
+export function isVersionAccepted(
+    authorStatus: EditorStatus,
+    protection: EditorStatus,
+    voteCounts?: TopicVersionStatus["voteCounts"]
+) {
+    // TO DO (!) considerar la protección
+    const voteCountsWithAuthor = addAuthorVoteToVoteCounts(authorStatus, voteCounts)
+    const relevantVotes = max(voteCountsWithAuthor, x => catToNumber(x.category))
     if(!relevantVotes) throw Error("No hubo ningún voto incluyendo al autor!")
     return relevantVotes.rejects == 0 && relevantVotes.accepts > 0
 }
 
 
-export function getTopicCurrentVersion(protection: string = "Beginner", versions: { author: {editorStatus?: string}, status?: TopicVersionStatus }[]): number | null {
+export function getTopicCurrentVersion(versions: { status: TopicVersionStatus }[]): number | null {
     for (let i = versions.length - 1; i >= 0; i--) {
-        if (isVersionAccepted(versions[i].author.editorStatus ?? "Beginner", protection, versions[i].status)) {
-            return i
-        }
+        if(versions[i].status?.accepted) return i
     }
     return null
 }
@@ -108,8 +112,8 @@ export async function updateTopicsCurrentVersionBatch(ctx: AppContext, trx: Tran
         topicId: string
         uri: string
         reactions: { uri: string, editorStatus: string }[] | null
-        protection: string
-        editorStatus: string
+        protection: EditorStatus
+        editorStatus: EditorStatus
         currentVersionId: string | null
         accCharsAdded: number | null
         created_at: Date
@@ -186,18 +190,17 @@ export async function updateTopicsCurrentVersionBatch(ctx: AppContext, trx: Tran
                 lastEdit
             })
         } else {
-            const status = versions
+            const versionsStatus = versions
                 .map(v => ({
                         author: {
                             editorStatus: v.editorStatus
                         },
-                        status: getTopicVersionStatusFromReactions(v.reactions ?? [])
+                        status: getTopicVersionStatusFromReactions(v.reactions ?? [], v.editorStatus, v.protection)
                     })
                 )
 
             const currentVersion = getTopicCurrentVersion(
-                versions[0].protection,
-                status
+                versionsStatus
             )
             if (currentVersion == null) {
                 updates.push({

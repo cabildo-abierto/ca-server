@@ -2,7 +2,10 @@ import {fetchTextBlobs} from "../blob.js";
 import {getDidFromUri, getUri} from "#/utils/uri.js";
 import {AppContext} from "#/setup.js";
 import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler.js";
-import {TopicProp, TopicView} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
+import {
+    TopicProp,
+    TopicView
+} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
 import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion.js";
 import {getTopicCurrentVersion, getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version.js";
 import {Agent} from "#/utils/session-agent.js";
@@ -11,7 +14,7 @@ import {Dataplane} from "#/services/hydration/dataplane.js";
 import {$Typed} from "@atproto/api";
 import {getTopicSynonyms} from "#/services/wiki/utils.js";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js"
-import {getTopicHistory} from "#/services/wiki/history.js";
+import {getTopicHistory, getTopicVersionStatus, getTopicVersionViewer} from "#/services/wiki/history.js";
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
 import {ArticleEmbed, ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
@@ -20,6 +23,8 @@ import {stringListIncludes, stringListIsEmpty} from "#/services/dataset/read.js"
 import {ProfileViewBasic as CAProfileViewBasic} from "#/lex-api/types/ar/cabildoabierto/actor/defs.js"
 import {cleanText} from "#/utils/strings.js";
 import {getTopicsReferencedInText} from "#/services/wiki/references/references.js";
+import {jsonArrayFrom} from "kysely/helpers/postgres";
+import {EditorStatus} from "@prisma/client";
 
 export type TimePeriod = "day" | "week" | "month" | "all"
 
@@ -268,6 +273,21 @@ export const getTopicCurrentVersionFromDB = async (ctx: AppContext, id: string):
 }
 
 
+export function editorStatusToEsp(s: EditorStatus) {
+    if(s == "Editor") return s
+    else if(s == "Beginner") return "Editor principiante"
+    else if(s == "Administrator") return "Administrador"
+}
+
+
+export function editorStatusToEn(s: CAProfileViewBasic["editorStatus"]): EditorStatus {
+    if(s == "Editor") return "Editor"
+    else if(s == "Editor principiante") return "Beginner"
+    else if(s == "Administrador") return "Administrator"
+    throw Error(`unknown editor status ${s}`)
+}
+
+
 export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?: string, rkey?: string): Promise<{
     data?: TopicView,
     error?: string
@@ -295,7 +315,12 @@ export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?:
             return {error: "No se encontró el tema " + id + "."}
         }
 
-        const index = getTopicCurrentVersion(history.protection, history.versions)
+        const index = getTopicCurrentVersion(
+            history.versions.map(v => ({
+                status: v.status
+            }))
+        )
+
         if (index == null) {
             return {error: "No se encontró el tema " + id + "."}
         }
@@ -304,7 +329,7 @@ export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?:
         uri = currentVersionId
     }
 
-    return await getTopicVersion(ctx, uri)
+    return await getTopicVersion(ctx, uri, agent.hasSession() ? agent.did : undefined)
 }
 
 
@@ -351,7 +376,7 @@ export function hydrateEmbedViews(authorId: string, embeds: ArticleEmbed[]): Art
 }
 
 
-export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
+export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: string): Promise<{
     data?: TopicView,
     error?: string
 }> => {
@@ -362,6 +387,7 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
         .innerJoin("Record", "TopicVersion.uri", "Record.uri")
         .innerJoin("Content", "TopicVersion.uri", "Content.uri")
         .innerJoin("Topic", "Topic.id", "TopicVersion.topicId")
+        .innerJoin("User", "User.did", "Record.authorId")
         .select([
             "Record.uri",
             "Record.cid",
@@ -376,12 +402,29 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
             "Topic.protection",
             "Topic.popularityScore",
             "Topic.lastEdit",
-            "Topic.currentVersionId"
+            "Topic.currentVersionId",
+            "uniqueAcceptsCount",
+            "uniqueRejectsCount",
+            "User.editorStatus",
+            eb => jsonArrayFrom(eb
+                .selectFrom("Reaction")
+                .innerJoin("Record as ReactionRecord", "Record.uri", "Reaction.subjectId")
+                .select([
+                    "Reaction.uri"
+                ])
+                .whereRef("Reaction.subjectId", "=", "TopicVersion.uri")
+                .where("ReactionRecord.authorId", "=", viewerDid ?? "no did")
+                .orderBy("ReactionRecord.authorId")
+                .orderBy("ReactionRecord.created_at_tz asc")
+                .distinctOn("ReactionRecord.authorId")
+            ).as("reactions"),
         ])
         .where("TopicVersion.uri", "=", uri)
         .where("Record.record", "is not", null)
         .where("Record.cid", "is not", null)
         .executeTakeFirst()
+
+    // ctx.logger.pino.info({topic}, "query result")
 
     if (!topic || !topic.cid) {
         ctx.logger.pino.info({uri, topic}, "topic version not found")
@@ -412,6 +455,14 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
     const record = topic.record ? JSON.parse(topic.record) as TopicVersionRecord : undefined
     const embeds = record ? hydrateEmbedViews(authorId, record.embeds ?? []) : []
 
+    //ctx.logger.pino.info({topic}, "topic for get topic status")
+    const status = getTopicVersionStatus(topic.editorStatus, topic.protection, topic)
+    //ctx.logger.pino.info({status}, "got status")
+
+    //ctx.logger.pino.info({reactions: topic.reactions, uri, viewerDid}, "getting viewer")
+    const viewer = getTopicVersionViewer(topic.reactions)
+    //ctx.logger.pino.info({viewer}, "got viewer")
+
     const view: TopicView = {
         $type: "ar.cabildoabierto.wiki.topicVersion#topicView",
         id,
@@ -424,8 +475,12 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
         lastEdit: topic.lastEdit?.toISOString() ?? topic.created_at.toISOString(),
         currentVersion: topic.currentVersionId ?? undefined,
         record: topic.record ? JSON.parse(topic.record) : undefined,
-        embeds
+        embeds,
+        status,
+        viewer
     }
+
+    //ctx.logger.pino.info({view}, "returning topic view")
 
     return {data: view}
 }
@@ -433,9 +488,9 @@ export const getTopicVersion = async (ctx: AppContext, uri: string): Promise<{
 
 export const getTopicVersionHandler: CAHandlerNoAuth<{
     params: { did: string, rkey: string }
-}, TopicView> = async (ctx, _, {params}) => {
+}, TopicView> = async (ctx, agent, {params}) => {
     const {did, rkey} = params
-    return getTopicVersion(ctx, getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey))
+    return getTopicVersion(ctx, getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey), agent.hasSession() ? agent.did : undefined)
 }
 
 

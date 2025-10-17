@@ -58,9 +58,9 @@ export function setupRedis(db: number) {
 }
 
 
-export function setupResolver(ioredis: Redis) {
+export function setupResolver(redis: RedisCache) {
     const baseIdResolver = createIdResolver()
-    return createBidirectionalResolver(baseIdResolver, ioredis)
+    return createBidirectionalResolver(baseIdResolver, redis)
 }
 
 
@@ -88,7 +88,6 @@ export async function setupAppContext(roles: Role[]) {
         )
     }
 
-    const resolver = setupResolver(ioredis)
     const xrpc = createServer()
     logger.pino.info("xrpc server created")
 
@@ -97,6 +96,8 @@ export async function setupAppContext(roles: Role[]) {
 
     const redisCache = new RedisCache(ioredis, mirrorId, logger)
     logger.pino.info("redis cache created")
+
+    const resolver = setupResolver(redisCache)
 
     const ctx: AppContext = {
         logger,

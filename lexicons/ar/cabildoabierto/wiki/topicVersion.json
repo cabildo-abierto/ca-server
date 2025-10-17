@@ -104,6 +104,21 @@
               "type": "ref",
               "ref": "ar.cabildoabierto.feed.article#articleEmbedView"
             }
+          },
+          "status": {
+            "type": "ref",
+            "ref": "#topicVersionStatus"
+          },
+          "author": {
+            "type": "ref",
+            "ref": "ar.cabildoabierto.actor.defs#profileViewBasic"
+          },
+          "viewer": {
+            "type": "ref",
+            "ref": "#topicVersionViewerState"
+          },
+          "protection": {
+            "type": "string"
           }
         }
       },
@@ -130,7 +145,7 @@
       },
       "versionInHistory": {
         "type": "object",
-        "required": ["uri", "cid", "createdAt", "author"],
+        "required": ["uri", "cid", "createdAt", "author", "status"],
         "properties": {
           "uri": {
             "type": "string",
@@ -182,6 +197,9 @@
           },
           "claimsAuthorship": {
             "type": "boolean"
+          },
+          "replyCount": {
+            "type": "integer"
           }
         }
       },
@@ -201,7 +219,7 @@
       },
       "topicVersionStatus": {
         "type": "object",
-        "required": ["voteCounts"],
+        "required": ["voteCounts", "accepted"],
         "properties": {
           "voteCounts": {
             "type": "array",
@@ -209,6 +227,13 @@
               "type": "ref",
               "ref": "#categoryVotes"
             }
+          },
+          "accepted": {
+            "type": "boolean"
+          },
+          "protection": {
+            "type": "string",
+            "description": ""
           }
         }
       },

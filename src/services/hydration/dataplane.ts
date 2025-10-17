@@ -185,9 +185,7 @@ export class Dataplane {
     }
 
     async fetchCAContentsAndBlobs(uris: string[]) {
-        const t1 = Date.now()
         await this.fetchCAContents(uris)
-        const t2 = Date.now()
 
         const contents = Array.from(this.caContents?.values() ?? [])
 
@@ -203,16 +201,12 @@ export class Dataplane {
             this.fetchTextBlobs(blobRefs),
             this.fetchFilteredTopics(filters)
         ])
-        const t3 = Date.now()
-        this.ctx.logger.logTimes("fetch ca contents and blobs", [t1, t2, t3])
+        //this.ctx.logger.logTimes("fetch ca contents and blobs", [t1, t2, t3])
     }
 
     async fetchCAContents(uris: string[]) {
         uris = uris.filter(u => !this.caContents?.has(u))
         if (uris.length == 0) return
-
-        this.ctx.logger.pino.info({included: uris.includes('at://did:plc:oky5czdrnfjpqslsw2a5iclo/app.bsky.feed.post/3lzduaypsv22f')},
-            "fetching ca contents")
 
         const contents = await this.ctx.kysely
             .selectFrom("Record")
@@ -274,7 +268,7 @@ export class Dataplane {
     }
 
     async fetchTextBlobs(blobs: BlobRef[]) {
-        this.ctx.logger.pino.info({blobs}, "fetching text blobs")
+        //this.ctx.logger.pino.info({blobs}, "fetching text blobs")
         if(blobs.length == 0) return
         const batchSize = 100
         let texts: (string | null)[] = []
@@ -294,7 +288,6 @@ export class Dataplane {
         uris = unique([...uris, ...required])
         const dids = unique([...uris.map(getDidFromUri), ...otherDids])
 
-        const t1 = Date.now()
         await Promise.all([
             this.fetchBskyPosts(postUris(uris)),
             this.fetchCAContentsAndBlobs(uris),
@@ -302,15 +295,12 @@ export class Dataplane {
             this.fetchTopicsBasicByUris(topicVersionUris(uris)),
             this.fetchProfileViewBasicHydrationData(dids)
         ])
-        const t2 = Date.now()
-        this.ctx.logger.logTimes("fetch posts and article views", [t1, t2])
+        //this.ctx.logger.logTimes("fetch posts and article views", [t1, t2])
     }
 
     async fetchTopicsBasicByUris(uris: string[]) {
         uris = uris.filter(u => !this.topicsByUri?.has(u))
         if (uris.length == 0) return
-
-        this.ctx.logger.pino.info({uris}, "fetching topic basics")
 
         const data: TopicVersionQueryResultBasic[] = await this.ctx.kysely
             .selectFrom("TopicVersion")
@@ -341,7 +331,6 @@ export class Dataplane {
             .map(e => e.reason && isSkeletonReasonRepost(e.reason) ? e.reason.repost : null)
             .filter(x => x != null)
 
-        const t1 = Date.now()
         const pUris = postUris(uris)
 
         const caPosts = (await Promise.all([
@@ -352,9 +341,8 @@ export class Dataplane {
                 .where("uri", "in", pUris)
                 .execute() : []
         ]))[1]
-        const t2 = Date.now()
 
-        this.ctx.logger.logTimes("expanding uris with replies and reposts", [t1, t2])
+        // this.ctx.logger.logTimes("expanding uris with replies and reposts", [t1, t2])
 
         const bskyPosts = uris
             .map(u => this.bskyPosts?.get(u))
@@ -747,70 +735,85 @@ export class Dataplane {
 
 
     async fetchProfileViewHydrationData(dids: string[]) {
+        this.ctx.logger.pino.info({dids}, "fetching profile views")
         dids = dids.filter(d => {
             if(this.profiles.has(d)) return false
             if(this.caUsers.has(d)) return false
             return !(this.caUsersDetailed.has(d) && (this.bskyBasicUsers.has(d) || this.bskyDetailedUsers.has(d)))
         })
 
-        if(dids.length == 0) return
+        dids = unique(dids)
+
+        if(dids.length == 0) {
+            this.ctx.logger.pino.info({}, "all profile views were skipped")
+            return
+        }
 
         const agentDid = this.agent.hasSession() ? this.agent.did : null
 
+        this.ctx.logger.pino.info({agentDid}, "got agent did")
         // TO DO (!): Esto asume que todos los usuarios de CA están sincronizados. Hay que asegurarlo.
-        const users = await this.ctx.kysely
-            .selectFrom("User")
-            .where("User.did", "in", dids)
-            .select([
-                "did",
-                "CAProfileUri",
-                "handle",
-                "displayName",
-                "avatar",
-                "created_at",
-                "orgValidation",
-                "userValidationHash",
-                "editorStatus",
-                "description",
-                eb => eb
-                    .selectFrom("Follow")
-                    .where("Follow.userFollowedId", "=", agentDid ?? "no did")
-                    .innerJoin("Record", "Record.uri", "Follow.uri")
-                    .whereRef("Record.authorId", "=", "User.did")
-                    .select("Follow.uri")
-                    .limit(1)
-                    .as("followedBy"),
-                eb => eb
-                    .selectFrom("Follow")
-                    .whereRef("Follow.userFollowedId", "=", "User.did")
-                    .innerJoin("Record", "Record.uri", "Follow.uri")
-                    .where("Record.authorId", "=", agentDid ?? "no did")
-                    .select("Follow.uri")
-                    .limit(1)
-                    .as("following")
-            ])
-            .where("inCA", "=", true)
-            .execute()
 
-        users.forEach(u => {
-            if(u.handle) {
-                this.caUsers.set(u.did, {
-                    did: u.did,
-                    caProfile: u.CAProfileUri,
-                    handle: u.handle,
-                    avatar: u.avatar,
-                    displayName: u.displayName,
-                    createdAt: u.created_at,
-                    verification: getValidationState(u),
-                    editorStatus: u.editorStatus,
-                    description: u.description,
-                    viewer: {
-                        following: u.following,
-                        followedBy: u.followedBy
-                    }
-                })
-            }
-        })
+        try {
+            const users = await this.ctx.kysely
+                .selectFrom("User")
+                .where("User.did", "in", dids)
+                .select([
+                    "did",
+                    "CAProfileUri",
+                    "handle",
+                    "displayName",
+                    "avatar",
+                    "created_at",
+                    "orgValidation",
+                    "userValidationHash",
+                    "editorStatus",
+                    "description",
+                    eb => eb
+                        .selectFrom("Follow")
+                        .where("Follow.userFollowedId", "=", agentDid ?? "no did")
+                        .innerJoin("Record", "Record.uri", "Follow.uri")
+                        .whereRef("Record.authorId", "=", "User.did")
+                        .select("Follow.uri")
+                        .limit(1)
+                        .as("followedBy"),
+                    eb => eb
+                        .selectFrom("Follow")
+                        .whereRef("Follow.userFollowedId", "=", "User.did")
+                        .innerJoin("Record", "Record.uri", "Follow.uri")
+                        .where("Record.authorId", "=", agentDid ?? "no did")
+                        .select("Follow.uri")
+                        .limit(1)
+                        .as("following")
+                ])
+                .where("inCA", "=", true)
+                .execute()
+
+
+            users.forEach(u => {
+                if(u.handle) {
+                    this.caUsers.set(u.did, {
+                        did: u.did,
+                        caProfile: u.CAProfileUri,
+                        handle: u.handle,
+                        avatar: u.avatar,
+                        displayName: u.displayName,
+                        createdAt: u.created_at,
+                        verification: getValidationState(u),
+                        editorStatus: u.editorStatus,
+                        description: u.description,
+                        viewer: {
+                            following: u.following,
+                            followedBy: u.followedBy
+                        }
+                    })
+                } else {
+                    this.ctx.logger.pino.warn({did: u.did}, "user with no handle, can't hydrate it")
+                }
+            })
+        } catch (error) {
+            this.ctx.logger.pino.error({error}, "error fetching profile views from CA")
+        }
 
         const bskyUsers = dids.filter(d => !this.caUsers.has(d))
         await this.fetchProfileViewDetailedHydrationDataFromBsky(bskyUsers)
@@ -907,8 +910,13 @@ export class Dataplane {
         const profiles: ProfileViewDetailed[] = []
         for (let i = 0; i < didBatches.length; i++) {
             const b = didBatches[i]
-            const res = await agent.bsky.app.bsky.actor.getProfiles({actors: b})
-            profiles.push(...res.data.profiles)
+            try {
+                const res = await agent.bsky.app.bsky.actor.getProfiles({actors: b})
+                profiles.push(...res.data.profiles)
+            } catch (error) {
+                this.ctx.logger.pino.error({error, dids: b}, "error getting profiles from bsky")
+                return
+            }
         }
 
         this.bskyDetailedUsers = joinMaps(

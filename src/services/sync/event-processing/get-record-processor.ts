@@ -56,7 +56,7 @@ export async function batchDeleteRecords(ctx: AppContext, uris: string[]) {
     const entries = Array.from(byCollections.entries())
     for (let i = 0; i < entries.length; i++) {
         const [c, uris] = entries[i]
-
+        ctx.logger.pino.info({c}, "deleting batch of records")
         await getDeleteProcessor(ctx, c).processInBatches(uris)
     }
 }

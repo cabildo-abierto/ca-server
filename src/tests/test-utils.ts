@@ -1,7 +1,7 @@
 import {RedisCache} from "#/services/redis/cache.js";
 import {AppContext, setupKysely, setupRedis, setupResolver} from "#/setup.js";
 import {Logger} from "#/utils/logger.js";
-import {AppBskyFeedLike, AppBskyFeedRepost, AppBskyGraphFollow} from "@atproto/api";
+import {AppBskyActorProfile, AppBskyFeedLike, AppBskyFeedRepost, AppBskyGraphFollow} from "@atproto/api";
 import {deleteUser} from "#/services/delete.js";
 import {sql} from "kysely";
 import {BaseAgent, bskyPublicAPI, SessionAgent} from "#/utils/session-agent.js";
@@ -16,7 +16,7 @@ import {randomBytes} from "crypto";
 import * as path from 'path';
 import { sha256 } from 'multiformats/hashes/sha2'
 import { encode, code } from '@ipld/dag-cbor'
-import {ArCabildoabiertoFeedArticle } from "#/lex-api/index.js";
+import {ArCabildoabiertoActorCaProfile, ArCabildoabiertoFeedArticle, ArCabildoabiertoWikiVoteAccept} from "#/lex-api/index.js";
 import {BlobRef} from "@atproto/lexicon";
 import {CID} from "multiformats/cid";
 import {getBlobKey} from "#/services/hydration/dataplane.js";
@@ -54,21 +54,68 @@ export function generateUserDid(testSuite: string) {
 }
 
 
+function getCAProfileRefAndRecord(did: string, testSuite: string): Promise<RefAndRecord<ArCabildoabiertoActorCaProfile.Record>> {
+    const record: ArCabildoabiertoActorCaProfile.Record = {
+        $type: "ar.cabildoabierto.actor.caProfile",
+        createdAt: new Date().toISOString()
+    }
+
+    return getRefAndRecord(
+        record,
+        testSuite,
+        {
+            did,
+            collection: record.$type,
+        }
+    )
+}
+
+
+async function getBskyProfileRefAndRecord(did: string, testSuite: string): Promise<RefAndRecord<AppBskyActorProfile.Record>> {
+    const record: AppBskyActorProfile.Record = {
+        $type: "app.bsky.actor.profile",
+        displayName: "Test",
+        createdAt: new Date().toISOString()
+    }
+
+    return await getRefAndRecord(
+        record,
+        testSuite,
+        {
+            did,
+            collection: record.$type,
+        }
+    )
+}
+
+
+export async function createTestUser(ctx: AppContext, handle: string, testSuite: string) {
+    const did = generateUserDid(testSuite)
+    await ctx.redisCache.resolver.setHandle(did, handle)
+    const caProfile = await getCAProfileRefAndRecord(did, testSuite)
+    const bskyProfile = await getBskyProfileRefAndRecord(did, testSuite)
+
+    await processRecordsInTest(ctx, [caProfile, bskyProfile])
+    return did
+}
+
+
 export async function createTestContext(): Promise<AppContext> {
     const ioredis = setupRedis(1)
     const logger = new Logger("test")
     const mirrorId = "test"
+    const redisCache = new RedisCache(ioredis, mirrorId, logger)
     const ctx: AppContext = {
         logger,
         kysely: setupKysely(process.env.TEST_DB),
         ioredis,
-        resolver: setupResolver(ioredis),
+        resolver: setupResolver(redisCache),
         mirrorId,
         worker: new MockCAWorker(logger),
         storage: undefined,
         xrpc: undefined,
         oauthClient: undefined,
-        redisCache: new RedisCache(ioredis, mirrorId, logger)
+        redisCache
     }
 
     const result = await sql<{ dbName: string }>`SELECT current_database() as "dbName"`.execute(ctx.kysely);
@@ -123,16 +170,12 @@ export async function cleanUPTestDataFromDB(ctx: AppContext, testSuite: string) 
     const testUsers = await ctx.kysely
         .selectFrom("User")
         .select("did")
-        .where("did", "ilike", `% ${testSuite} %`)
+        .where("did", "ilike", `%${testSuite}%`)
         .execute()
 
-    for(let i = 0; i < testUsers.length; i++){
-        try {
-            await deleteUser(ctx, testUsers[i].did)
-        } catch (err) {
-            ctx.logger.pino.error({i, error: err}, "couldn't delete user")
-        }
-    }
+    ctx.logger.pino.info({testUsers, testSuite}, "clearing test users")
+
+    await deleteUsersInTest(ctx, testUsers.map(t => t.did))
 }
 
 export async function cleanUpAfterTests(ctx: AppContext) {
@@ -271,6 +314,76 @@ export function getRepostRefAndRecord(ref: ATProtoStrongRef, created_at: Date = 
 }
 
 
+import {ArCabildoabiertoWikiTopicVersion} from "#/lex-api/index.js"
+import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor.js";
+
+
+async function getTopicVersionRecord(ctx: AppContext, topicId: string, text: string, created_at: Date, authorId: string): Promise<ArCabildoabiertoWikiTopicVersion.Record> {
+    const cid = await generateCid(text)
+    const mimeType = "text/plain"
+    const blob = new BlobRef(
+        CID.parse(cid),
+        mimeType,
+        text.length
+    )
+    await ctx.ioredis.set(getBlobKey({cid, authorId}), text)
+
+    return {
+        $type: "ar.cabildoabierto.wiki.topicVersion",
+        id: topicId,
+        text: blob,
+        format: "markdown",
+        createdAt: created_at.toISOString(),
+    }
+}
+
+
+export async function getTopicVersionRefAndRecord(ctx: AppContext, topicId: string, text: string, created_at: Date, authorId: string, testSuite: string): Promise<RefAndRecord<ArCabildoabiertoWikiTopicVersion.Record>> {
+    const record = await getTopicVersionRecord(
+        ctx,
+        topicId,
+        text,
+        created_at,
+        authorId
+    )
+
+    return getRefAndRecord(
+        record,
+        testSuite,
+        {
+            collection: "ar.cabildoabierto.wiki.topicVersion"
+        }
+    )
+}
+
+
+async function getAcceptVoteRecord(ctx: AppContext, subjectRef: ATProtoStrongRef, created_at: Date): Promise<ArCabildoabiertoWikiVoteAccept.Record> {
+    return {
+        $type: "ar.cabildoabierto.wiki.voteAccept",
+        subject: subjectRef,
+        createdAt: created_at.toISOString()
+    }
+}
+
+
+export async function getAcceptVoteRefAndRecord(ctx: AppContext, subjectRef: ATProtoStrongRef, created_at: Date, authorId: string, testSuite: string) {
+    const record = await getAcceptVoteRecord(
+        ctx,
+        subjectRef,
+        created_at
+    )
+
+    return getRefAndRecord(
+        record,
+        testSuite,
+        {
+            did: authorId,
+            collection: "ar.cabildoabierto.wiki.voteAccept"
+        }
+    )
+}
+
+
 export function getLikeRefAndRecord(ref: ATProtoStrongRef, created_at: Date = new Date(), testSuite: string) {
     const record = getLikeRecord(ref, created_at)
 
@@ -284,9 +397,30 @@ export function getLikeRefAndRecord(ref: ATProtoStrongRef, created_at: Date = ne
 }
 
 
+export async function deleteUsersInTest(ctx: AppContext, dids: string[]) {
+    for(const d of dids) {
+        try {
+            await deleteUser(ctx, d)
+        } catch (err) {
+            ctx.logger.pino.error({did: d, error: err}, "couldn't delete user")
+        }
+    }
+    await ctx!.worker?.runAllJobs()
+}
+
+
 export async function processRecordsInTest(ctx: AppContext, records: RefAndRecord[]) {
     for(const r of records) {
         const processor = getRecordProcessor(ctx, getCollectionFromUri(r.ref.uri))
+        await processor.process([r])
+    }
+    await ctx!.worker?.runAllJobs()
+}
+
+
+export async function deleteRecordsInTest(ctx: AppContext, records: string[]) {
+    for(const r of records) {
+        const processor = getDeleteProcessor(ctx, getCollectionFromUri(r))
         await processor.process([r])
     }
     await ctx!.worker?.runAllJobs()

@@ -1,11 +1,14 @@
 import {ATProtoStrongRef} from "#/lib/types.js";
-import {SessionAgent} from "#/utils/session-agent.js";
+import {BaseAgent, SessionAgent} from "#/utils/session-agent.js";
 import {AppContext} from "#/setup.js";
-import {getUri} from "#/utils/uri.js";
-import {CAHandler} from "#/utils/handler.js";
+import {getCollectionFromUri, getDidFromUri, getUri} from "#/utils/uri.js";
+import {CAHandler, CAHandlerNoAuth} from "#/utils/handler.js";
 import {addReaction, removeReactionAT} from "#/services/reactions/reactions.js";
 import {Record as VoteAcceptRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept.js"
 import {Record as VoteRejectRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteReject.js"
+import {ArCabildoabiertoWikiDefs} from "#/lex-api/index.js"
+import {Dataplane} from "#/services/hydration/dataplane.js";
+import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
 
 export type TopicVoteType = "ar.cabildoabierto.wiki.voteAccept" | "ar.cabildoabierto.wiki.voteReject"
 
@@ -88,4 +91,72 @@ export const cancelEditVote: CAHandler<{
     const {collection, rkey} = params
     const uri = getUri(agent.did, collection, rkey)
     return await removeReactionAT(ctx, agent, uri)
+}
+
+
+export async function getTopicVersionVotes(ctx: AppContext, agent: BaseAgent, uri: string) {
+    const reactions = await ctx.kysely
+        .selectFrom("Reaction")
+        .innerJoin("Record", "Record.uri", "Reaction.uri")
+        .where("Reaction.subjectId","=", uri)
+        .where("Record.collection", "in", [
+            "ar.cabildoabierto.wiki.voteAccept",
+            "ar.cabildoabierto.wiki.voteReject"
+        ])
+        .select([
+            "Reaction.uri",
+            "Record.cid",
+            "Reaction.subjectId",
+            "Reaction.subjectCid"
+        ])
+        .orderBy("Record.authorId")
+        .orderBy("Record.created_at_tz asc")
+        .distinctOn("Record.authorId")
+        .execute()
+
+    ctx.logger.pino.info({uri, reactions}, "getting topic version votes")
+
+    const votes = reactions
+        .filter(r => isTopicVote(getCollectionFromUri(r.uri)))
+        .map(r => r.cid && r.subjectCid && r.subjectId ? {...r, subjectId: r.subjectId, subjectCid: r.subjectCid, cid: r.cid} : null)
+        .filter(r => r != null)
+    ctx.logger.pino.info({votes}, "votes")
+
+    const users = votes.map(v => getDidFromUri(v.uri))
+    const dataplane = new Dataplane(ctx, agent)
+    await dataplane.fetchProfileViewBasicHydrationData(users)
+    ctx.logger.pino.info( "fetched voters")
+
+    const voteViews: (ArCabildoabiertoWikiDefs.VoteView | null)[] = votes.map(v => {
+        const author = hydrateProfileViewBasic(ctx, getDidFromUri(v.uri), dataplane)
+        if(!author) {
+            ctx.logger.pino.warn({uri: v.uri}, "author of vote not found")
+            return null
+        }
+        return {
+            $type: "ar.cabildoabierto.wiki.defs#voteView",
+            uri: v.uri,
+            cid: v.cid,
+            subject: {
+                uri: v.subjectId,
+                cid: v.subjectCid
+            },
+            author
+        }
+    })
+
+    ctx.logger.pino.info({voteViews}, "vote views")
+
+    const res = voteViews.filter(v => v != null)
+
+    ctx.logger.pino.info({res}, "retrning votes")
+    return res
+}
+
+
+export const getTopicVersionVotesHandler: CAHandlerNoAuth<{params: {did: string, rkey: string}}, ArCabildoabiertoWikiDefs.VoteView[]> = async (ctx, agent, {params}) => {
+    const uri = getUri(params.did, "ar.cabildoabierto.wiki.topicVersion", params.rkey)
+    const votes = await getTopicVersionVotes(ctx, agent, uri)
+
+    return {data: votes}
 }

@@ -41,8 +41,7 @@ export async function handleToDid(ctx: AppContext, agent: Agent, handleOrDid: st
         try {
             return await ctx.resolver.resolveHandleToDid(handleOrDid)
         } catch (err) {
-            console.error("Error in handleToDid:", handleOrDid)
-            console.error(err)
+            ctx.logger.pino.error({error: err, handleOrDid}, "error in handleToDid")
             return null
         }
     }
@@ -356,7 +355,6 @@ type Tutorial = "topic-minimized" | "topic-normal" | "home" | "topics"
 export const setSeenTutorial: CAHandler<{ params: { tutorial: Tutorial } }, {}> = async (ctx, agent, {params}) => {
     const {tutorial} = params
     const did = agent.did
-    console.log("setting seen tutorial", tutorial)
     if (tutorial == "topic-minimized") {
         await ctx.kysely.updateTable("User").set("seenTopicMinimizedTutorial", true).where("did", "=", did).execute()
     } else if (tutorial == "home") {

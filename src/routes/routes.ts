@@ -39,7 +39,7 @@ import {deleteCAProfile, deleteRecordHandler, deleteRecordsHandler} from "#/serv
 import {getCategoriesGraph, getCategoryGraph} from "#/services/wiki/graph.js";
 import {createTopicVersion} from "#/services/write/topic.js";
 import path from "path";
-import {cancelEditVote, voteEdit} from "#/services/wiki/votes.js";
+import {cancelEditVote, getTopicVersionVotesHandler, voteEdit} from "#/services/wiki/votes.js";
 import { adminRoutes } from './admin-routes.js';
 import { fetchURLMetadataHandler, getContentMetadata } from '#/services/write/metadata.js';
 import {getDataset, getDatasets, getTopicsDatasetHandler } from '#/services/dataset/read.js';
@@ -430,6 +430,8 @@ export const createRouter = (ctx: AppContext) => {
     ))
 
     router.post("/unsubscribe", makeHandlerNoAuth(ctx, unsubscribeHandler))
+
+    router.get("/votes/:did/:rkey", makeHandlerNoAuth(ctx, getTopicVersionVotesHandler))
 
     router.use(adminRoutes(ctx))
 

@@ -69,14 +69,24 @@ export const deleteUserHandler: CAHandler<{params: {handleOrDid: string}}> = asy
 
 
 export async function deleteUser(ctx: AppContext, did: string) {
-    await deleteRecordsForAuthor({ctx, did: did, atproto: false})
+    try {
+        await deleteRecordsForAuthor({ctx, did: did, atproto: false})
 
-    await ctx.kysely.transaction().execute(async trx => {
-        await trx.deleteFrom("ReadSession").where("userId", "=", did).execute()
-        await trx.deleteFrom("Notification").where("userNotifiedId", "=", did).execute()
-        await trx.deleteFrom("Blob").where("authorId", "=", did).execute()
-        await trx.deleteFrom("User").where("did", "=", did).execute()
-    })
+        await ctx.kysely.transaction().execute(async trx => {
+            await trx.deleteFrom("ReadSession").where("userId", "=", did).execute()
+            await trx.deleteFrom("Notification").where("userNotifiedId", "=", did).execute()
+            await trx.deleteFrom("Blob").where("authorId", "=", did).execute()
+            await trx.deleteFrom("User").where("did", "=", did).execute()
+        })
+    } catch (err) {
+        const records = await ctx.kysely
+            .selectFrom("Record")
+            .where("authorId", "=", did)
+            .select("uri")
+            .limit(10)
+            .execute()
+        ctx.logger.pino.info({error: err, did, remainingRecords: records}, "something went wrong when deleting a user")
+    }
     // TO DO: Revisar que cache hace falta actualizar
 }
 

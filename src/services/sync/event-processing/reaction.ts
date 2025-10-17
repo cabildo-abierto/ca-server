@@ -30,23 +30,20 @@ const columnMap: Record<ReactionType, keyof DB['Record']> = {
     'ar.cabildoabierto.wiki.voteReject': 'uniqueRejectsCount',
 }
 
-
 function isLikeOrRepost(r: RefAndRecord) {
     return ["app.bsky.feed.like", "app.bsky.feed.repost"].includes(getCollectionFromUri(r.ref.uri))
 }
 
 export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
-
     async addRecordsToDB(records: RefAndRecord<ReactionRecord>[], reprocess: boolean = false) {
         try {
             const res = await this.ctx.kysely.transaction().execute(async (trx) => {
                 const reactionType = getCollectionFromUri(records[0].ref.uri)
                 if (!isReactionType(reactionType)) return
 
-                this.ctx.logger.pino.info("processing records")
+                this.ctx.logger.pino.info({records}, "inserting reaction records")
 
                 await this.processRecordsBatch(trx, records)
-                this.ctx.logger.pino.info("processing dirty records")
 
                 const subjects = records.map(r => ({uri: r.record.subject.uri, cid: r.record.subject.cid}))
                 await this.processDirtyRecordsBatch(trx, subjects)
@@ -57,7 +54,7 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
                     subjectCid: r.record.subject.cid
                 }))
 
-                this.ctx.logger.pino.info("processing reactions")
+                this.ctx.logger.pino.info({reactions}, "processing reactions")
                 await trx
                     .insertInto("Reaction")
                     .values(reactions)
@@ -75,32 +72,32 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
                     reactionType: getCollectionFromUri(r.ref.uri),
                     id: uuidv4()
                 }))
-                this.ctx.logger.pino.info("processing has reacted")
+                this.ctx.logger.pino.info({hasReacted}, "processing has reacted")
 
                 const inserted = await trx
                     .insertInto("HasReacted")
                     .values(hasReacted)
-                    .onConflict(oc => oc.doNothing())
+                    .onConflict(oc => oc.columns(["recordId", "reactionType", "userId"]).doNothing())
                     .returning(['recordId'])
                     .execute()
 
-                this.ctx.logger.pino.info("processing increment")
+                this.ctx.logger.pino.info({inserted}, "inserted in has reacted")
+
                 await this.batchIncrementReactionCounter(trx, reactionType, inserted.map(r => r.recordId))
 
                 if (isTopicVote(reactionType)) {
                     if (isVoteReject(reactionType)) {
-                        const votes: { uri: string, message: string | null, labels: string[] }[] = records.map(r => {
+                        const votes: { uri: string, labels: string[] }[] = records.map(r => {
                             if (isVoteReject(r.record)) {
                                 return {
+                                    // TO DO (!!)
                                     uri: r.ref.uri,
-                                    message: r.record.message ?? null,
                                     labels: r.record.labels ?? []
                                 }
                             }
                             return null
                         }).filter(v => v != null)
 
-                        this.ctx.logger.pino.info("processing vote reject")
                         await trx
                             .insertInto("VoteReject")
                             .values(votes)
@@ -113,7 +110,6 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
                             .execute()
                     }
 
-                    this.ctx.logger.pino.info("processing tv")
                     if(records.length > 0 && inserted.length > 0){
                         let topicVotes = (await trx
                             .selectFrom("TopicVersion")
@@ -233,49 +229,67 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
         const type = getCollectionFromUri(uris[0])
         if (!isReactionCollection(type)) return
 
+        this.ctx.logger.pino.info({uris}, "deleting reactions")
+
         const {topicIds, subjectIds} = await this.ctx.kysely.transaction().execute(async (db) => {
-            const subjectIds = (await db
-                .selectFrom("Reaction")
-                .select(["subjectId", "uri"])
-                .where("uri", "in", uris)
-                .execute())
-                .map(e => e.subjectId != null ? {...e, subjectId: e.subjectId} : null)
-                .filter(x => x != null)
-
-            if (subjectIds.length == 0) return {}
-
+            let subjectIds: {subjectId: string, uri: string}[] = []
             try {
-                const deletedSubjects = await db
-                    .deleteFrom("HasReacted")
-                    .where("reactionType", "=", type)
+                subjectIds = (await db
+                    .selectFrom("Reaction")
+                    .select(["subjectId", "uri"])
+                    .where("uri", "in", uris)
+                    .execute())
+                    .map(e => e.subjectId != null ? {...e, subjectId: e.subjectId} : null)
+                    .filter(x => x != null)
+            } catch (err) {
+                this.ctx.logger.pino.error({error: err, subjectIds}, "error getting subject ids")
+            }
+
+            if (subjectIds.length == 0) {
+                this.ctx.logger.pino.info("got no subject ids")
+            }
+
+            let sameSubjectUris: string[] = uris
+            if(subjectIds.length > 0){
+                try {
+                    const deletedSubjects = await db
+                        .deleteFrom("HasReacted")
+                        .where("reactionType", "=", type)
+                        .where(({eb, refTuple, tuple}) =>
+                            eb(
+                                refTuple("HasReacted.recordId", 'HasReacted.userId'),
+                                'in',
+                                subjectIds.map(e => tuple(e.subjectId, getDidFromUri(e.uri)))
+                            )
+                        )
+                        .returning(["HasReacted.recordId"])
+                        .execute()
+
+                    await this.batchDecrementReactionCounter(db, type, deletedSubjects.map(u => u.recordId))
+                } catch (error) {
+                    this.ctx.logger.pino.error({error}, "error deleting from has reacted")
+                }
+                // las reacciones del mismo autor al mismo record
+
+                sameSubjectUris.push(...(await db
+                    .selectFrom("Reaction")
+                    .innerJoin("Record", "Record.uri", "Reaction.uri")
+                    .select("Record.uri")
+                    .where("Record.collection", "=", type)
                     .where(({eb, refTuple, tuple}) =>
                         eb(
-                            refTuple("HasReacted.recordId", 'HasReacted.userId'),
+                            refTuple("Reaction.subjectId", 'Record.authorId'),
                             'in',
                             subjectIds.map(e => tuple(e.subjectId, getDidFromUri(e.uri)))
                         )
                     )
-                    .returning(["HasReacted.recordId"])
-                    .execute()
+                    .execute()).map(u => u.uri))
 
-                await this.batchDecrementReactionCounter(db, type, deletedSubjects.map(u => u.recordId))
-            } catch {
+                sameSubjectUris = unique(sameSubjectUris)
+
+                this.ctx.logger.pino.info({sameSubjectUris}, "same subject uris")
             }
 
-            // las reacciones del mismo autor al mismo record
-            const sameSubjectUris = (await db
-                .selectFrom("Reaction")
-                .innerJoin("Record", "Record.uri", "Reaction.uri")
-                .select("Record.uri")
-                .where("Record.collection", "=", type)
-                .where(({eb, refTuple, tuple}) =>
-                    eb(
-                        refTuple("Reaction.subjectId", 'Record.authorId'),
-                        'in',
-                        subjectIds.map(e => tuple(e.subjectId, getDidFromUri(e.uri)))
-                    )
-                )
-                .execute()).map(u => u.uri)
 
             if (sameSubjectUris.length > 0) {
                 if (type == "ar.cabildoabierto.wiki.voteReject") {
@@ -291,26 +305,31 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
 
                 await db.deleteFrom("Reaction").where("uri", "in", sameSubjectUris).execute()
 
-                //for (const u of sameSubjectUris) { // por qué era esto?
-                //    await db.deleteFrom("Record").where("uri", "in", [u]).execute()
-                //}
                 await db.deleteFrom("Record").where("uri", "in", sameSubjectUris).execute()
             }
 
-            if (type == "ar.cabildoabierto.wiki.voteReject" || type == "ar.cabildoabierto.wiki.voteAccept") {
-                const topicIds = (await db
-                    .selectFrom("TopicVersion")
-                    .select("topicId")
-                    .where("uri", "in", subjectIds.map(s => s.subjectId))
-                    .execute()).map(t => t.topicId)
+            if (subjectIds.length > 0 && (type == "ar.cabildoabierto.wiki.voteReject" || type == "ar.cabildoabierto.wiki.voteAccept")) {
+                this.ctx.logger.pino.info("getting topic ids")
+
+                let topicIds: string[] = []
+                try {
+                    topicIds = (await db
+                        .selectFrom("TopicVersion")
+                        .select("topicId")
+                        .where("uri", "in", subjectIds.map(s => s.subjectId))
+                        .execute()).map(t => t.topicId)
+                } catch (error) {
+                    this.ctx.logger.pino.error({error}, "error getting topic ids")
+                }
+
+                this.ctx.logger.pino.info({topicIds}, "got topic ids")
 
                 if (topicIds.length > 0) {
-                    await db.transaction().execute(async trx => {
-                        await updateTopicsCurrentVersionBatch(this.ctx, trx, topicIds)
-                    })
+                    await updateTopicsCurrentVersionBatch(this.ctx, db, topicIds)
                     return {topicIds, subjectIds}
                 }
             }
+            this.ctx.logger.pino.info("deleting reactions transaction finished correctly")
             return {subjectIds}
         })
         if (topicIds && topicIds.length > 0) {
@@ -328,7 +347,6 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
             )
         }
     }
-
 
     async batchDecrementReactionCounter(
         trx: Transaction<DB>,

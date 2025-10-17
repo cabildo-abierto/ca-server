@@ -14,6 +14,7 @@ export function getDeleteProcessor(ctx: AppContext, collection: string) {
     if (processor) {
         return new processor(ctx)
     } else {
+        ctx.logger.pino.warn({collection}, "delete processor not found")
         return new DeleteProcessor(ctx)
     }
 }
