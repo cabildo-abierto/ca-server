@@ -384,7 +384,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get("/conversations/list", makeHandler(ctx, getConversations))
 
-    router.get("/conversation/:convoId", makeHandler(ctx, getConversation))
+    router.get("/conversation/:convoIdOrHandle", makeHandler(ctx, getConversation))
 
     router.post("/send-message", makeHandler(ctx, sendMessage))
 

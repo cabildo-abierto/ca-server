@@ -47,6 +47,7 @@ import {AppBskyActorDefs} from "@atproto/api"
 import {AppBskyFeedPost, ArCabildoabiertoActorDefs} from "#/lex-api/index.js"
 import {CAProfileDetailed, CAProfile} from "#/lib/types.js";
 import {hydrateProfileViewDetailed} from "#/services/hydration/profile.js";
+import logger from "@atproto/xrpc-server/dist/logger.js";
 
 
 export type FeedElementQueryResult = {
@@ -921,6 +922,9 @@ export class Dataplane {
         )
         const t2 = Date.now()
         this.ctx.logger.logTimes(`fetch users data from bsky (N = ${dids.length})`, [t1, t2])
+
+        this.ctx.logger.pino.info("--------------------------------------------------------------------------------")
+        this.ctx.logger.pino.info({profiles, dids}, `fetching profile data from bsky`)
     }
 
 
@@ -978,6 +982,7 @@ export class Dataplane {
             return profiles[i] == null
         })
         if(missedDids.length == 0) return
+
 
         await Promise.all([
             this.fetchProfileViewDetailedHydrationDataFromCA(missedDids),

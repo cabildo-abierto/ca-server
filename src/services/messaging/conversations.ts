@@ -6,6 +6,7 @@ import {
     MessageView
 } from "@atproto/api/dist/client/types/chat/bsky/convo/defs.js";
 import {$Typed} from "@atproto/api";
+import {handleToDid} from "#/services/user/users.js";
 
 
 export const getConversations: CAHandler<{}, ConvoView[]> = async (ctx, agent, params) => {
@@ -32,22 +33,41 @@ export type Conversation = {
 }
 
 export const getConversation: CAHandler<{
-    params: { convoId: string }
+    params: { convoIdOrHandle: string }
 }, Conversation> = async (ctx, agent, {params}) => {
     const chatAgent = agent.bsky.withProxy("bsky_chat", "did:web:api.bsky.chat")
+    const did = await handleToDid(ctx, agent, params.convoIdOrHandle)
 
-    const {convoId} = params
-    const [{data}, {data: convData}] = await Promise.all([
-        chatAgent.chat.bsky.convo.getMessages({convoId}),
-        chatAgent.chat.bsky.convo.getConvo({convoId})
-    ])
-
-    return {
-        data: {
-            messages: data.messages,
-            conversation: convData.convo
+    if (did == null) {
+        const convoId = params.convoIdOrHandle
+        const [{data}, {data: convData}] = await Promise.all([
+            chatAgent.chat.bsky.convo.getMessages({convoId}),
+            chatAgent.chat.bsky.convo.getConvo({convoId})
+        ])
+        return {
+            data: {
+                messages: data.messages,
+                conversation: convData.convo
+            }
         }
     }
+
+    else {
+        const convoResponse = await chatAgent.chat.bsky.convo.getConvoForMembers({members: [did]})
+        if (!convoResponse.success) {
+            return {error: "No se encontró la conversación."}
+        }
+        const convo = convoResponse.data.convo
+        const convoId = convo.id
+        const messages = await chatAgent.chat.bsky.convo.getMessages({convoId})
+        return {
+            data: {
+                messages: messages.data.messages,
+                conversation: convo
+            }
+        }
+    }
+
 }
 
 
@@ -55,8 +75,8 @@ export const createConversation: CAHandler<{params: {did: string}}, {convoId: st
     const {did} = params
     const chatAgent = agent.bsky.withProxy("bsky_chat", "did:web:api.bsky.chat")
     try {
-        const convo = await chatAgent.chat.bsky.convo.getConvoForMembers({members: [did]})
-        return {data: {convoId: convo.data.convo.id}}
+        const convoResponse = await chatAgent.chat.bsky.convo.getConvoForMembers({members: [did]})
+        return {data: {convoId: convoResponse.data.convo.id}}
     } catch (err) {
         console.log("No se pudo iniciar la conversación")
         console.log(err)
