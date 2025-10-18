@@ -38,7 +38,7 @@ async function getThreadRepliesSkeletonForPostFromBsky(ctx: AppContext, agent: A
     try {
         const {data} = await agent.bsky.app.bsky.feed.getPostThread({uri})
         const thread = isThreadViewPost(data.thread) ? data.thread : null
-        ctx.logger.pino.info({threadPost: thread?.post}, "thread")
+
         if(thread){
             dataplane.saveDataFromPostThread(thread, true)
         }

@@ -268,7 +268,6 @@ export function notFoundPost(uri: string): $Typed<NotFoundPost> {
 
 
 function hydrateFeedViewContentReason(ctx: AppContext, subjectUri: string, reason: SkeletonFeedPost["reason"], data: Dataplane): FeedViewContent["reason"] | null {
-    ctx.logger.pino.info({reason, subjectUri}, "hydrating reason")
     if (!reason) return null
     if (isSkeletonReasonRepost(reason)) {
         const user = hydrateProfileViewBasic(ctx, getDidFromUri(reason.repost), data)

@@ -21,8 +21,8 @@ import {TopicVersionQueryResultBasic} from "#/services/wiki/topics.js";
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
 import {
     FeedViewPost,
-    isPostView, isReasonRepost,
-    isSkeletonReasonRepost, isThreadViewPost,
+    isPostView,
+    isThreadViewPost,
     PostView, ThreadViewPost
 } from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
 import {fetchTextBlobs} from "#/services/blob.js";
@@ -45,6 +45,7 @@ import {AppBskyFeedPost, ArCabildoabiertoActorDefs} from "#/lex-api/index.js"
 import {CAProfileDetailed, CAProfile} from "#/lib/types.js";
 import {hydrateProfileViewDetailed} from "#/services/hydration/profile.js";
 import {AppBskyEmbedRecord, AppBskyEmbedRecordWithMedia} from "@atproto/api"
+import {isSkeletonReasonRepost} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
 
 
 export type FeedElementQueryResult = {
@@ -583,6 +584,14 @@ export class Dataplane {
         ])
     }
 
+    storeBskyBasicUser(user: ProfileViewBasic) {
+
+        this.bskyBasicUsers.set(user.did, {
+            ...user,
+            $type: "app.bsky.actor.defs#profileViewBasic"
+        })
+    }
+
     storeFeedViewPosts(feed: FeedViewPost[]) {
         feed.forEach(f => {
             this.storeBskyPost(f.post.uri, f.post)
@@ -595,7 +604,8 @@ export class Dataplane {
                 }
             }
             if (f.reason) {
-                if (isReasonRepost(f.reason) && f.post.uri) {
+                if (AppBskyFeedDefs.isReasonRepost(f.reason) && f.post.uri) {
+                    this.storeBskyBasicUser(f.reason.by)
                     this.storeRepost({
                         created_at: new Date(f.reason.indexedAt),
                         subjectId: f.post.uri
