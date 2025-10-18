@@ -19,12 +19,12 @@
         },
         "reply": {
           "type": "ref",
-          "ref": "app.bsky.feed.defs#replyRef"
+          "ref": "#replyRef"
         },
         "reason": {
           "type": "union",
           "refs": [
-            "app.bsky.feed.defs#reasonRepost",
+            "#reasonRepost",
             "app.bsky.feed.defs#reasonPin"
           ]
         },
@@ -33,6 +33,14 @@
           "description": "Context provided by feed generator that may be passed back alongside interactions.",
           "maxLength": 2000
         }
+      }
+    },
+    "reasonRepost": {
+      "type": "object",
+      "required": ["by", "indexedAt"],
+      "properties": {
+        "by": { "type": "ref", "ref": "ar.cabildoabierto.actor.defs#profileViewBasic" },
+        "indexedAt": { "type": "string", "format": "datetime" }
       }
     },
     "threadViewContent": {
@@ -76,6 +84,37 @@
         }
       }
     },
+    "replyRef": {
+      "type": "object",
+      "required": ["root", "parent"],
+      "properties": {
+        "root": {
+          "type": "union",
+          "refs": [
+            "ar.cabildoabierto.feed.defs#postView",
+            "ar.cabildoabierto.feed.defs#articleView",
+            "ar.cabildoabierto.wiki.topicVersion#topicViewBasic",
+            "app.bsky.feed.defs#notFoundPost",
+            "app.bsky.feed.defs#blockedPost"
+          ]
+        },
+        "parent": {
+          "type": "union",
+          "refs": [
+            "#postView",
+            "#articleView",
+            "ar.cabildoabierto.wiki.topicVersion#topicViewBasic",
+            "app.bsky.feed.defs#notFoundPost",
+            "app.bsky.feed.defs#blockedPost"
+          ]
+        },
+        "grandparentAuthor": {
+          "type": "ref",
+          "ref": "app.bsky.actor.defs#profileViewBasic",
+          "description": "When parent is a reply to another post, this is the author of that post."
+        }
+      }
+    },
     "postView": {
       "type": "object",
       "required": [
@@ -107,8 +146,8 @@
             "app.bsky.embed.images#view",
             "app.bsky.embed.video#view",
             "app.bsky.embed.external#view",
-            "app.bsky.embed.record#view",
-            "app.bsky.embed.recordWithMedia#view",
+            "ar.cabildoabierto.embed.record#view",
+            "ar.cabildoabierto.embed.recordWithMedia#view",
             "ar.cabildoabierto.embed.selectionQuote#view",
             "ar.cabildoabierto.embed.visualization#view"
           ]

@@ -1,22 +1,21 @@
-import {$Typed} from "@atproto/api";
+import {$Typed, AppBskyFeedDefs} from "@atproto/api";
 import {
     ArticleView,
     FeedViewContent,
     FullArticleView,
     isFeedViewContent,
-    isPostView,
+    isPostView, isReasonRepost,
     isThreadViewContent,
     PostView,
     ThreadViewContent
 } from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
 import {getCollectionFromUri, getDidFromUri, isArticle, isDataset, isPost, isTopicVersion} from "#/utils/uri.js";
-import {isReasonRepost, NotFoundPost, SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs.js";
+import {NotFoundPost, SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs.js";
 import {FeedSkeleton} from "#/services/feed/feed.js";
 import {decompress} from "#/utils/compression.js";
 import {getAllText} from "#/services/wiki/diff.js";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post.js"
 import {listOrderDesc, sortByKey} from "#/utils/arrays.js";
-import {isPostView as isBskyPostView} from "#/lex-api/types/app/bsky/feed/defs.js"
 import {Dataplane} from "#/services/hydration/dataplane.js";
 import {hydrateEmbedViews, hydrateTopicViewBasicFromUri} from "#/services/wiki/topics.js";
 import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
@@ -33,7 +32,7 @@ import {
 import {hydrateProfileViewBasic} from "#/services/hydration/profile.js"
 import removeMarkdown from "remove-markdown"
 import {AppContext} from "#/setup.js";
-import {hydratePostView} from "#/services/hydration/post-view.js";
+import {PostViewHydrator} from "#/services/hydration/post-view.js";
 
 
 export function hydrateViewer(uri: string, data: Dataplane): { repost?: string, like?: string } {
@@ -222,7 +221,7 @@ export function hydrateContent(ctx: AppContext, uri: string, data: Dataplane, fu
 } {
     const collection = getCollectionFromUri(uri)
     if (isPost(collection)) {
-        return hydratePostView(ctx, uri, data)
+        return {data: new PostViewHydrator(ctx, data).hydrate(uri) ?? undefined}
     } else if (isArticle(collection)) {
         return full ? hydrateFullArticleView(ctx, uri, data) : hydrateArticleView(ctx, uri, data)
     } else if (isTopicVersion(collection)) {
@@ -261,10 +260,10 @@ function hydrateFeedViewContentReason(ctx: AppContext, subjectUri: string, reaso
         }
         const indexedAt = repostData.created_at.toISOString()
         return {
-            $type: "app.bsky.feed.defs#reasonRepost",
+            $type: "ar.cabildoabierto.feed.defs#reasonRepost",
             by: {
                 ...user,
-                $type: "app.bsky.actor.defs#profileViewBasic",
+                $type: "ar.cabildoabierto.actor.defs#profileViewBasic",
             },
             indexedAt
         }
@@ -333,6 +332,8 @@ type ThreadViewContentReply = $Typed<ThreadViewContent> | $Typed<NotFoundPost> |
 
 
 export const threadRepliesSortKey = (authorId: string) => (r: ThreadViewContentReply) => {
+
+
     return isThreadViewContent(r) && isPostView(r.content) && r.content.author.did == authorId ?
         [1, new Date(r.content.indexedAt).getTime()] : [0, 0]
 }
@@ -340,7 +341,7 @@ export const threadRepliesSortKey = (authorId: string) => (r: ThreadViewContentR
 
 export const threadPostRepliesSortKey = (authorId: string) => (r: ThreadViewPost) => {
     return isThreadViewPost(r) &&
-    isBskyPostView(r.post) &&
+    AppBskyFeedDefs.isPostView(r.post) &&
     r.post.author.did == authorId ?
         [1, -new Date(r.post.indexedAt).getTime()] : [0, 0]
 }

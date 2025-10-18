@@ -6,9 +6,8 @@ import {
     GetSkeletonProps
 } from "#/services/feed/feed.js";
 import {rootCreationDateSortKey} from "#/services/feed/utils.js";
-import {FeedViewPost, isFeedViewPost, isReasonRepost} from "#/lex-api/types/app/bsky/feed/defs.js";
-import {articleCollections, getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri.js";
-import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri.js";
+import {FeedViewContent, isFeedViewContent, isReasonRepost} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
 import {isKnownContent} from "#/utils/type-utils.js";
 import {isPostView as isCAPostView} from "#/lex-server/types/ar/cabildoabierto/feed/defs.js";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post.js";
@@ -17,7 +16,7 @@ import {$Typed} from "@atproto/api";
 import {isTopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
 import {FeedFormatOption} from "#/services/feed/inicio/discusion.js";
 import {FollowingFeedSkeletonKey} from "#/services/redis/cache.js";
-import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
+import {FeedViewPost, isFeedViewPost, SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
 
 export type RepostQueryResult = {
     uri?: string
