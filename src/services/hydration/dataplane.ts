@@ -116,8 +116,8 @@ export class Dataplane {
     agent: SessionAgent | NoSessionAgent
     caContents: Map<string, FeedElementQueryResult> = new Map()
     bskyPosts: Map<string, AppBskyFeedDefs.PostView> = new Map()
-    likes: Map<string, string | null> = new Map()
-    reposts: Map<string, RepostQueryResult | null> = new Map() // mapea uri del post a información del repost asociado
+    likes: Map<string, string[]> = new Map()
+    reposts: Map<string, RepostQueryResult[]> = new Map() // mapea uri del post a información del repost asociado
     topicsByUri: Map<string, TopicVersionQueryResultBasic> = new Map()
     textBlobs: Map<string, string> = new Map()
     datasets: Map<string, DatasetQueryResult> = new Map()
@@ -254,7 +254,6 @@ export class Dataplane {
             ])
             .execute()
 
-
         contents.forEach(c => {
             if (c.cid) {
                 this.caContents.set(c.uri, {
@@ -272,7 +271,6 @@ export class Dataplane {
     }
 
     async fetchTextBlobs(blobs: BlobRef[]) {
-        this.ctx.logger.pino.info({blobs}, "fetching text blobs")
         if(blobs.length == 0) return
         const batchSize = 100
         let texts: (string | null)[] = []
@@ -418,7 +416,7 @@ export class Dataplane {
             this.ctx.logger.logTimes("fetch reposts", [t1, t2])
             reposts.forEach(r => {
                 if (r.subjectId) {
-                    this.reposts.set(r.subjectId, r)
+                    this.storeRepost({...r, subjectId: r.subjectId})
                 }
             })
         }
@@ -534,10 +532,10 @@ export class Dataplane {
         reactions.forEach(l => {
             if (l.subjectId) {
                 if (getCollectionFromUri(l.uri) == "app.bsky.feed.like") {
-                    if (!this.likes.has(l.subjectId)) this.likes.set(l.subjectId, l.uri)
+                    if (!this.likes.has(l.subjectId)) this.storeLike(l.subjectId, l.uri)
                 }
                 if (getCollectionFromUri(l.uri) == "app.bsky.feed.repost") {
-                    if (!this.reposts.has(l.subjectId)) this.reposts.set(l.subjectId, {
+                    if (!this.reposts.has(l.subjectId)) this.storeRepost({
                         uri: l.uri,
                         created_at: null,
                         subjectId: l.subjectId
@@ -545,6 +543,16 @@ export class Dataplane {
                 }
             }
         })
+    }
+
+    storeLike(subjectId: string, likeUri: string) {
+        const cur = this.likes.get(subjectId) ?? []
+        this.likes.set(subjectId, [...cur, likeUri])
+    }
+
+    storeRepost(repost: RepostQueryResult & {subjectId: string}) {
+        const cur = this.reposts.get(repost.subjectId) ?? []
+        this.reposts.set(repost.subjectId, [...cur, repost])
     }
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
@@ -588,7 +596,7 @@ export class Dataplane {
             }
             if (f.reason) {
                 if (isReasonRepost(f.reason) && f.post.uri) {
-                    this.reposts.set(f.post.uri, {
+                    this.storeRepost({
                         created_at: new Date(f.reason.indexedAt),
                         subjectId: f.post.uri
                     })

@@ -3,7 +3,7 @@ import {ProfileViewBasic} from "#/lex-server/types/ar/cabildoabierto/actor/defs.
 import {Dataplane} from "#/services/hydration/dataplane.js";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
 import {Agent} from "#/utils/session-agent.js";
-import {getUri} from "#/utils/uri.js";
+import {getCollectionFromUri, getUri, isArticle, isPost} from "#/utils/uri.js";
 import {PostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
 import {AppContext} from "#/setup.js";
 import {PostViewHydrator} from "#/services/hydration/post-view.js";
@@ -28,18 +28,41 @@ async function getRepostsSkeleton(ctx: AppContext, agent: Agent, uri: string, da
     dids: string[];
     cursor?: string;
 }> {
-    try {
-        const repostsSkeletonResponse = await agent.bsky.app.bsky.feed.getRepostedBy({uri, limit, cursor: cursor})
+    const collection = getCollectionFromUri(uri)
+    ctx.logger.pino.info({uri}, "getting reposts sk")
 
-        for (const user of repostsSkeletonResponse.data.repostedBy) {
-            dataplane.bskyBasicUsers.set(user.did, {...user, $type: "app.bsky.actor.defs#profileViewBasic"})
+    if(isPost(collection)) {
+        try {
+            const repostsSkeletonResponse = await agent.bsky.app.bsky.feed.getRepostedBy({uri, limit, cursor: cursor})
+
+            for (const user of repostsSkeletonResponse.data.repostedBy) {
+                dataplane.bskyBasicUsers.set(user.did, {...user, $type: "app.bsky.actor.defs#profileViewBasic"})
+            }
+            return {
+                dids: repostsSkeletonResponse.success ? repostsSkeletonResponse.data.repostedBy.map((value) => value.did) : [],
+                cursor: repostsSkeletonResponse.data.cursor
+            }
+        } catch (error) {
+            ctx.logger.pino.error({error, uri}, "error al obtener reposted by de bluesky")
+            return {
+                dids: [],
+                cursor: undefined
+            }
         }
+    } else if(isArticle(collection)) {
+        const reactions = await ctx.kysely
+            .selectFrom("Reaction")
+            .innerJoin("Record", "Record.uri", "Reaction.uri")
+            .where("Reaction.subjectId", "=", uri)
+            .where("Record.collection", "=", "app.bsky.feed.repost")
+            .select(["Record.authorId as did"])
+            .orderBy("Record.created_at_tz desc")
+            .execute()
         return {
-            dids: repostsSkeletonResponse.success ? repostsSkeletonResponse.data.repostedBy.map((value) => value.did) : [],
-            cursor: repostsSkeletonResponse.data.cursor
+            dids: reactions.map((value) => value.did),
+            cursor: undefined
         }
-    } catch (error) {
-        ctx.logger.pino.error({error, uri}, "error al obtener reposted by de bluesky")
+    } else {
         return {
             dids: [],
             cursor: undefined
