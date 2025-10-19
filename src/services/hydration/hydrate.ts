@@ -336,8 +336,6 @@ export type BlobRef = { cid: string, authorId: string }
 export async function hydrateFeed(ctx: AppContext, skeleton: FeedSkeleton, data: Dataplane): Promise<$Typed<FeedViewContent>[]> {
     await data.fetchFeedHydrationData(skeleton)
 
-    ctx.logger.pino.info({skeleton}, "hydrating feed")
-
     const feed = skeleton
         .map((e) => (hydrateFeedViewContent(ctx, e, data)))
         .filter(x => x != null)
