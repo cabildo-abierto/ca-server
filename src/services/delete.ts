@@ -79,6 +79,8 @@ export async function deleteUser(ctx: AppContext, did: string) {
             await trx.deleteFrom("User").where("did", "=", did).execute()
         })
     } catch (err) {
+        ctx.logger.pino.info({error: err, did}, "error deleting user, getting remaining ercords")
+
         const records = await ctx.kysely
             .selectFrom("Record")
             .where("authorId", "=", did)

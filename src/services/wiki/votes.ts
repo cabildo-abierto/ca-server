@@ -95,6 +95,7 @@ export const cancelEditVote: CAHandler<{
 
 
 export async function getTopicVersionVotes(ctx: AppContext, agent: BaseAgent, uri: string) {
+    ctx.logger.pino.info("getting topic version votes")
     const reactions = await ctx.kysely
         .selectFrom("Reaction")
         .innerJoin("Record", "Record.uri", "Reaction.uri")
@@ -114,18 +115,14 @@ export async function getTopicVersionVotes(ctx: AppContext, agent: BaseAgent, ur
         .distinctOn("Record.authorId")
         .execute()
 
-    ctx.logger.pino.info({uri, reactions}, "getting topic version votes")
-
     const votes = reactions
         .filter(r => isTopicVote(getCollectionFromUri(r.uri)))
         .map(r => r.cid && r.subjectCid && r.subjectId ? {...r, subjectId: r.subjectId, subjectCid: r.subjectCid, cid: r.cid} : null)
         .filter(r => r != null)
-    ctx.logger.pino.info({votes}, "votes")
 
     const users = votes.map(v => getDidFromUri(v.uri))
     const dataplane = new Dataplane(ctx, agent)
     await dataplane.fetchProfileViewBasicHydrationData(users)
-    ctx.logger.pino.info( "fetched voters")
 
     const voteViews: (ArCabildoabiertoWikiDefs.VoteView | null)[] = votes.map(v => {
         const author = hydrateProfileViewBasic(ctx, getDidFromUri(v.uri), dataplane)
@@ -145,12 +142,7 @@ export async function getTopicVersionVotes(ctx: AppContext, agent: BaseAgent, ur
         }
     })
 
-    ctx.logger.pino.info({voteViews}, "vote views")
-
-    const res = voteViews.filter(v => v != null)
-
-    ctx.logger.pino.info({res}, "retrning votes")
-    return res
+    return voteViews.filter(v => v != null)
 }
 
 

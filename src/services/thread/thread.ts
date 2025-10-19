@@ -15,11 +15,10 @@ import {
     threadPostRepliesSortKey,
     ThreadSkeleton
 } from "#/services/hydration/hydrate.js";
-import {isThreadViewPost} from "#/lex-server/types/app/bsky/feed/defs.js";
 import {CAHandlerNoAuth} from "#/utils/handler.js";
 import {handleToDid} from "#/services/user/users.js";
 import {Dataplane} from "#/services/hydration/dataplane.js";
-import {ThreadViewPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
+import {isThreadViewPost, ThreadViewPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
 import {listOrderDesc, sortByKey} from "#/utils/arrays.js";
 
 function threadViewPostToThreadSkeleton(thread: ThreadViewPost, isAncestor: boolean = false): ThreadSkeleton {
@@ -35,7 +34,7 @@ function threadViewPostToThreadSkeleton(thread: ThreadViewPost, isAncestor: bool
 }
 
 
-async function getThreadRepliesSkeletonForPostFromBsky(agent: Agent, uri: string, dataplane: Dataplane){
+async function getThreadRepliesSkeletonForPostFromBsky(ctx: AppContext, agent: Agent, uri: string, dataplane: Dataplane){
     try {
         const {data} = await agent.bsky.app.bsky.feed.getPostThread({uri})
         const thread = isThreadViewPost(data.thread) ? data.thread : null
@@ -45,7 +44,8 @@ async function getThreadRepliesSkeletonForPostFromBsky(agent: Agent, uri: string
         }
 
         return thread ? threadViewPostToThreadSkeleton(thread) : {post: uri}
-    } catch {
+    } catch (error) {
+        ctx.logger.pino.warn({uri, error}, "error fecthing thread from bsky")
         return null
     }
 }
@@ -108,7 +108,7 @@ export async function getThreadRepliesSkeletonForPostFromCA(ctx: AppContext, uri
 
 async function getThreadSkeletonForPost(ctx: AppContext, agent: Agent, uri: string, data: Dataplane): Promise<ThreadSkeleton> {
     const [skeletonBsky, skeletonCA] = await Promise.all([
-        getThreadRepliesSkeletonForPostFromBsky(agent, uri, data),
+        getThreadRepliesSkeletonForPostFromBsky(ctx, agent, uri, data),
         getThreadRepliesSkeletonForPostFromCA(ctx, uri)
     ])
 

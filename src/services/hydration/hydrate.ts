@@ -1,22 +1,21 @@
-import {$Typed} from "@atproto/api";
+import {$Typed, AppBskyFeedDefs} from "@atproto/api";
 import {
     ArticleView,
     FeedViewContent,
     FullArticleView,
     isFeedViewContent,
-    isPostView,
+    isPostView, isReasonRepost, isSkeletonReasonRepost,
     isThreadViewContent,
-    PostView,
+    PostView, SkeletonFeedPost,
     ThreadViewContent
 } from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
 import {getCollectionFromUri, getDidFromUri, isArticle, isDataset, isPost, isTopicVersion} from "#/utils/uri.js";
-import {isReasonRepost, NotFoundPost, SkeletonFeedPost} from "#/lex-server/types/app/bsky/feed/defs.js";
+import {NotFoundPost} from "#/lex-server/types/app/bsky/feed/defs.js";
 import {FeedSkeleton} from "#/services/feed/feed.js";
 import {decompress} from "#/utils/compression.js";
 import {getAllText} from "#/services/wiki/diff.js";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post.js"
 import {listOrderDesc, sortByKey} from "#/utils/arrays.js";
-import {isPostView as isBskyPostView} from "#/lex-api/types/app/bsky/feed/defs.js"
 import {Dataplane} from "#/services/hydration/dataplane.js";
 import {hydrateEmbedViews, hydrateTopicViewBasicFromUri} from "#/services/wiki/topics.js";
 import {TopicProp, TopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
@@ -26,22 +25,44 @@ import {hydrateDatasetView} from "#/services/dataset/read.js";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
 import {
     BlockedPost,
-    isSkeletonReasonRepost,
     isThreadViewPost,
     ThreadViewPost
 } from "@atproto/api/dist/client/types/app/bsky/feed/defs.js"
 import {hydrateProfileViewBasic} from "#/services/hydration/profile.js"
 import removeMarkdown from "remove-markdown"
 import {AppContext} from "#/setup.js";
-import {hydratePostView} from "#/services/hydration/post-view.js";
+import {PostViewHydrator} from "#/services/hydration/post-view.js";
 
 
 export function hydrateViewer(uri: string, data: Dataplane): { repost?: string, like?: string } {
     const bskyPost = data.bskyPosts.get(uri)
+    const sessionDid = data.agent.hasSession() ? data.agent.did : null
+    if(!sessionDid) return {}
+
+    let repost: string | undefined = bskyPost?.viewer?.repost
+    if(!repost){
+        const reposts = data.reposts.get(uri)
+        reposts?.forEach(r => {
+            if(r.uri && getDidFromUri(r.uri) == sessionDid){
+                repost = r.uri
+            }
+        })
+    }
+
+    let like: string | undefined = bskyPost?.viewer?.like
+    if(!like){
+        const likes = data.likes.get(uri)
+        likes?.forEach(r => {
+            if(getDidFromUri(r) == sessionDid){
+                like = r
+            }
+        })
+    }
+
     return {
         ...bskyPost?.viewer,
-        repost: bskyPost?.viewer?.repost ?? data.reposts?.get(uri)?.uri ?? undefined,
-        like: bskyPost?.viewer?.like ?? data.likes?.get(uri) ?? undefined
+        repost,
+        like
     }
 }
 
@@ -222,7 +243,7 @@ export function hydrateContent(ctx: AppContext, uri: string, data: Dataplane, fu
 } {
     const collection = getCollectionFromUri(uri)
     if (isPost(collection)) {
-        return hydratePostView(ctx, uri, data)
+        return {data: new PostViewHydrator(ctx, data).hydrate(uri) ?? undefined}
     } else if (isArticle(collection)) {
         return full ? hydrateFullArticleView(ctx, uri, data) : hydrateArticleView(ctx, uri, data)
     } else if (isTopicVersion(collection)) {
@@ -248,29 +269,30 @@ export function notFoundPost(uri: string): $Typed<NotFoundPost> {
 
 function hydrateFeedViewContentReason(ctx: AppContext, subjectUri: string, reason: SkeletonFeedPost["reason"], data: Dataplane): FeedViewContent["reason"] | null {
     if (!reason) return null
-    if (isSkeletonReasonRepost(reason) && reason.repost) {
+    if (isSkeletonReasonRepost(reason)) {
         const user = hydrateProfileViewBasic(ctx, getDidFromUri(reason.repost), data)
         if (!user) {
-            console.log("Warning: no se encontró el usuario autor del repost", getDidFromUri(reason.repost))
+            ctx.logger.pino.warn({reason}, "no se encontró el usuario autor del repost")
             return null
         }
+        // TO DO (!): Esto está un poco raro, si algo fue reposteado más de una vez no anda
         const repostData = data.reposts.get(subjectUri)
-        if (!repostData || !repostData.created_at) {
-            console.log("Warning: no se encontró el repost", reason.repost)
+        const repost = repostData ? repostData[0] : undefined
+        if (!repost || !repost.created_at) {
+            ctx.logger.pino.warn({reason}, "no se encontró el repost")
             return null
         }
-        const indexedAt = repostData.created_at.toISOString()
+        const indexedAt = repost.created_at.toISOString()
         return {
-            $type: "app.bsky.feed.defs#reasonRepost",
+            $type: "ar.cabildoabierto.feed.defs#reasonRepost",
             by: {
                 ...user,
-                $type: "app.bsky.actor.defs#profileViewBasic",
+                $type: "ar.cabildoabierto.actor.defs#profileViewBasic",
             },
             indexedAt
         }
-    } else if (isReasonRepost(reason)) {
-        return reason
     }
+    ctx.logger.pino.warn({reason}, "failed to hydrate reason")
     return null
 }
 
@@ -333,6 +355,8 @@ type ThreadViewContentReply = $Typed<ThreadViewContent> | $Typed<NotFoundPost> |
 
 
 export const threadRepliesSortKey = (authorId: string) => (r: ThreadViewContentReply) => {
+
+
     return isThreadViewContent(r) && isPostView(r.content) && r.content.author.did == authorId ?
         [1, new Date(r.content.indexedAt).getTime()] : [0, 0]
 }
@@ -340,7 +364,7 @@ export const threadRepliesSortKey = (authorId: string) => (r: ThreadViewContentR
 
 export const threadPostRepliesSortKey = (authorId: string) => (r: ThreadViewPost) => {
     return isThreadViewPost(r) &&
-    isBskyPostView(r.post) &&
+    AppBskyFeedDefs.isPostView(r.post) &&
     r.post.author.did == authorId ?
         [1, -new Date(r.post.indexedAt).getTime()] : [0, 0]
 }

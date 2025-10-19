@@ -3,7 +3,6 @@ import {
     cleanUPTestDataFromDB,
     createTestContext, createTestUser,
     deleteRecordsInTest,
-    generateUserDid,
     getAcceptVoteRefAndRecord,
     getSuiteId,
     getTopicVersionRefAndRecord, MockSessionAgent,
@@ -11,7 +10,6 @@ import {
 } from "#/tests/test-utils.js";
 import {AppContext} from "#/setup.js";
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import {splitUri} from "#/utils/uri.js";
 import {getTopicVersion} from "#/services/wiki/topics.js";
 import {getTopicVersionVotes} from "#/services/wiki/votes.js";
 
@@ -23,12 +21,12 @@ describe('Create topic vote', { timeout: 20000 }, () => {
     beforeAll(async () => {
         ctx = await createTestContext()
         await ctx.worker?.setup(ctx)
-    })
+    }, 20000)
 
     beforeEach(async () => {
         await cleanUPTestDataFromDB(ctx!, testSuite)
         await ctx!.worker?.clear()
-    })
+    }, 20000)
 
     it("should add one to the counter", async () => {
         const user = await createTestUser(ctx!, "test.cabildo.ar", testSuite)

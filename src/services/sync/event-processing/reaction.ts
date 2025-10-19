@@ -36,11 +36,19 @@ function isLikeOrRepost(r: RefAndRecord) {
 
 export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
     async addRecordsToDB(records: RefAndRecord<ReactionRecord>[], reprocess: boolean = false) {
+        this.ctx.logger.pino.info({records}, "reactions to add")
+        records = records.filter(r => {
+            return isReactionType(getCollectionFromUri(r.ref.uri))
+        })
+        if(records.length == 0) {
+            this.ctx.logger.pino.info("no reactions, returning")
+        }
+        const reactionType = getCollectionFromUri(records[0].ref.uri)
+        if(!isReactionType(reactionType)) return
+        this.ctx.logger.pino.info({reactionType}, "reaction type")
         try {
+            this.ctx.logger.pino.info({refs: records.map(r => r.ref)}, "adding reactions")
             const res = await this.ctx.kysely.transaction().execute(async (trx) => {
-                const reactionType = getCollectionFromUri(records[0].ref.uri)
-                if (!isReactionType(reactionType)) return
-
                 this.ctx.logger.pino.info({records}, "inserting reaction records")
 
                 await this.processRecordsBatch(trx, records)

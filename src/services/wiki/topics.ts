@@ -7,14 +7,13 @@ import {
     TopicView
 } from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
 import {TopicViewBasic} from "#/lex-server/types/ar/cabildoabierto/wiki/topicVersion.js";
-import {getTopicCurrentVersion, getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version.js";
 import {Agent} from "#/utils/session-agent.js";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms.js";
 import {Dataplane} from "#/services/hydration/dataplane.js";
 import {$Typed} from "@atproto/api";
 import {getTopicSynonyms} from "#/services/wiki/utils.js";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js"
-import {getTopicHistory, getTopicVersionStatus, getTopicVersionViewer} from "#/services/wiki/history.js";
+import {getTopicVersionStatus, getTopicVersionViewer} from "#/services/wiki/history.js";
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
 import {ArticleEmbed, ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
@@ -292,41 +291,16 @@ export const getTopic = async (ctx: AppContext, agent: Agent, id?: string, did?:
     data?: TopicView,
     error?: string
 }> => {
-    if(!id){
-        if(!did || !rkey){
-            return {error: "Se requiere un id o un par did y rkey."}
-        } else {
-            id = await getTopicIdFromTopicVersionUri(ctx, did, rkey) ?? undefined
-            if(!id){
-                return {error: "No se encontró esta versión del tema."}
-            }
-        }
-    }
-
-    const {data: currentVersionId, error} = await getTopicCurrentVersionFromDB(ctx, id)
-    if(error) return {error: "No se encontró el tema " + id + "."}
 
     let uri: string
-    if (!currentVersionId) {
-        ctx.logger.pino.warn({id}, `Warning: Current version not set for topic.`)
-        const history = await getTopicHistory(ctx, id, agent.hasSession() ? agent : undefined)
-
-        if (!history) {
-            return {error: "No se encontró el tema " + id + "."}
-        }
-
-        const index = getTopicCurrentVersion(
-            history.versions.map(v => ({
-                status: v.status
-            }))
-        )
-
-        if (index == null) {
-            return {error: "No se encontró el tema " + id + "."}
-        }
-        uri = history.versions[index].uri
-    } else {
+    if(did && rkey) {
+        uri = getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey)
+    } else if(id) {
+        const {data: currentVersionId, error} = await getTopicCurrentVersionFromDB(ctx, id)
+        if(!currentVersionId || error) return {error: "No se encontró el tema " + id + "."}
         uri = currentVersionId
+    } else {
+        return {error: "Parámetros insuficientes."}
     }
 
     return await getTopicVersion(ctx, uri, agent.hasSession() ? agent.did : undefined)
@@ -380,6 +354,7 @@ export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: 
     data?: TopicView,
     error?: string
 }> => {
+    ctx.logger.pino.info({uri}, "getting topic version")
     const authorId = getDidFromUri(uri)
 
     const topic = await ctx.kysely
@@ -424,12 +399,11 @@ export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: 
         .where("Record.cid", "is not", null)
         .executeTakeFirst()
 
-    // ctx.logger.pino.info({topic}, "query result")
-
     if (!topic || !topic.cid) {
         ctx.logger.pino.info({uri, topic}, "topic version not found")
         return {error: "No se encontró la versión."}
     }
+    ctx.logger.pino.info({uri, accepts: topic.uniqueAcceptsCount, rejects: topic.uniqueRejectsCount}, "topic query result")
 
     let text: string | null = null
     let format: string | null = null

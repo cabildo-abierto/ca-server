@@ -1,6 +1,5 @@
 import {AppContext} from "#/setup.js";
 import {bskyPublicAPI, NoSessionAgent, SessionAgent} from "#/utils/session-agent.js";
-import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs.js";
 import {ProfileViewBasic, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs.js";
 import {
     BlobRef, ThreadSkeleton
@@ -16,21 +15,20 @@ import {
     postUris,
     topicVersionUris
 } from "#/utils/uri.js";
+import {AppBskyFeedDefs} from "@atproto/api"
 import {$Typed, AtpBaseClient} from "@atproto/api";
 import {TopicVersionQueryResultBasic} from "#/services/wiki/topics.js";
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
 import {
     FeedViewPost,
-    isPostView, isReasonRepost,
-    isSkeletonReasonRepost, isThreadViewPost,
+    isPostView,
+    isThreadViewPost,
     PostView, ThreadViewPost
 } from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
 import {fetchTextBlobs} from "#/services/blob.js";
 import {env} from "#/lib/env.js";
 import {RepostQueryResult} from "#/services/feed/inicio/following.js";
-import {isView as isEmbedRecordView} from "#/lex-api/types/app/bsky/embed/record.js"
-import {isView as isEmbedRecordWithMediaView} from "#/lex-api/types/app/bsky/embed/recordWithMedia.js"
-import {isViewNotFound, isViewRecord} from "#/lex-api/types/app/bsky/embed/record.js";
+import {isViewNotFound} from "#/lex-api/types/app/bsky/embed/record.js";
 import {NotificationQueryResult, NotificationsSkeleton} from "#/services/notifications/notifications.js";
 import {equalFilterCond, inFilterCond, stringListIncludes} from "#/services/dataset/read.js";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
@@ -41,12 +39,13 @@ import {
     isColumnFilter
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
 import {getUrisFromThreadSkeleton} from "#/services/thread/thread.js";
-import {prettyPrintJSON} from "#/utils/strings.js";
 import {getValidationState} from "#/services/user/users.js";
 import {AppBskyActorDefs} from "@atproto/api"
 import {AppBskyFeedPost, ArCabildoabiertoActorDefs} from "#/lex-api/index.js"
 import {CAProfileDetailed, CAProfile} from "#/lib/types.js";
 import {hydrateProfileViewDetailed} from "#/services/hydration/profile.js";
+import {AppBskyEmbedRecord, AppBskyEmbedRecordWithMedia} from "@atproto/api"
+import {isSkeletonReasonRepost} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
 
 
 export type FeedElementQueryResult = {
@@ -117,9 +116,9 @@ export class Dataplane {
     ctx: AppContext
     agent: SessionAgent | NoSessionAgent
     caContents: Map<string, FeedElementQueryResult> = new Map()
-    bskyPosts: Map<string, BskyPostView> = new Map()
-    likes: Map<string, string | null> = new Map()
-    reposts: Map<string, RepostQueryResult | null> = new Map() // mapea uri del post a información del repost asociado
+    bskyPosts: Map<string, AppBskyFeedDefs.PostView> = new Map()
+    likes: Map<string, string[]> = new Map()
+    reposts: Map<string, RepostQueryResult[]> = new Map() // mapea uri del post a información del repost asociado
     topicsByUri: Map<string, TopicVersionQueryResultBasic> = new Map()
     textBlobs: Map<string, string> = new Map()
     datasets: Map<string, DatasetQueryResult> = new Map()
@@ -249,7 +248,6 @@ export class Dataplane {
 
             ])
             .execute()
-
 
         contents.forEach(c => {
             if (c.cid) {
@@ -410,62 +408,60 @@ export class Dataplane {
             this.ctx.logger.logTimes("fetch reposts", [t1, t2])
             reposts.forEach(r => {
                 if (r.subjectId) {
-                    this.reposts.set(r.subjectId, r)
+                    this.storeRepost({...r, subjectId: r.subjectId})
                 }
             })
         }
     }
 
-
-    addEmbedsToPostsMap(m: Map<string, BskyPostView>) {
-        const posts = Array.from(m.values())
-        posts.forEach(post => {
-            if (post.embed && isEmbedRecordView(post.embed) && isViewRecord(post.embed.record)) {
-                const record = post.embed.record
-                const collection = getCollectionFromUri(record.uri)
-                if (isPost(collection) && !m.has(record.uri)) {
-                    m.set(record.uri, {
-                        ...record,
-                        uri: record.uri,
-                        cid: record.cid,
-                        $type: "app.bsky.feed.defs#postView",
-                        author: {
-                            ...record.author
-                        },
-                        indexedAt: record.indexedAt,
-                        record: record.value,
-                        embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
-                    })
-                }
-            } else if (post.embed && isEmbedRecordWithMediaView(post.embed)) {
-                const recordView = post.embed.record
-                if (isEmbedRecordView(recordView) && isViewRecord(recordView.record)) {
-                    const record = recordView.record
-                    if(!m.has(record.uri)){
-                        m.set(record.uri, {
-                            ...record,
-                            uri: record.uri,
-                            cid: record.cid,
-                            $type: "app.bsky.feed.defs#postView",
-                            author: {
-                                ...record.author
-                            },
-                            indexedAt: record.indexedAt,
-                            record: record.value,
-                            embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
-                        })
-                    }
-                }
-            } else if (post.embed && isEmbedRecordView(post.embed) && isViewNotFound(post.embed.record)) {
-                const uri = post.embed.record.uri
-                const collection = getCollectionFromUri(uri)
-                if (isArticle(collection)) {
-                    this.requires.set(post.uri, [...(this.requires.get(post.uri) ?? []), uri])
-                }
-            }
+    storeBskyPost(uri: string, post: AppBskyFeedDefs.PostView) {
+        this.bskyPosts.set(uri, post)
+        this.bskyBasicUsers.set(getDidFromUri(uri), {
+            ...post.author,
+            $type: "app.bsky.actor.defs#profileViewBasic"
         })
+        if (post.embed && AppBskyEmbedRecord.isView(post.embed) && AppBskyEmbedRecord.isViewRecord(post.embed.record)) {
+            const record = post.embed.record
+            const collection = getCollectionFromUri(record.uri)
 
-        return m
+            if (isPost(collection)) {
+                this.storeBskyPost(record.uri, {
+                    ...record,
+                    uri: record.uri,
+                    cid: record.cid,
+                    $type: "app.bsky.feed.defs#postView",
+                    author: {
+                        ...record.author
+                    },
+                    indexedAt: record.indexedAt,
+                    record: record.value,
+                    embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
+                })
+            }
+        } else if (post.embed && AppBskyEmbedRecordWithMedia.isView(post.embed)) {
+            const recordView = post.embed.record
+            if (AppBskyEmbedRecord.isView(recordView) && AppBskyEmbedRecord.isViewRecord(recordView.record)) {
+                const record = recordView.record
+                this.storeBskyPost(record.uri, {
+                    ...record,
+                    uri: record.uri,
+                    cid: record.cid,
+                    $type: "app.bsky.feed.defs#postView",
+                    author: {
+                        ...record.author
+                    },
+                    indexedAt: record.indexedAt,
+                    record: record.value,
+                    embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
+                })
+            }
+        } else if (post.embed && AppBskyEmbedRecord.isView(post.embed) && isViewNotFound(post.embed.record)) {
+            const uri = post.embed.record.uri
+            const collection = getCollectionFromUri(uri)
+            if (isArticle(collection)) {
+                this.requires.set(post.uri, [...(this.requires.get(post.uri) ?? []), uri])
+            }
+        }
     }
 
     async fetchBskyPosts(uris: string[]) {
@@ -494,24 +490,8 @@ export class Dataplane {
             return
         }
 
-        let m = new Map<string, BskyPostView>(
-            postViews.map(item => [item.uri, item])
-        )
-
-        m = this.addEmbedsToPostsMap(m)
-        this.addAuthorsFromPostViews(Array.from(m.values()))
-
-        this.bskyPosts = joinMaps(this.bskyPosts, m)
-    }
-
-    addAuthorsFromPostViews(posts: PostView[]) {
-        posts.forEach(p => {
-            if (!this.bskyBasicUsers.has(p.author.did)) {
-                this.bskyBasicUsers.set(p.author.did, {
-                    ...p.author,
-                    $type: "app.bsky.actor.defs#profileViewBasic"
-                })
-            }
+        postViews.forEach(p => {
+            this.storeBskyPost(p.uri, p)
         })
     }
 
@@ -544,10 +524,10 @@ export class Dataplane {
         reactions.forEach(l => {
             if (l.subjectId) {
                 if (getCollectionFromUri(l.uri) == "app.bsky.feed.like") {
-                    if (!this.likes.has(l.subjectId)) this.likes.set(l.subjectId, l.uri)
+                    if (!this.likes.has(l.subjectId)) this.storeLike(l.subjectId, l.uri)
                 }
                 if (getCollectionFromUri(l.uri) == "app.bsky.feed.repost") {
-                    if (!this.reposts.has(l.subjectId)) this.reposts.set(l.subjectId, {
+                    if (!this.reposts.has(l.subjectId)) this.storeRepost({
                         uri: l.uri,
                         created_at: null,
                         subjectId: l.subjectId
@@ -555,6 +535,16 @@ export class Dataplane {
                 }
             }
         })
+    }
+
+    storeLike(subjectId: string, likeUri: string) {
+        const cur = this.likes.get(subjectId) ?? []
+        this.likes.set(subjectId, [...cur, likeUri])
+    }
+
+    storeRepost(repost: RepostQueryResult & {subjectId: string}) {
+        const cur = this.reposts.get(repost.subjectId) ?? []
+        this.reposts.set(repost.subjectId, [...cur, repost])
     }
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
@@ -585,34 +575,35 @@ export class Dataplane {
         ])
     }
 
+    storeBskyBasicUser(user: ProfileViewBasic) {
+
+        this.bskyBasicUsers.set(user.did, {
+            ...user,
+            $type: "app.bsky.actor.defs#profileViewBasic"
+        })
+    }
+
     storeFeedViewPosts(feed: FeedViewPost[]) {
-        const m = new Map<string, PostView>()
         feed.forEach(f => {
-            m.set(f.post.uri, f.post)
+            this.storeBskyPost(f.post.uri, f.post)
             if (f.reply) {
                 if (isPostView(f.reply.parent)) {
-                    if (!m.has(f.reply.parent.uri)) {
-                        m.set(f.reply.parent.uri, f.reply.parent)
-                    }
+                    this.storeBskyPost(f.reply.parent.uri, f.reply.parent)
                 }
                 if (isPostView(f.reply.root)) {
-                    if (!m.has(f.reply.root.uri)) {
-                        m.set(f.reply.root.uri, f.reply.root)
-                    }
+                    this.storeBskyPost(f.reply.root.uri, f.reply.root)
                 }
             }
             if (f.reason) {
-                if (isReasonRepost(f.reason) && f.post.uri) {
-                    this.reposts.set(f.post.uri, {
+                if (AppBskyFeedDefs.isReasonRepost(f.reason) && f.post.uri) {
+                    this.storeBskyBasicUser(f.reason.by)
+                    this.storeRepost({
                         created_at: new Date(f.reason.indexedAt),
                         subjectId: f.post.uri
                     })
                 }
             }
         })
-        this.addEmbedsToPostsMap(m)
-        this.bskyPosts = joinMaps(this.bskyPosts, m)
-        this.addAuthorsFromPostViews(Array.from(m.values()))
     }
 
     async fetchDatasetsHydrationData(uris: string[]) {
@@ -735,7 +726,6 @@ export class Dataplane {
 
 
     async fetchProfileViewHydrationData(dids: string[]) {
-        this.ctx.logger.pino.info({dids}, "fetching profile views")
         dids = dids.filter(d => {
             if(this.profiles.has(d)) return false
             if(this.caUsers.has(d)) return false
@@ -1056,7 +1046,6 @@ export class Dataplane {
         })
     }
 
-
     async fetchFilteredTopics(manyFilters: $Typed<ColumnFilter>[][]) {
         const datasets = await Promise.all(manyFilters.map(async filters => {
 
@@ -1111,9 +1100,7 @@ export class Dataplane {
 
     saveDataFromPostThread(thread: ThreadViewPost, includeParents: boolean, excludeChild?: string) {
         if (thread.post) {
-            this.addAuthorsFromPostViews([thread.post])
-            this.bskyPosts.set(thread.post.uri, thread.post)
-            this.addEmbedsToPostsMap(this.bskyPosts)
+            this.storeBskyPost(thread.post.uri, thread.post)
 
             if (includeParents && thread.parent && isThreadViewPost(thread.parent)) {
                 this.saveDataFromPostThread(thread.parent, true, thread.post.uri)
@@ -1126,14 +1113,12 @@ export class Dataplane {
                             this.saveDataFromPostThread(r, true)
                         }
                     } else {
-                        console.log("reply is not post view")
-                        prettyPrintJSON(r)
+                        this.ctx.logger.pino.info({r}, "reply is not post view")
                     }
                 })
             }
         } else {
-            console.log("thread->post no es postView:")
-            prettyPrintJSON(thread.post)
+            this.ctx.logger.pino.info({post: thread.post}, "thread->post no es postView")
         }
     }
 }

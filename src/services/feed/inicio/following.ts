@@ -6,18 +6,21 @@ import {
     GetSkeletonProps
 } from "#/services/feed/feed.js";
 import {rootCreationDateSortKey} from "#/services/feed/utils.js";
-import {FeedViewPost, isFeedViewPost, isReasonRepost} from "#/lex-api/types/app/bsky/feed/defs.js";
-import {articleCollections, getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri.js";
-import {FeedViewContent, isFeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri.js";
+import {
+    FeedViewContent,
+    isFeedViewContent,
+    SkeletonFeedPost,
+} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
 import {isKnownContent} from "#/utils/type-utils.js";
 import {isPostView as isCAPostView} from "#/lex-server/types/ar/cabildoabierto/feed/defs.js";
 import {Record as PostRecord} from "#/lex-server/types/app/bsky/feed/post.js";
 import {Dataplane} from "#/services/hydration/dataplane.js";
-import {$Typed} from "@atproto/api";
+import {$Typed, AppBskyFeedDefs} from "@atproto/api";
 import {isTopicViewBasic} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
 import {FeedFormatOption} from "#/services/feed/inicio/discusion.js";
 import {FollowingFeedSkeletonKey} from "#/services/redis/cache.js";
-import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
+import {FeedViewPost, isFeedViewPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
 
 export type RepostQueryResult = {
     uri?: string
@@ -31,7 +34,7 @@ function skeletonFromArticleReposts(p: RepostQueryResult): SkeletonFeedPost | nu
         return {
             post: p.subjectId,
             reason: {
-                $type: "app.bsky.feed.defs#skeletonReasonRepost",
+                $type: "ar.cabildoabierto.feed.defs#skeletonReasonRepost",
                 repost: p.uri
             }
         }
@@ -61,14 +64,12 @@ function getRootUriFromPost(ctx: AppContext, e: FeedViewPost | FeedViewContent):
 }
 
 
-function getRootTopicIdFromPost(e: FeedViewPost | FeedViewContent): string | null {
+function getRootTopicIdFromPost(ctx: AppContext, e: FeedViewContent): string | null {
     if (!e.reply) {
-        if (isFeedViewPost(e)) {
-            return e.post.uri
-        } else if (isFeedViewContent(e) && isKnownContent(e.content)) {
+        if (isFeedViewContent(e) && isKnownContent(e.content)) {
             return e.content.uri
         } else {
-            console.warn("Warning: No se encontró el root del post", e)
+            ctx.logger.pino.warn({e}, "no se encontró el root del post")
             return null
         }
     } else if (e.reply.root) {
@@ -83,11 +84,22 @@ function getRootTopicIdFromPost(e: FeedViewPost | FeedViewContent): string | nul
 
 export type SkeletonFeedPostWithDate = SkeletonFeedPost & {created_at: Date}
 
+function bskySkeletonReasonToCA(reason: FeedViewPost["reason"]): SkeletonFeedPost["reason"] {
+    if(AppBskyFeedDefs.isReasonRepost(reason)) {
+        return {
+            $type: "ar.cabildoabierto.feed.defs#skeletonReasonRepost",
+            repost: reason.uri
+        }
+    } else {
+        return undefined
+    }
+}
+
 export const feedViewPostToSkeletonElement = (p: FeedViewPost): SkeletonFeedPostWithDate => {
     return {
-        $type: "app.bsky.feed.defs#skeletonFeedPost",
+        $type: "ar.cabildoabierto.feed.defs#skeletonFeedPost",
         post: p.post.uri,
-        reason: p.reason,
+        reason: bskySkeletonReasonToCA(p.reason),
         created_at: new Date(p.post.indexedAt)
     }
 }
@@ -103,7 +115,7 @@ export const getSkeletonFromTimeline = (ctx: AppContext, timeline: FeedViewPost[
     // y de esos con el que más respuestas tenga
 
     let filtered = following ? timeline.filter(t => {
-        if (t.reason && isReasonRepost(t.reason)) return true
+        if (t.reason && AppBskyFeedDefs.isReasonRepost(t.reason)) return true
         const rootUri = getRootUriFromPost(ctx, t)
         if (!rootUri) {
             return false
@@ -165,7 +177,7 @@ export async function getArticleRepostsForFollowingFeed(ctx: AppContext, agent: 
             created_at: r.repostCreatedAt,
         }
         qrs.push(qr)
-        dataplane.reposts.set(r.recordUri, qr)
+        dataplane.storeRepost(qr)
     })
     return qrs
 }
@@ -612,15 +624,15 @@ const getFollowingFeedSkeletonOnlyCA: (format: FeedFormatOption) => GetSkeletonP
     }): SkeletonFeedPost {
         if (!e.repostedRecordUri) {
             return {
-                $type: "app.bsky.feed.defs#skeletonFeedPost",
+                $type: "ar.cabildoabierto.feed.defs#skeletonFeedPost",
                 post: e.uri
             }
         } else {
             return {
-                $type: "app.bsky.feed.defs#skeletonFeedPost",
+                $type: "ar.cabildoabierto.feed.defs#skeletonFeedPost",
                 post: e.repostedRecordUri,
                 reason: {
-                    $type: "app.bsky.feed.defs#skeletonReasonRepost",
+                    $type: "ar.cabildoabierto.feed.defs#skeletonReasonRepost",
                     repost: e.uri
                 }
             }
@@ -670,7 +682,7 @@ export function filterFeed(ctx: AppContext, feed: FeedViewContent[], allowTopicV
             res.push(a)
             roots.add(rootUri)
         } else if (!rootUri) {
-            const rootTopic = getRootTopicIdFromPost(a)
+            const rootTopic = getRootTopicIdFromPost(ctx, a)
             if (rootTopic) {
                 res.push(a)
             }
