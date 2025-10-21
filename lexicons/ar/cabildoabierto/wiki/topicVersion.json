@@ -119,6 +119,9 @@
           },
           "protection": {
             "type": "string"
+          },
+          "replyCount": {
+            "type": "integer"
           }
         }
       },

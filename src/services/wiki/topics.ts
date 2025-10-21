@@ -381,6 +381,10 @@ export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: 
             "uniqueAcceptsCount",
             "uniqueRejectsCount",
             "User.editorStatus",
+            eb => eb
+                .selectFrom("Post as Reply")
+                .select(eb => eb.fn.count<number>("Reply.uri").as("count"))
+                .whereRef("Reply.replyToId", "=", "Record.uri").as("replyCount"),
             eb => jsonArrayFrom(eb
                 .selectFrom("Reaction")
                 .innerJoin("Record as ReactionRecord", "Record.uri", "Reaction.subjectId")
@@ -429,13 +433,9 @@ export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: 
     const record = topic.record ? JSON.parse(topic.record) as TopicVersionRecord : undefined
     const embeds = record ? hydrateEmbedViews(authorId, record.embeds ?? []) : []
 
-    //ctx.logger.pino.info({topic}, "topic for get topic status")
     const status = getTopicVersionStatus(topic.editorStatus, topic.protection, topic)
-    //ctx.logger.pino.info({status}, "got status")
 
-    //ctx.logger.pino.info({reactions: topic.reactions, uri, viewerDid}, "getting viewer")
     const viewer = getTopicVersionViewer(topic.reactions)
-    //ctx.logger.pino.info({viewer}, "got viewer")
 
     const view: TopicView = {
         $type: "ar.cabildoabierto.wiki.topicVersion#topicView",
@@ -451,7 +451,8 @@ export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: 
         record: topic.record ? JSON.parse(topic.record) : undefined,
         embeds,
         status,
-        viewer
+        viewer,
+        replyCount: topic.replyCount ?? undefined
     }
 
     //ctx.logger.pino.info({view}, "returning topic view")
