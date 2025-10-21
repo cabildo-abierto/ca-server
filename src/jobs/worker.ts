@@ -35,6 +35,7 @@ import {reprocessCollection} from "#/services/sync/reprocess.js";
 import {runTestJob} from "#/services/admin/status.js";
 import {clearAllRedis} from "#/services/redis/cache.js";
 import {type Redis} from "ioredis"
+import {updateAllTopicPopularities, updateTopicPopularities} from "#/services/wiki/references/popularity.js";
 
 const mins = 60 * 1000
 const seconds = 1000
@@ -212,6 +213,10 @@ export class CAWorker {
             "clear-all-redis",
             () => clearAllRedis(ctx)
         )
+        this.registerJob(
+            "update-all-topics-popularities",
+            () => updateAllTopicPopularities(ctx)
+        )
 
         this.logger.pino.info("worker jobs registered")
 
@@ -225,6 +230,7 @@ export class CAWorker {
             await this.addRepeatingJob("batch-jobs", mins / 2, 0, 1)
             await this.addRepeatingJob("update-follow-suggestions", 30 * mins, 30 * mins + 18)
             await this.addRepeatingJob("update-all-interactions-score", 30 * mins, 30 * mins + 23)
+            await this.addRepeatingJob("update-all-topics-popularities", 30 * mins, 30 * mins + 26)
             await this.addRepeatingJob("test-job", 20 * seconds, 20 * seconds, 14)
         } else {
             await this.addRepeatingJob("batch-jobs", mins / 2, 0, 1)
