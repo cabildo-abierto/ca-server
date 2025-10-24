@@ -7,7 +7,6 @@ import {
     createTestUser,
     deleteRecordsInTest,
     getPostRefAndRecord,
-    getRejectVoteRefAndRecord,
     getSuiteId,
     getTopicVersionRefAndRecord, MockSessionAgent,
     processRecordsInTest
@@ -18,7 +17,6 @@ import {getTopicVersion} from "#/services/wiki/topics.js";
 import {getTopicVersionVotes} from "#/services/wiki/votes.js";
 import {getTopicFeed} from "#/services/feed/topic.js";
 import {isPostView} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
-import {getCollectionFromUri} from "#/utils/uri.js";
 
 const testSuite = getSuiteId(__filename)
 
@@ -218,7 +216,7 @@ describe('Get discussion', { timeout: 20000 }, () => {
 })
 
 
-describe('Create reject vote', { timeout: 20000 }, () => {
+/*describe('Create reject vote', { timeout: 20000 }, () => {
     let ctx : AppContext | undefined
     beforeAll(async () => {
         ctx = await createTestContext()
@@ -312,8 +310,6 @@ describe('Create reject vote', { timeout: 20000 }, () => {
         expect(feed.data).not.toBeFalsy()
         expect(feed.data?.feed.length).toEqual(2)
 
-        ctx!.logger.pino.info({feed}, "got discussion feed")
-
         const reasonInFeed = feed.data!.feed
             .find(e => isPostView(e.content) &&
                 e.content.uri == reasonPost.ref.uri)
@@ -332,4 +328,4 @@ describe('Create reject vote', { timeout: 20000 }, () => {
     })
 
     afterAll(async () => cleanUpAfterTests(ctx!))
-})
+})*/

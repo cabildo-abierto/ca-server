@@ -1,6 +1,4 @@
 import pino from "pino";
-import {env} from "#/lib/env.js";
-import pretty from 'pino-pretty'
 
 
 
@@ -8,11 +6,7 @@ export class Logger {
     pino: pino.Logger
 
     constructor(name: string) {
-        if(env.NODE_ENV === 'test') {
-            this.pino = pino(pretty({sync: true}))
-        } else {
-            this.pino = pino({name})
-        }
+        this.pino = pino({name})
     }
 
     logTimes(msg: string, times: number[], object?: Record<string, unknown>){
