@@ -375,6 +375,7 @@ export type VoteReject = {
     uri: string;
     labels: string[];
     message: string | null;
+    reasonId: string | null;
 };
 export type DB = {
     _ContentToDataset: ContentToDataset;

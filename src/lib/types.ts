@@ -54,6 +54,7 @@ export type Session = {
         topicMinimized: boolean
         topicMaximized: boolean
     }
+    caProfile: string | null
     handle: string
     displayName: string | null
     avatar: string | null

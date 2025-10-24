@@ -42,7 +42,7 @@ export async function fetchTextBlob(ctx: AppContext, ref: {cid: string, authorId
     const res = await fetchBlob(ctx, ref)
     if(!res || res.status != 200) {
         if(retries > 0) {
-            ctx.logger.pino.warn({retriesLeft: retries-1}, "retrying fetch text blob")
+            ctx.logger.pino.warn({retriesLeft: retries-1, ref}, "retrying fetch text blob")
             return fetchTextBlob(ctx, ref, retries - 1)
         } else {
             return null
@@ -59,6 +59,7 @@ export async function fetchTextBlobs(ctx: AppContext, blobs: BlobRef[], retries:
 
     let blobContents: (string | null)[]
     try {
+        ctx.logger.pino.info({keys}, "fetching text blobs")
         blobContents = await ctx.ioredis.mget(keys)
     } catch (err) {
         if(err instanceof Error){

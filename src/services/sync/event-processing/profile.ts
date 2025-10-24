@@ -26,19 +26,23 @@ export class CAProfileDeleteProcessor extends DeleteProcessor {
     async deleteRecordsFromDB(uris: string[]){
         const dids = uris.map(getDidFromUri)
 
-        await this.ctx.kysely.transaction().execute(async (trx) => {
-            await trx
-                .deleteFrom("Record")
-                .where("Record.uri", "in", uris)
-                .execute()
+        try {
+            await this.ctx.kysely.transaction().execute(async (trx) => {
+                await trx
+                    .deleteFrom("Record")
+                    .where("Record.uri", "in", uris)
+                    .execute()
 
-            await trx
-                .updateTable("User")
-                .set("User.inCA", false)
-                .set("User.hasAccess", false)
-                .where("User.did", "in", dids)
-                .execute()
-        })
+                await trx
+                    .updateTable("User")
+                    .set("inCA", false)
+                    .set("hasAccess", false)
+                    .where("User.did", "in", dids)
+                    .execute()
+            })
+        } catch (error) {
+            this.ctx.logger.pino.error({error, uris}, "error deleting ca profiles")
+        }
     }
 }
 

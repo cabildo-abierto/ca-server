@@ -6,7 +6,10 @@ import {getTopicCategories, getTopicTitle} from "#/services/wiki/utils.js";
 import {AppContext} from "#/setup.js";
 import {DB} from "../../../prisma/generated/types.js";
 import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard.js";
-import {sql, Transaction} from "kysely";
+import {Transaction} from "kysely";
+import {EditorStatus} from "@prisma/client";
+import {produce} from "immer";
+import {jsonArrayFrom} from "kysely/helpers/postgres";
 
 
 export async function getTopicIdFromTopicVersionUri(ctx: AppContext, did: string, rkey: string) {
@@ -22,29 +25,28 @@ export async function getTopicIdFromTopicVersionUri(ctx: AppContext, did: string
 }
 
 
-function getStatusWithAuthorVote(authorStatus: string, status?: TopicVersionStatus): TopicVersionStatus {
-    if (status) {
-        const idx = status.voteCounts
-            .findIndex(c => c.category == authorStatus)
+function addAuthorVoteToVoteCounts(authorStatus: EditorStatus, voteCounts?: TopicVersionStatus["voteCounts"]): TopicVersionStatus["voteCounts"] {
+    if (voteCounts) {
+        return produce(voteCounts, draft => {
+            const idx = voteCounts
+                .findIndex(c => c.category == authorStatus)
 
-        if (idx != -1) {
-            status.voteCounts[idx].accepts += 1
-        } else {
-            status.voteCounts.push({
-                category: authorStatus,
-                accepts: 1,
-                rejects: 0
-            })
-        }
-        return status
+            if (idx != -1) {
+                draft[idx].accepts += 1
+            } else {
+                draft.push({
+                    category: authorStatus,
+                    accepts: 1,
+                    rejects: 0
+                })
+            }
+        })
     } else {
-        return {
-            voteCounts: [{
-                category: authorStatus,
-                accepts: 1,
-                rejects: 0
-            }]
-        }
+        return [{
+            category: authorStatus,
+            accepts: 1,
+            rejects: 0
+        }]
     }
 }
 
@@ -57,19 +59,28 @@ function catToNumber(cat: string) {
 }
 
 
-export function isVersionAccepted(authorStatus: string, protection: string, status?: TopicVersionStatus) {
-    const statusWithAuthor = getStatusWithAuthorVote(authorStatus, status)
-    const relevantVotes = max(statusWithAuthor.voteCounts, x => catToNumber(x.category))
+export function isVersionAccepted(
+    ctx: AppContext,
+    authorStatus: EditorStatus,
+    protection: EditorStatus,
+    voteCounts?: TopicVersionStatus["voteCounts"]
+) {
+    // TO DO (!) considerar la protección
+    const voteCountsWithAuthor = addAuthorVoteToVoteCounts(
+        authorStatus,
+        voteCounts
+    )
+    const relevantVotes = max(
+        voteCountsWithAuthor, x => catToNumber(x.category)
+    )
     if(!relevantVotes) throw Error("No hubo ningún voto incluyendo al autor!")
     return relevantVotes.rejects == 0 && relevantVotes.accepts > 0
 }
 
 
-export function getTopicCurrentVersion(protection: string = "Beginner", versions: { author: {editorStatus?: string}, status?: TopicVersionStatus }[]): number | null {
-    for (let i = versions.length - 1; i >= 0; i--) {
-        if (isVersionAccepted(versions[i].author.editorStatus ?? "Beginner", protection, versions[i].status)) {
-            return i
-        }
+export function getTopicCurrentVersion(status: TopicVersionStatus[]): number | null {
+    for (let i = status.length - 1; i >= 0; i--) {
+        if(status[i].accepted) return i
     }
     return null
 }
@@ -104,15 +115,17 @@ export async function updateTopicsCurrentVersionBatch(ctx: AppContext, trx: Tran
     topicIds = unique(topicIds)
     if (topicIds.length == 0) return
 
+    ctx.logger.pino.info({ids: topicIds.slice(0, 5)}, "updating topics current version")
+
     type VersionWithVotes = {
         topicId: string
         uri: string
-        reactions: { uri: string, editorStatus: string }[] | null
-        protection: string
-        editorStatus: string
+        reactions?: { uri: string | null, editorStatus: EditorStatus }[]
+        protection: EditorStatus
+        editorStatus: EditorStatus
         currentVersionId: string | null
         accCharsAdded: number | null
-        created_at: Date
+        created_at_tz: Date | null
         props: unknown
     }
 
@@ -125,11 +138,8 @@ export async function updateTopicsCurrentVersionBatch(ctx: AppContext, trx: Tran
             .innerJoin('TopicVersion', 'TopicVersion.uri', 'Content.uri')
             .innerJoin("User", "Record.authorId", "User.did")
             .innerJoin("Topic", "Topic.id", "TopicVersion.topicId")
-            .leftJoin("Reaction", "Reaction.subjectId", "TopicVersion.uri")
-            .leftJoin("Record as ReactionRecord", "Reaction.uri", "ReactionRecord.uri")
-            .leftJoin("User as ReactionAuthor", "ReactionAuthor.did", "ReactionRecord.authorId")
             .select([
-                "Record.created_at",
+                "Record.created_at_tz",
                 'TopicVersion.topicId',
                 "Topic.currentVersionId",
                 'Record.uri',
@@ -137,27 +147,26 @@ export async function updateTopicsCurrentVersionBatch(ctx: AppContext, trx: Tran
                 "User.editorStatus",
                 "accCharsAdded",
                 "TopicVersion.props",
-                eb => eb.fn.jsonAgg(
-                    sql<{ uri: string; editorStatus: string }>`json_build_object
-                    ('uri', "Reaction"."uri", 'editorStatus', "ReactionAuthor"."editorStatus")`
-                ).filterWhere("Reaction.uri", "is not", null).as("reactions")
+                eb => jsonArrayFrom(eb
+                    .selectFrom("Reaction")
+                    .whereRef("Reaction.subjectId", "=", "TopicVersion.uri")
+                    .innerJoin("Record as ReactionRecord", "ReactionRecord.uri", "Reaction.uri")
+                    .innerJoin("User as ReactionAuthor", "ReactionAuthor.did", "ReactionRecord.authorId")
+                    .select([
+                        "Reaction.uri",
+                        "ReactionAuthor.editorStatus"
+                    ])
+                    .orderBy("ReactionRecord.authorId")
+                    .orderBy("ReactionRecord.created_at_tz desc")
+                    .distinctOn("ReactionRecord.authorId")
+                ).as("reactions")
             ])
             .where('TopicVersion.topicId', 'in', topicIds)
             .where('Record.cid', 'is not', null)
-            .groupBy([
-                "TopicVersion.props",
-                "Record.created_at",
-                'TopicVersion.topicId',
-                "Topic.currentVersionId",
-                'Record.uri',
-                "Topic.protection",
-                "User.editorStatus",
-                "accCharsAdded",
-            ])
-            .orderBy('Record.created_at', 'asc')
-            .execute();
+            .orderBy('Record.created_at_tz', 'asc')
+            .execute()
     } catch (err) {
-        console.error("Error getting topics for update current version", err)
+        ctx.logger.pino.error({error: err}, "Error getting topics for update current version")
         return
     }
 
@@ -186,19 +195,21 @@ export async function updateTopicsCurrentVersionBatch(ctx: AppContext, trx: Tran
                 lastEdit
             })
         } else {
-            const status = versions
-                .map(v => ({
-                        author: {
-                            editorStatus: v.editorStatus
-                        },
-                        status: getTopicVersionStatusFromReactions(v.reactions ?? [])
-                    })
+            const versionsStatus = versions
+                .map(v => getTopicVersionStatusFromReactions(
+                        ctx,
+                        v.reactions?.map(r => r.uri != null ? {...r, uri: r.uri} : null).filter(x => x != null) ?? [],
+                        v.editorStatus,
+                        v.protection
+                    )
                 )
 
             const currentVersion = getTopicCurrentVersion(
-                versions[0].protection,
-                status
+                versionsStatus
             )
+
+            ctx.logger.pino.info({currentVersion, id}, "new current version")
+
             if (currentVersion == null) {
                 updates.push({
                     id,
@@ -225,6 +236,7 @@ export async function updateTopicsCurrentVersionBatch(ctx: AppContext, trx: Tran
     }
 
     if (updates.length > 0) {
+        ctx.logger.pino.info({updates}, "applying current version update")
         try {
             await trx
                 .insertInto("Topic")

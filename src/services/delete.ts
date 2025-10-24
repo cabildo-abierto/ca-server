@@ -1,4 +1,4 @@
-import {getCollectionFromUri, getRkeyFromUri, getUri} from "#/utils/uri.js";
+import {getCollectionFromUri, getRkeyFromUri, getUri, isPost} from "#/utils/uri.js";
 import {AppContext} from "#/setup.js";
 import {SessionAgent} from "#/utils/session-agent.js";
 import {CAHandler} from "#/utils/handler.js";
@@ -69,14 +69,26 @@ export const deleteUserHandler: CAHandler<{params: {handleOrDid: string}}> = asy
 
 
 export async function deleteUser(ctx: AppContext, did: string) {
-    await deleteRecordsForAuthor({ctx, did: did, atproto: false})
+    try {
+        await deleteRecordsForAuthor({ctx, did: did, atproto: false})
 
-    await ctx.kysely.transaction().execute(async trx => {
-        await trx.deleteFrom("ReadSession").where("userId", "=", did).execute()
-        await trx.deleteFrom("Notification").where("userNotifiedId", "=", did).execute()
-        await trx.deleteFrom("Blob").where("authorId", "=", did).execute()
-        await trx.deleteFrom("User").where("did", "=", did).execute()
-    })
+        await ctx.kysely.transaction().execute(async trx => {
+            await trx.deleteFrom("ReadSession").where("userId", "=", did).execute()
+            await trx.deleteFrom("Notification").where("userNotifiedId", "=", did).execute()
+            await trx.deleteFrom("Blob").where("authorId", "=", did).execute()
+            await trx.deleteFrom("User").where("did", "=", did).execute()
+        })
+    } catch (err) {
+        ctx.logger.pino.info({error: err, did}, "error deleting user, getting remaining ercords")
+
+        const records = await ctx.kysely
+            .selectFrom("Record")
+            .where("authorId", "=", did)
+            .select("uri")
+            .limit(10)
+            .execute()
+        ctx.logger.pino.info({error: err, did, remainingRecords: records}, "something went wrong when deleting a user")
+    }
     // TO DO: Revisar que cache hace falta actualizar
 }
 
@@ -112,10 +124,39 @@ export async function deleteRecordAT(agent: SessionAgent, uri: string){
 }
 
 
+export async function deleteAssociatedVotes(ctx: AppContext, agent: SessionAgent, uri: string) {
+    const votes = await ctx.kysely
+        .selectFrom("VoteReject")
+        .where("VoteReject.reasonId", "=", uri)
+        .select("VoteReject.uri")
+        .execute()
+    for(let i = 0; i < votes.length; i++){
+        const {error} = await deleteRecord(ctx, agent, votes[i].uri)
+        if(error) return {error}
+    }
+    return {}
+}
+
+
+async function deleteRecord(ctx: AppContext, agent: SessionAgent, uri: string) {
+    const collection = getCollectionFromUri(uri)
+    try {
+        if(isPost(collection)){
+            await deleteAssociatedVotes(ctx, agent, uri)
+        }
+        await deleteRecordAT(agent, uri)
+        await getDeleteProcessor(ctx, collection).process([uri])
+    } catch (error) {
+        ctx.logger.pino.error({error, uri}, "error deleting record")
+        return {error: "Algo salió mal."}
+    }
+    return {data: {}}
+}
+
+
 export const deleteRecordHandler: CAHandler<{params: {rkey: string, collection: string}}> = async (ctx, agent, {params}) => {
     const {rkey, collection} = params
     const uri = getUri(agent.did, collection, rkey)
-    await deleteRecordAT(agent, uri)
-    await getDeleteProcessor(ctx, collection).process([uri])
-    return {data: {}}
+
+    return await deleteRecord(ctx, agent, uri)
 }

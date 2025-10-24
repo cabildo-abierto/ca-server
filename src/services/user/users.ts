@@ -41,8 +41,7 @@ export async function handleToDid(ctx: AppContext, agent: Agent, handleOrDid: st
         try {
             return await ctx.resolver.resolveHandleToDid(handleOrDid)
         } catch (err) {
-            console.error("Error in handleToDid:", handleOrDid)
-            console.error(err)
+            ctx.logger.pino.error({error: err, handleOrDid}, "error in handleToDid")
             return null
         }
     }
@@ -206,11 +205,12 @@ export const getSessionData = async (ctx: AppContext, did: string): Promise<Sess
                     "displayName",
                     "avatar",
                     "hasAccess",
-                    "inCA",
                     "userValidationHash",
                     "orgValidation",
                     "algorithmConfig",
                     "authorStatus",
+                    "CAProfileUri",
+                    "inCA"
                 ])
                 .where("did", "=", did)
                 .executeTakeFirst(),
@@ -233,6 +233,7 @@ export const getSessionData = async (ctx: AppContext, did: string): Promise<Sess
             displayName: data.displayName,
             avatar: data.avatar,
             hasAccess: data.hasAccess,
+            caProfile: data.CAProfileUri,
             seenTutorial: {
                 home: data.seenTutorial,
                 topics: data.seenTopicsTutorial,
@@ -278,14 +279,14 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
     }
 
     const data = await getSessionData(ctx, agent.did)
-    if (isFullSessionData(data) && data.hasAccess) {
+    if (isFullSessionData(data) && data.hasAccess && data.caProfile) {
         return {data}
     }
 
     const code = params?.code
 
     if(data && data.hasAccess) {
-        // está en le DB y tiene acceso pero no está sincronizado (sin handle)
+        // está en le DB y tiene acceso pero no está sincronizado o no tiene perfil de ca
         const {error} = await createCAUser(ctx, agent)
         if (error) {
             return {error}
@@ -356,7 +357,6 @@ type Tutorial = "topic-minimized" | "topic-normal" | "home" | "topics"
 export const setSeenTutorial: CAHandler<{ params: { tutorial: Tutorial } }, {}> = async (ctx, agent, {params}) => {
     const {tutorial} = params
     const did = agent.did
-    console.log("setting seen tutorial", tutorial)
     if (tutorial == "topic-minimized") {
         await ctx.kysely.updateTable("User").set("seenTopicMinimizedTutorial", true).where("did", "=", did).execute()
     } else if (tutorial == "home") {
