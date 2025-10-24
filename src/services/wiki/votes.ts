@@ -1,7 +1,7 @@
 import {ATProtoStrongRef} from "#/lib/types.js";
 import {BaseAgent, SessionAgent} from "#/utils/session-agent.js";
 import {AppContext} from "#/setup.js";
-import {getCollectionFromUri, getDidFromUri, getUri} from "#/utils/uri.js";
+import {getCollectionFromUri, getDidFromUri, getUri, splitUri} from "#/utils/uri.js";
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler.js";
 import {addReaction, removeReactionAT} from "#/services/reactions/reactions.js";
 import {Record as VoteAcceptRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/voteAccept.js"
@@ -9,6 +9,8 @@ import {Record as VoteRejectRecord} from "#/lex-api/types/ar/cabildoabierto/wiki
 import {ArCabildoabiertoWikiDefs} from "#/lex-api/index.js"
 import {Dataplane} from "#/services/hydration/dataplane.js";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
+import {createPost, CreatePostProps} from "#/services/write/post.js";
+import {deleteRecords} from "#/services/delete.js";
 
 export type TopicVoteType = "ar.cabildoabierto.wiki.voteAccept" | "ar.cabildoabierto.wiki.voteReject"
 
@@ -53,25 +55,29 @@ export const createVoteRejectAT = async (agent: SessionAgent, ref: ATProtoStrong
 
 
 export type VoteRejectProps = {
-    message?: string,
-    labels?: string[]
+    reason: ATProtoStrongRef
 }
 
 
 export const voteEdit: CAHandler<{
-    message?: string,
-    labels?: string[],
+    reason?: CreatePostProps,
+    force?: boolean,
     params: { vote: string, rkey: string, did: string, cid: string }
 }, { uri: string }> = async (
-    ctx: AppContext, agent: SessionAgent, {message, labels, params}) => {
+    ctx: AppContext, agent: SessionAgent, {reason, force, params}
+) => {
     const {vote, rkey, did, cid} = params
 
-    if (vote !== "accept" && vote !== "reject") {
+    if (vote != "accept" && vote != "reject") {
         return {error: `Voto inválido: ${vote}.`}
     }
 
-    if (vote == "accept" && (message != null || labels != null)) {
-        return {error: "Por ahora no se permiten etiquetas ni mensajes en un voto positivo."}
+    if (vote == "accept" && reason) {
+        return {error: "Por ahora no se permiten justificaciones en votos positivos."}
+    }
+
+    if(vote == "reject" && !reason) {
+        return {error: "Los votos negativos requieren una justificación."}
     }
 
     const uri = getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey)
@@ -79,23 +85,103 @@ export const voteEdit: CAHandler<{
 
     const type: TopicVoteType = vote == "accept" ? "ar.cabildoabierto.wiki.voteAccept" : "ar.cabildoabierto.wiki.voteReject"
 
-    const rejectProps = {message, labels}
+    const existing = await ctx.kysely
+        .selectFrom("Reaction")
+        .innerJoin("Record", "Record.uri", "Reaction.uri")
+        .select("Record.uri")
+        .where("Reaction.subjectId", "=", uri)
+        .where("Record.authorId", "=", agent.did)
+        .execute()
 
-    return await addReaction(ctx, agent, versionRef, type, rejectProps)
-    // TO DO: Eliminar reacciones opuestas
+    if(existing.length > 0) {
+        // TO DO: Si llegase a haber más de una posiblemente haya que tener más cuidado.
+        // si ya existe una reacción del mismo tipo no hacemos nada
+        if(getCollectionFromUri(existing[0].uri) == "ar.cabildoabierto.wiki.voteAccept" && vote == "accept") {
+            return {data: {uri: existing[0].uri}}
+        } else if(getCollectionFromUri(existing[0].uri) == "ar.cabildoabierto.wiki.voteReject" && vote == "reject") {
+            return {data: {uri: existing[0].uri}}
+        } else if(vote == "reject") {
+            // está pasando de aceptar a rechazar
+            const {error} = await cancelEditVote(ctx, agent, {params: splitUri(existing[0].uri)})
+            if(error) {
+                return {error: "Ocurrió un error al cambiar el voto."}
+            }
+        } else if(vote == "accept") {
+            // está pasando de rechazar a aceptar
+            if(!force) {
+                return {error: "Crear el voto de aceptación borraría la justificación del voto de rechazo."}
+            }
+
+            const {error} = await cancelEditVote(ctx, agent, {params: splitUri(existing[0].uri)})
+            if(error) {
+                return {error: "Ocurrió un error al cambiar el voto."}
+            }
+        }
+    }
+
+    if(reason) {
+        const {error, data} = await createPost(ctx, agent, reason!)
+        if(error || !data) {
+            return {error: "Ocurrió un error al crear la justificación."}
+        }
+        return await addReaction(
+            ctx,
+            agent,
+            versionRef,
+            type,
+            {
+                reason: data
+            }
+        )
+    } else {
+        return await addReaction(
+            ctx,
+            agent,
+            versionRef,
+            type
+        )
+    }
 }
 
 export const cancelEditVote: CAHandler<{
     params: { collection: string, rkey: string }
-}> = async (ctx: AppContext, agent: SessionAgent, {params}) => {
+    force?: boolean
+}> = async (ctx: AppContext, agent: SessionAgent, {params, force}) => {
     const {collection, rkey} = params
     const uri = getUri(agent.did, collection, rkey)
+
+    if(collection == "ar.cabildoabierto.wiki.voteReject") {
+        const reject = await ctx.kysely
+            .selectFrom("VoteReject")
+            .where("VoteReject.uri", "=", uri)
+            .select("VoteReject.reasonId")
+            .executeTakeFirst()
+        if(!reject) {
+            return {error: "No se encontró el voto a borrar."}
+        } else if(reject.reasonId){
+            if(!force) {
+                return {error: "Borrar el voto de rechazo también borraría la justificación."}
+            }
+            try {
+                await deleteRecords({
+                    ctx,
+                    agent,
+                    atproto: true,
+                    uris: [reject.reasonId]
+                })
+            } catch {
+                return {error: "Ocurrió un error al borrar la justificación."}
+            }
+        } else {
+            // hay un reject pero no tiene reasonId, continuamos con el delete
+        }
+    }
+
     return await removeReactionAT(ctx, agent, uri)
 }
 
 
 export async function getTopicVersionVotes(ctx: AppContext, agent: BaseAgent, uri: string) {
-    ctx.logger.pino.info("getting topic version votes")
     const reactions = await ctx.kysely
         .selectFrom("Reaction")
         .innerJoin("Record", "Record.uri", "Reaction.uri")
@@ -111,8 +197,8 @@ export async function getTopicVersionVotes(ctx: AppContext, agent: BaseAgent, ur
             "Reaction.subjectCid"
         ])
         .orderBy("Record.authorId")
-        .orderBy("Record.created_at_tz asc")
-        .distinctOn("Record.authorId")
+        .orderBy("Record.created_at_tz desc")
+        .distinctOn(["Record.authorId"])
         .execute()
 
     const votes = reactions

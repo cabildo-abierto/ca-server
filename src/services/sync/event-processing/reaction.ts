@@ -36,25 +36,23 @@ function isLikeOrRepost(r: RefAndRecord) {
 
 export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
     async addRecordsToDB(records: RefAndRecord<ReactionRecord>[], reprocess: boolean = false) {
-        this.ctx.logger.pino.info({records}, "reactions to add")
         records = records.filter(r => {
             return isReactionType(getCollectionFromUri(r.ref.uri))
         })
         if(records.length == 0) {
-            this.ctx.logger.pino.info("no reactions, returning")
+            return
         }
         const reactionType = getCollectionFromUri(records[0].ref.uri)
         if(!isReactionType(reactionType)) return
-        this.ctx.logger.pino.info({reactionType}, "reaction type")
         try {
-            this.ctx.logger.pino.info({refs: records.map(r => r.ref)}, "adding reactions")
             const res = await this.ctx.kysely.transaction().execute(async (trx) => {
-                this.ctx.logger.pino.info({records}, "inserting reaction records")
 
                 await this.processRecordsBatch(trx, records)
 
                 const subjects = records.map(r => ({uri: r.record.subject.uri, cid: r.record.subject.cid}))
-                await this.processDirtyRecordsBatch(trx, subjects)
+                const reasons = records
+                    .map(r => isVoteReject(r.record) ? r.record.reason : null).filter(x => x != null)
+                await this.processDirtyRecordsBatch(trx, [...subjects, ...reasons])
 
                 const reactions = records.map(r => ({
                     uri: r.ref.uri,
@@ -62,7 +60,6 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
                     subjectCid: r.record.subject.cid
                 }))
 
-                this.ctx.logger.pino.info({reactions}, "processing reactions")
                 await trx
                     .insertInto("Reaction")
                     .values(reactions)
@@ -80,7 +77,6 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
                     reactionType: getCollectionFromUri(r.ref.uri),
                     id: uuidv4()
                 }))
-                this.ctx.logger.pino.info({hasReacted}, "processing has reacted")
 
                 const inserted = await trx
                     .insertInto("HasReacted")
@@ -89,33 +85,35 @@ export class ReactionRecordProcessor extends RecordProcessor<ReactionRecord> {
                     .returning(['recordId'])
                     .execute()
 
-                this.ctx.logger.pino.info({inserted}, "inserted in has reacted")
-
                 await this.batchIncrementReactionCounter(trx, reactionType, inserted.map(r => r.recordId))
 
                 if (isTopicVote(reactionType)) {
-                    if (isVoteReject(reactionType)) {
-                        const votes: { uri: string, labels: string[] }[] = records.map(r => {
+                    if (reactionType == "ar.cabildoabierto.wiki.voteReject") {
+                        const votes: { uri: string, reasonId: string | undefined, labels: string[] }[] = records.map(r => {
                             if (isVoteReject(r.record)) {
                                 return {
-                                    // TO DO (!!)
                                     uri: r.ref.uri,
-                                    labels: r.record.labels ?? []
+                                    reasonId: r.record.reason?.uri,
+                                    labels: []
                                 }
                             }
                             return null
                         }).filter(v => v != null)
 
-                        await trx
-                            .insertInto("VoteReject")
-                            .values(votes)
-                            .onConflict((oc) =>
-                                oc.column("uri").doUpdateSet({
-                                    message: (eb) => eb.ref('excluded.message'),
-                                    labels: (eb) => eb.ref('excluded.labels'),
-                                })
-                            )
-                            .execute()
+                        try {
+                            await trx
+                                .insertInto("VoteReject")
+                                .values(votes)
+                                .onConflict((oc) =>
+                                    oc.column("uri").doUpdateSet({
+                                        reasonId: (eb) => eb.ref('excluded.reasonId'),
+                                    })
+                                )
+                                .execute()
+                        } catch (err) {
+                            this.ctx.logger.pino.info({error: err}, "error inserting vote reject")
+                            throw err
+                        }
                     }
 
                     if(records.length > 0 && inserted.length > 0){
@@ -257,7 +255,6 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
                 this.ctx.logger.pino.info("got no subject ids")
             }
 
-            let sameSubjectUris: string[] = uris
             if(subjectIds.length > 0){
                 try {
                     const deletedSubjects = await db
@@ -277,44 +274,23 @@ export class ReactionDeleteProcessor extends DeleteProcessor {
                 } catch (error) {
                     this.ctx.logger.pino.error({error}, "error deleting from has reacted")
                 }
-                // las reacciones del mismo autor al mismo record
-
-                sameSubjectUris.push(...(await db
-                    .selectFrom("Reaction")
-                    .innerJoin("Record", "Record.uri", "Reaction.uri")
-                    .select("Record.uri")
-                    .where("Record.collection", "=", type)
-                    .where(({eb, refTuple, tuple}) =>
-                        eb(
-                            refTuple("Reaction.subjectId", 'Record.authorId'),
-                            'in',
-                            subjectIds.map(e => tuple(e.subjectId, getDidFromUri(e.uri)))
-                        )
-                    )
-                    .execute()).map(u => u.uri))
-
-                sameSubjectUris = unique(sameSubjectUris)
-
-                this.ctx.logger.pino.info({sameSubjectUris}, "same subject uris")
             }
 
 
-            if (sameSubjectUris.length > 0) {
-                if (type == "ar.cabildoabierto.wiki.voteReject") {
-                    await db
-                        .deleteFrom("VoteReject")
-                        .where("uri", "in", sameSubjectUris)
-                        .execute()
-                }
-
-                await db.deleteFrom("TopicInteraction").where("recordId", "in", sameSubjectUris).execute()
-
-                await db.deleteFrom("Notification").where("causedByRecordId", "in", sameSubjectUris).execute()
-
-                await db.deleteFrom("Reaction").where("uri", "in", sameSubjectUris).execute()
-
-                await db.deleteFrom("Record").where("uri", "in", sameSubjectUris).execute()
+            if (type == "ar.cabildoabierto.wiki.voteReject") {
+                await db
+                    .deleteFrom("VoteReject")
+                    .where("uri", "in", uris)
+                    .execute()
             }
+
+            await db.deleteFrom("TopicInteraction").where("recordId", "in", uris).execute()
+
+            await db.deleteFrom("Notification").where("causedByRecordId", "in", uris).execute()
+
+            await db.deleteFrom("Reaction").where("uri", "in", uris).execute()
+
+            await db.deleteFrom("Record").where("uri", "in", uris).execute()
 
             if (subjectIds.length > 0 && (type == "ar.cabildoabierto.wiki.voteReject" || type == "ar.cabildoabierto.wiki.voteAccept")) {
                 this.ctx.logger.pino.info("getting topic ids")

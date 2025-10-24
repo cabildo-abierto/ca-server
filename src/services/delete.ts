@@ -1,4 +1,4 @@
-import {getCollectionFromUri, getRkeyFromUri, getUri} from "#/utils/uri.js";
+import {getCollectionFromUri, getRkeyFromUri, getUri, isPost} from "#/utils/uri.js";
 import {AppContext} from "#/setup.js";
 import {SessionAgent} from "#/utils/session-agent.js";
 import {CAHandler} from "#/utils/handler.js";
@@ -124,10 +124,39 @@ export async function deleteRecordAT(agent: SessionAgent, uri: string){
 }
 
 
+export async function deleteAssociatedVotes(ctx: AppContext, agent: SessionAgent, uri: string) {
+    const votes = await ctx.kysely
+        .selectFrom("VoteReject")
+        .where("VoteReject.reasonId", "=", uri)
+        .select("VoteReject.uri")
+        .execute()
+    for(let i = 0; i < votes.length; i++){
+        const {error} = await deleteRecord(ctx, agent, votes[i].uri)
+        if(error) return {error}
+    }
+    return {}
+}
+
+
+async function deleteRecord(ctx: AppContext, agent: SessionAgent, uri: string) {
+    const collection = getCollectionFromUri(uri)
+    try {
+        if(isPost(collection)){
+            await deleteAssociatedVotes(ctx, agent, uri)
+        }
+        await deleteRecordAT(agent, uri)
+        await getDeleteProcessor(ctx, collection).process([uri])
+    } catch (error) {
+        ctx.logger.pino.error({error, uri}, "error deleting record")
+        return {error: "Algo salió mal."}
+    }
+    return {data: {}}
+}
+
+
 export const deleteRecordHandler: CAHandler<{params: {rkey: string, collection: string}}> = async (ctx, agent, {params}) => {
     const {rkey, collection} = params
     const uri = getUri(agent.did, collection, rkey)
-    await deleteRecordAT(agent, uri)
-    await getDeleteProcessor(ctx, collection).process([uri])
-    return {data: {}}
+
+    return await deleteRecord(ctx, agent, uri)
 }

@@ -16,10 +16,12 @@ import {randomBytes} from "crypto";
 import * as path from 'path';
 import { sha256 } from 'multiformats/hashes/sha2'
 import { encode, code } from '@ipld/dag-cbor'
-import {ArCabildoabiertoActorCaProfile, ArCabildoabiertoFeedArticle, ArCabildoabiertoWikiVoteAccept} from "#/lex-api/index.js";
+import {ArCabildoabiertoActorCaProfile, ArCabildoabiertoWikiVoteReject, ArCabildoabiertoFeedArticle, ArCabildoabiertoWikiVoteAccept} from "#/lex-api/index.js";
 import {BlobRef} from "@atproto/lexicon";
 import {CID} from "multiformats/cid";
 import {getBlobKey} from "#/services/hydration/dataplane.js";
+import {ArCabildoabiertoWikiTopicVersion} from "#/lex-api/index.js"
+import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor.js";
 
 
 export function generateRkey(): string {
@@ -314,8 +316,6 @@ export function getRepostRefAndRecord(ref: ATProtoStrongRef, created_at: Date = 
 }
 
 
-import {ArCabildoabiertoWikiTopicVersion} from "#/lex-api/index.js"
-import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor.js";
 
 
 async function getTopicVersionRecord(ctx: AppContext, topicId: string, text: string, created_at: Date, authorId: string): Promise<ArCabildoabiertoWikiTopicVersion.Record> {
@@ -326,6 +326,7 @@ async function getTopicVersionRecord(ctx: AppContext, topicId: string, text: str
         mimeType,
         text.length
     )
+    ctx.logger.pino.info({key: getBlobKey({cid, authorId}), text}, "setting blob key")
     await ctx.ioredis.set(getBlobKey({cid, authorId}), text)
 
     return {
@@ -351,6 +352,7 @@ export async function getTopicVersionRefAndRecord(ctx: AppContext, topicId: stri
         record,
         testSuite,
         {
+            did: authorId,
             collection: "ar.cabildoabierto.wiki.topicVersion"
         }
     )
@@ -379,6 +381,96 @@ export async function getAcceptVoteRefAndRecord(ctx: AppContext, subjectRef: ATP
         {
             did: authorId,
             collection: "ar.cabildoabierto.wiki.voteAccept"
+        }
+    )
+}
+
+
+export async function createTestAcceptVote(ctx: AppContext, authorId: string, topicVersion: ATProtoStrongRef, testSuite: string) {
+    const vote = await getAcceptVoteRefAndRecord(
+        ctx!,
+        topicVersion,
+        new Date(),
+        authorId,
+        testSuite
+    )
+    await processRecordsInTest(ctx!, [vote])
+    return vote
+}
+
+
+export async function createTestTopicVersion(ctx: AppContext, authorId: string, testSuite: string) {
+    const topicVersion = await getTopicVersionRefAndRecord(
+        ctx!,
+        "tema de prueba",
+        "texto",
+        new Date(),
+        authorId,
+        testSuite
+    )
+    await processRecordsInTest(ctx!, [topicVersion])
+    return topicVersion
+}
+
+
+export async function createTestRejectVote(ctx: AppContext, authorId: string, topicVersion: ATProtoStrongRef, testSuite: string) {
+    const reasonPost = await getPostRefAndRecord(
+        "prueba",
+        new Date(),
+        testSuite,
+        {did: authorId},
+        topicVersion
+    )
+    const vote = await getRejectVoteRefAndRecord(
+        ctx!,
+        topicVersion,
+        new Date(),
+        authorId,
+        reasonPost.ref,
+        testSuite,
+    )
+    await processRecordsInTest(ctx!, [reasonPost])
+    await processRecordsInTest(ctx!, [vote])
+    return {reasonPost, vote}
+}
+
+
+async function getRejectVoteRecord(
+    ctx: AppContext,
+    subjectRef: ATProtoStrongRef,
+    created_at: Date,
+    reasonRef: ATProtoStrongRef
+): Promise<ArCabildoabiertoWikiVoteReject.Record> {
+    return {
+        $type: "ar.cabildoabierto.wiki.voteReject",
+        subject: subjectRef,
+        createdAt: created_at.toISOString(),
+        reason: reasonRef
+    }
+}
+
+
+export async function getRejectVoteRefAndRecord(
+    ctx: AppContext,
+    subjectRef: ATProtoStrongRef,
+    created_at: Date,
+    authorId: string,
+    reasonRef: ATProtoStrongRef,
+    testSuite: string
+) {
+    const record = await getRejectVoteRecord(
+        ctx,
+        subjectRef,
+        created_at,
+        reasonRef
+    )
+
+    return getRefAndRecord(
+        record,
+        testSuite,
+        {
+            did: authorId,
+            collection: "ar.cabildoabierto.wiki.voteReject"
         }
     )
 }
@@ -424,6 +516,15 @@ export async function deleteRecordsInTest(ctx: AppContext, records: string[]) {
         await processor.process([r])
     }
     await ctx!.worker?.runAllJobs()
+}
+
+
+export async function getRecord(ctx: AppContext, uri: string){
+    return await ctx.kysely
+        .selectFrom("Record")
+        .where("Record.uri", "=", uri)
+        .selectAll()
+        .executeTakeFirst()
 }
 
 

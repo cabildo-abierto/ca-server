@@ -66,6 +66,7 @@ type TopicVersionQueryResult = {
 
 
 export function getTopicVersionStatusFromReactions(
+    ctx: AppContext,
     reactions: { uri: string, editorStatus: string }[],
     authorStatus: EditorStatus,
     protection: EditorStatus
@@ -75,7 +76,6 @@ export function getTopicVersionStatusFromReactions(
         const cur = byEditorStatus.get(r.editorStatus)
         if (cur) {
             cur.push(r.uri)
-            byEditorStatus.set(r.editorStatus, cur)
         } else {
             byEditorStatus.set(r.editorStatus, [r.uri])
         }
@@ -85,11 +85,11 @@ export function getTopicVersionStatusFromReactions(
         return {
             $type: "ar.cabildoabierto.wiki.topicVersion#categoryVotes",
             accepts: new Set(v
-                .filter(v => getCollectionFromUri(v) == "ar.cabildoabierto.wiki.topicAccept")
+                .filter(v => getCollectionFromUri(v) == "ar.cabildoabierto.wiki.voteAccept")
                 .map(getDidFromUri))
                 .size,
             rejects: new Set(v
-                .filter(v => getCollectionFromUri(v) == "ar.cabildoabierto.wiki.topicReject")
+                .filter(v => getCollectionFromUri(v) == "ar.cabildoabierto.wiki.voteReject")
                 .map(getDidFromUri))
                 .size,
             category: k
@@ -99,6 +99,7 @@ export function getTopicVersionStatusFromReactions(
     return {
         voteCounts,
         accepted: isVersionAccepted(
+            ctx,
             authorStatus,
             protection,
             voteCounts
@@ -168,7 +169,8 @@ async function getTopicsForDashboard(ctx: AppContext, did: string): Promise<Topi
             'TopicVersion.contribution',
             'Record.created_at',
             'TopicCurrentVersion.props',
-            "Topic.protection"
+            "Topic.protection",
+            "Author.editorStatus"
         ])
         .orderBy("Record.created_at", "asc")
         .execute()
@@ -211,6 +213,7 @@ async function getTopicsForDashboardQuery(ctx: AppContext, did: string) {
             const reactions = tv.reactions as { uri: string, editorStatus: string }[]
 
             const status: TopicVersionStatus = getTopicVersionStatusFromReactions(
+                ctx,
                 reactions,
                 tv.editorStatus,
                 tv.protection

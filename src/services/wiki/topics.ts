@@ -13,7 +13,7 @@ import {Dataplane} from "#/services/hydration/dataplane.js";
 import {$Typed} from "@atproto/api";
 import {getTopicSynonyms} from "#/services/wiki/utils.js";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js"
-import {getTopicVersionStatus, getTopicVersionViewer} from "#/services/wiki/history.js";
+import {getTopicVersionViewer} from "#/services/wiki/history.js";
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
 import {ArticleEmbed, ArticleEmbedView} from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
@@ -24,6 +24,7 @@ import {cleanText} from "#/utils/strings.js";
 import {getTopicsReferencedInText} from "#/services/wiki/references/references.js";
 import {jsonArrayFrom} from "kysely/helpers/postgres";
 import {EditorStatus} from "@prisma/client";
+import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard.js";
 
 export type TimePeriod = "day" | "week" | "month" | "all"
 
@@ -354,7 +355,6 @@ export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: 
     data?: TopicView,
     error?: string
 }> => {
-    ctx.logger.pino.info({uri}, "getting topic version")
     const authorId = getDidFromUri(uri)
 
     const topic = await ctx.kysely
@@ -378,8 +378,6 @@ export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: 
             "Topic.popularityScore",
             "Topic.lastEdit",
             "Topic.currentVersionId",
-            "uniqueAcceptsCount",
-            "uniqueRejectsCount",
             "User.editorStatus",
             eb => eb
                 .selectFrom("Post as Reply")
@@ -387,16 +385,17 @@ export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: 
                 .whereRef("Reply.replyToId", "=", "Record.uri").as("replyCount"),
             eb => jsonArrayFrom(eb
                 .selectFrom("Reaction")
-                .innerJoin("Record as ReactionRecord", "Record.uri", "Reaction.subjectId")
-                .select([
-                    "Reaction.uri"
-                ])
                 .whereRef("Reaction.subjectId", "=", "TopicVersion.uri")
-                .where("ReactionRecord.authorId", "=", viewerDid ?? "no did")
+                .innerJoin("Record as ReactionRecord", "ReactionRecord.uri", "Reaction.uri")
+                .innerJoin("User as ReactionAuthor", "ReactionAuthor.did", "ReactionRecord.authorId")
+                .select([
+                    "Reaction.uri",
+                    "ReactionAuthor.editorStatus"
+                ])
                 .orderBy("ReactionRecord.authorId")
-                .orderBy("ReactionRecord.created_at_tz asc")
+                .orderBy("ReactionRecord.created_at_tz desc")
                 .distinctOn("ReactionRecord.authorId")
-            ).as("reactions"),
+            ).as("reactions")
         ])
         .where("TopicVersion.uri", "=", uri)
         .where("Record.record", "is not", null)
@@ -407,7 +406,6 @@ export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: 
         ctx.logger.pino.info({uri, topic}, "topic version not found")
         return {error: "No se encontró la versión."}
     }
-    ctx.logger.pino.info({uri, accepts: topic.uniqueAcceptsCount, rejects: topic.uniqueRejectsCount}, "topic query result")
 
     let text: string | null = null
     let format: string | null = null
@@ -433,9 +431,17 @@ export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: 
     const record = topic.record ? JSON.parse(topic.record) as TopicVersionRecord : undefined
     const embeds = record ? hydrateEmbedViews(authorId, record.embeds ?? []) : []
 
-    const status = getTopicVersionStatus(topic.editorStatus, topic.protection, topic)
+    const status = getTopicVersionStatusFromReactions(
+        ctx,
+        topic.reactions,
+        topic.editorStatus,
+        topic.protection,
+    )
 
-    const viewer = getTopicVersionViewer(topic.reactions)
+    const viewer = getTopicVersionViewer(
+        viewerDid ?? "no did",
+        topic.reactions
+    )
 
     const view: TopicView = {
         $type: "ar.cabildoabierto.wiki.topicVersion#topicView",

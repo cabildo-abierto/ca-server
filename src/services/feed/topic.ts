@@ -10,7 +10,7 @@ import {Dataplane} from "#/services/hydration/dataplane.js";
 import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version.js";
 import {getTopicTitle} from "#/services/wiki/utils.js";
 import {TopicProp,} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
-import {getUri} from "#/utils/uri.js";
+import {getCollectionFromUri, getDidFromUri, getUri} from "#/utils/uri.js";
 import {isView as isSelectionQuoteEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/selectionQuote.js"
 import {
     EnDiscusionMetric,
@@ -21,6 +21,8 @@ import {
     getNextCursorEnDiscusion
 } from "#/services/feed/inicio/discusion.js";
 import {SkeletonQuery} from "#/services/feed/inicio/following.js";
+import {getTopicCurrentVersionFromDB} from "#/services/wiki/topics.js";
+import {$Typed} from "@atproto/api";
 
 
 const getTopicRepliesSkeleton = async (ctx: AppContext, id: string) => {
@@ -72,7 +74,7 @@ const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, tim
                     eb("TopicVersion.uri", "is", null)
                 ]))
                 .where("Record.created_at", ">", startDate)
-                .select(eb => [
+                .select([
                     'Record.uri',
                     "Record.created_at as createdAt"
                 ])
@@ -250,24 +252,115 @@ export async function getTopicMentionsInTopics(ctx: AppContext, id: string){
 }
 
 
-async function hydrateRepliesSkeleton(ctx: AppContext, agent: Agent, skeleton: FeedSkeleton){
+type VoteBasicQueryResult = {
+    voteUri: string
+    topicVersionUri: string
+    topicVersionCreatedAt: Date
+    reasonUri: string | null
+}
+
+
+async function getTopicVotesForDiscussion(ctx: AppContext, uri: string): Promise<VoteBasicQueryResult[]> {
+    const votes = await ctx.kysely
+        .selectFrom("Reaction")
+        .innerJoin("Record", "Record.uri", "Reaction.uri")
+        .innerJoin("Record as SubjectRecord", "SubjectRecord.uri", "Reaction.subjectId")
+        .where("Record.collection", "in", ["ar.cabildoabierto.wiki.voteAccept", "ar.cabildoabierto.wiki.voteReject"])
+        .where("Reaction.subjectId", "=", uri)
+        .leftJoin("VoteReject", "VoteReject.uri", "Reaction.uri")
+        .leftJoin("Post as Reason", "Reason.uri", "VoteReject.reasonId")
+        .select([
+            "Reaction.uri",
+            "Reaction.subjectId",
+            "SubjectRecord.created_at_tz as subjectCreatedAt",
+            "Reason.uri as reasonUri"
+        ])
+        .execute()
+    return votes.map(v => {
+        if(v.subjectId && v.subjectCreatedAt) {
+            return {
+                voteUri: v.uri,
+                topicVersionUri: v.subjectId,
+                topicVersionCreatedAt: v.subjectCreatedAt,
+                reasonUri: v.reasonUri
+            }
+        }
+        return null
+    }).filter(x => x != null)
+}
+
+
+function addVotesContextToDiscussionFeed(ctx: AppContext, uri: string, feed: $Typed<FeedViewContent>[], votes: VoteBasicQueryResult[]): $Typed<FeedViewContent>[] {
+    const authorVotingStates = new Map<string, "accept" | "reject">()
+    const reasonToVote = new Map<string, VoteBasicQueryResult>()
+    votes.forEach(v => {
+        if(v.topicVersionUri == uri) {
+            const accept = getCollectionFromUri(v.voteUri) == "ar.cabildoabierto.wiki.voteAccept"
+            authorVotingStates.set(getDidFromUri(v.voteUri), accept ? "accept" : "reject")
+        }
+        if(v.reasonUri){
+            reasonToVote.set(v.reasonUri, v)
+        }
+    })
+
+    return feed.map(e => {
+        if(!isPostView(e.content)){
+            return e
+        } else {
+            const reason = reasonToVote.get(e.content.uri)
+            const authorState = authorVotingStates.get(e.content.author.did)
+            // información de qué voto está justificando este post
+            const voteContext: PostView["voteContext"] = {
+                authorVotingState: authorState ?? "none",
+                vote: reason ? {
+                    uri: reason.voteUri,
+                    subject: reason.topicVersionUri,
+                    subjectCreatedAt: reason.topicVersionCreatedAt.toISOString()
+                } : undefined
+            }
+
+            return {
+                ...e,
+                content: {
+                    ...e.content,
+                    voteContext
+                }
+            }
+        }
+    })
+}
+
+
+async function hydrateRepliesSkeleton(ctx: AppContext, agent: Agent, skeleton: FeedSkeleton, uri: string){
     const data = new Dataplane(ctx, agent)
-    await data.fetchFeedHydrationData(skeleton)
+    const [votes] = await Promise.all([
+        getTopicVotesForDiscussion(ctx, uri),
+        data.fetchFeedHydrationData(skeleton),
+    ])
 
     let feed = skeleton
         .map((e) => (hydrateFeedViewContent(ctx, e, data)))
+        .filter(x => x != null)
+
+    feed = addVotesContextToDiscussionFeed(ctx, uri, feed, votes)
 
     return sortByKey(
-        feed.filter(x => x != null),
+        feed,
         creationDateSortKey,
         listOrderDesc
     )
 }
 
 
-export const getTopicVersionReplies = async (ctx: AppContext, agent: Agent, id: string): Promise<{data?: FeedViewContent[], error?: string}> => {
+export const getTopicVersionReplies = async (
+    ctx: AppContext, agent: Agent, id: string, uri: string): Promise<{data?: FeedViewContent[], error?: string}> => {
     const skeleton = await getTopicRepliesSkeleton(ctx, id)
-    const res = await hydrateRepliesSkeleton(ctx, agent, skeleton)
+    const res = await hydrateRepliesSkeleton(
+        ctx,
+        agent,
+        skeleton,
+        uri
+    )
 
     return {data: res}
 }
@@ -280,6 +373,7 @@ export const getTopicFeed: CAHandlerNoAuth<{ params: {kind: "mentions" | "discus
     let {i: id, did, rkey, cursor, metric, time, format} = query
     const {kind} = params
 
+    let uri: string | undefined = did && rkey ? getUri(did, "ar.cabildoabierto.wiki.topicVersion", rkey) : undefined
     if(!id){
         if(!did || !rkey){
             return {error: "Se requiere un id o un par did y rkey."}
@@ -292,7 +386,14 @@ export const getTopicFeed: CAHandlerNoAuth<{ params: {kind: "mentions" | "discus
     }
 
     if(kind == "discussion"){
-        const replies = await getTopicVersionReplies(ctx, agent, id)
+        if(!uri) {
+            const {data, error} = await getTopicCurrentVersionFromDB(ctx, id)
+            if(error || !data) {
+                return {error: "No se encontró el tema."}
+            }
+            uri = data
+        }
+        const replies = await getTopicVersionReplies(ctx, agent, id, uri)
         if(!replies.data) return {error: replies.error}
 
         return {
@@ -372,7 +473,7 @@ export const getTopicQuoteReplies: CAHandlerNoAuth<{params: {did: string, rkey: 
         .select("uri")
         .execute()).map(p => ({post: p.uri}))
 
-    const hydrated = await hydrateRepliesSkeleton(ctx, agent, skeleton)
+    const hydrated = await hydrateRepliesSkeleton(ctx, agent, skeleton, uri)
 
     const posts: PostView[] = hydrated
         .map(c => c.content)

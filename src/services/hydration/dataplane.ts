@@ -477,16 +477,13 @@ export class Dataplane {
         }
         let postViews: PostView[] = []
         try {
-            const t1 = Date.now()
             if (batches.length > 1) console.log(`Warning: get bsky posts has ${batches.length} batches.`)
             for (const b of batches) {
                 const res = await agent.bsky.app.bsky.feed.getPosts({uris: b})
                 postViews.push(...res.data.posts)
             }
-            const t2 = Date.now()
-            this.ctx.logger.logTimes("fetch bsky posts", [t1, t2])
         } catch (err) {
-            this.ctx.logger.pino.error({error: err, uris}, "error fetching posts from bsky")
+            this.ctx.logger.pino.warn({error: err, uris}, "error fetching posts from bsky")
             return
         }
 
@@ -741,7 +738,6 @@ export class Dataplane {
 
         const agentDid = this.agent.hasSession() ? this.agent.did : null
 
-        this.ctx.logger.pino.info({agentDid}, "got agent did")
         // TO DO (!): Esto asume que todos los usuarios de CA están sincronizados. Hay que asegurarlo.
 
         try {

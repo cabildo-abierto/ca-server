@@ -3,7 +3,7 @@ import {getChunksReadByContent} from "#/services/monetization/user-months.js";
 import {sum} from "#/utils/arrays.js";
 import {getMonthlyValue} from "#/services/monetization/donations.js";
 import {getCollectionFromUri, isArticle, isTopicVersion, splitUri} from "#/utils/uri.js";
-import {getTopicIdFromTopicVersionUri, isVersionAccepted} from "#/services/wiki/current-version.js";
+import {getTopicIdFromTopicVersionUri} from "#/services/wiki/current-version.js";
 import {getTopicHistory} from "#/services/wiki/history.js";
 import {ReadChunksAttr} from "#/services/monetization/read-tracking.js";
 import {v4 as uuidv4} from "uuid";
@@ -215,7 +215,7 @@ async function createPaymentPromisesForTopicVersion(ctx: AppContext, uri: string
         if (v.claimsAuthorship) {
             monetizedCharsTotal += v.addedChars
         }
-        if (isVersionAccepted(v.author.editorStatus ?? "Beginner", history.protection ?? "Beginner", v.status)) {
+        if (v.status.accepted) {
             authorsVersionsCount.set(v.author.did, (authorsVersionsCount.get(v.author.did) ?? 0) + 1)
         }
     }
@@ -230,11 +230,7 @@ async function createPaymentPromisesForTopicVersion(ctx: AppContext, uri: string
         if (v.claimsAuthorship && monetizedCharsTotal > 0) {
             weight += v.addedChars / monetizedCharsTotal * 0.9
         }
-        if (isVersionAccepted(
-            v.author.editorStatus ?? "Beginner",
-            history.protection ?? "Beginner",
-            v.status
-        )) {
+        if (v.status.accepted) {
             weight += 1 / (idx + 1) * (monetizedCharsTotal > 0 ? 0.1 : 1.0)
         }
         ctx.logger.pino.info({uri, value, weight, amount: value * weight}, "payment promise for topic")

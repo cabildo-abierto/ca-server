@@ -196,6 +196,7 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
         for (let i = 0; i < topicVersions.length; i++) {
             const v = topicVersions[i]
             const status = getTopicVersionStatusFromReactions(
+                ctx,
                 v.reactions?.map(r => ({uri: r.uri, editorStatus: r.editorStatus})) ?? [],
                 v.editorStatus,
                 v.protection
@@ -317,13 +318,11 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
 
 
 export async function updateTopicContributionsRequired(ctx: AppContext) {
-    console.log("getting topic versions")
     const tv = await ctx.kysely
         .selectFrom("TopicVersion")
         .where("TopicVersion.charsAdded", "is", null)
         .select("topicId")
         .execute()
     const topicIds = unique(tv.map(t => t.topicId))
-    console.log("Required topic contribution updates:", topicIds.length)
     await updateTopicContributions(ctx, topicIds)
 }

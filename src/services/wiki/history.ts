@@ -1,23 +1,23 @@
 import {CAHandlerNoAuth} from "#/utils/handler.js"
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
 import {Agent} from "#/utils/session-agent.js"
-import {CategoryVotes, TopicHistory, TopicVersionStatus, VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
+import {TopicHistory, VersionInHistory} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
 import {getCollectionFromUri, getDidFromUri} from "#/utils/uri.js"
 import {editorStatusToEn} from "#/services/wiki/topics.js"
 import {AppContext} from "#/setup.js";
 import {jsonArrayFrom} from "kysely/helpers/postgres";
-import {isVersionAccepted} from "#/services/wiki/current-version.js";
-import {EditorStatus} from "@prisma/client";
 import {Dataplane} from "#/services/hydration/dataplane.js";
 import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
+import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard.js";
 
 
-export function getTopicVersionViewer(reactions: {uri: string}[]): VersionInHistory["viewer"] {
+export function getTopicVersionViewer(viewerDid: string, reactions: {uri: string}[]): VersionInHistory["viewer"] {
     let accept: string | undefined
     let reject: string | undefined
 
     if (reactions) {
         reactions.forEach(a => {
+            if(getDidFromUri(a.uri) != viewerDid) return
             const collection = getCollectionFromUri(a.uri)
             if (collection == "ar.cabildoabierto.wiki.voteAccept") {
                 accept = a.uri
@@ -29,28 +29,6 @@ export function getTopicVersionViewer(reactions: {uri: string}[]): VersionInHist
     return {
         accept, reject
     }
-}
-
-
-export function getTopicVersionStatus(authorStatus: EditorStatus, protection: EditorStatus, v: {uniqueAcceptsCount: number, uniqueRejectsCount: number}) {
-    const voteCounts: CategoryVotes[] = [
-        {
-            accepts: v.uniqueAcceptsCount,
-            rejects: v.uniqueRejectsCount,
-            category: "Beginner" // TO DO (!)
-        }
-    ]
-
-    const status: TopicVersionStatus = {
-        voteCounts,
-        accepted: isVersionAccepted(
-            authorStatus,
-            protection,
-            voteCounts
-        )
-    }
-
-    return status
 }
 
 
@@ -67,8 +45,6 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
             "Record.cid",
             "Record.created_at",
             "Record.created_at_tz",
-            "uniqueAcceptsCount",
-            "uniqueRejectsCount",
             "diff",
             "charsAdded",
             "charsDeleted",
@@ -81,12 +57,16 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
             "authorship",
             eb => jsonArrayFrom(eb
                 .selectFrom("Reaction")
-                .innerJoin("Record as ReactionRecord", "Record.uri", "Reaction.subjectId")
-                .select([
-                    "Reaction.uri"
-                ])
                 .whereRef("Reaction.subjectId", "=", "TopicVersion.uri")
-                .where("ReactionRecord.authorId", "=", did ?? "no did")
+                .innerJoin("Record as ReactionRecord", "ReactionRecord.uri", "Reaction.uri")
+                .innerJoin("User as ReactionAuthor", "ReactionAuthor.did", "ReactionRecord.authorId")
+                .select([
+                    "Reaction.uri",
+                    "ReactionAuthor.editorStatus"
+                ])
+                .orderBy("ReactionRecord.authorId")
+                .orderBy("ReactionRecord.created_at_tz desc")
+                .distinctOn("ReactionRecord.authorId")
             ).as("reactions"),
             eb => eb
                 .selectFrom("Post as Reply")
@@ -108,12 +88,17 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
             if (!v.cid) return null
 
             const viewer = getTopicVersionViewer(
+                did ?? "no did",
                 v.reactions
             )
             const author = hydrateProfileViewBasic(ctx, getDidFromUri(v.uri), dataplane) // TO DO: Usar el dataplane
             if (!author) return null
 
-            const status = getTopicVersionStatus(editorStatusToEn(author.editorStatus), v.protection, v)
+            const status = getTopicVersionStatusFromReactions(
+                ctx,
+                v.reactions,
+                editorStatusToEn(author.editorStatus),
+                v.protection)
 
             const contributionStr = v.contribution
             const contribution = contributionStr ? JSON.parse(contributionStr) : undefined

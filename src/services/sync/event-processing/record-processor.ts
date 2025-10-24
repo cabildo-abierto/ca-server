@@ -83,8 +83,7 @@ export class RecordProcessor<T> {
                         reason: res.error.message,
                         stack: res.error.stack,
                         uri: ref.uri,
-                        record,
-                        text: record.text.constructor.name
+                        record
                     }, "invalid record")
                 }
             }
