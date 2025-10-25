@@ -42,7 +42,7 @@ import path from "path";
 import {cancelEditVote, getTopicVersionVotesHandler, voteEdit} from "#/services/wiki/votes.js";
 import { adminRoutes } from './admin-routes.js';
 import { fetchURLMetadataHandler, getContentMetadata } from '#/services/write/metadata.js';
-import {getDataset, getDatasets, getTopicsDatasetHandler } from '#/services/dataset/read.js';
+import {getDatasetHandler, getDatasets, getTopicsDatasetHandler } from '#/services/dataset/read.js';
 import { createDataset } from '#/services/dataset/write.js';
 import {searchContents} from "#/services/feed/search.js";
 import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion.js";
@@ -67,6 +67,8 @@ import { getFollowSuggestions, setNotInterested } from '#/services/user/follow-s
 import {AppContext} from "#/setup.js";
 import { jobApplicationHandler } from '#/services/admin/jobs.js';
 import {unsubscribe, unsubscribeHandler} from "#/services/emails/sending.js";
+import {getTopicsDataForElectionVisualizationHandler} from "#/services/wiki/election.js";
+import {getKnownPropsHandler} from "#/services/wiki/known-props.js";
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
     return {data: "live"}
@@ -318,7 +320,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.get('/dataset/:did/:collection/:rkey',
-        makeHandlerNoAuth(ctx, getDataset)
+        makeHandlerNoAuth(ctx, getDatasetHandler)
     )
 
     router.post('/topics-dataset',
@@ -432,6 +434,10 @@ export const createRouter = (ctx: AppContext) => {
     router.post("/unsubscribe", makeHandlerNoAuth(ctx, unsubscribeHandler))
 
     router.get("/votes/:did/:rkey", makeHandlerNoAuth(ctx, getTopicVersionVotesHandler))
+
+    router.post("/election", makeHandler(ctx, getTopicsDataForElectionVisualizationHandler))
+
+    router.get("/known-props", makeHandlerNoAuth(ctx, getKnownPropsHandler))
 
     router.use(adminRoutes(ctx))
 
