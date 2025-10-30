@@ -1012,7 +1012,7 @@ export class Dataplane {
 
         const reqAuthors = skeleton.map(n => getDidFromUri(n.causedByRecordId))
 
-        const caNotificationsData: NotificationQueryResult[] = (await Promise.all([
+        const caNotificationsData = (await Promise.all([
             this.ctx.kysely
                 .selectFrom("Notification")
                 .innerJoin("Record", "Notification.causedByRecordId", "Record.uri")
@@ -1023,7 +1023,7 @@ export class Dataplane {
                     "Notification.causedByRecordId",
                     "Notification.message",
                     "Notification.moreContext",
-                    "Notification.created_at",
+                    "Notification.created_at_tz",
                     "Notification.type",
                     "Notification.reasonSubject",
                     "Record.cid",
@@ -1031,14 +1031,17 @@ export class Dataplane {
                     "TopicVersion.topicId"
                 ])
                 .where("userNotifiedId", "=", this.agent.did)
-                .orderBy("created_at", "desc")
+                .orderBy("Notification.created_at_tz", "desc")
                 .limit(20)
                 .execute(),
             this.fetchProfileViewHydrationData(reqAuthors)
         ]))[0]
 
         caNotificationsData.forEach(n => {
-            this.notifications.set(n.id, n)
+            if(n.created_at_tz != null) this.notifications.set(n.id, {
+                ...n,
+                created_at: n.created_at_tz
+            })
         })
     }
 

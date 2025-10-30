@@ -99,8 +99,8 @@ export const createRouter = (ctx: AppContext) => {
             clientSession.did = session.did
             await clientSession.save()
         } catch (err) {
-            ctx.logger.pino.error({ error: err }, 'oauth callback failed')
-            return res.redirect('/?error')
+            ctx.logger.pino.error({ error: err, params }, 'oauth callback failed')
+            return res.redirect(env.FRONTEND_URL+'/login/error')
         }
         return res.redirect(env.FRONTEND_URL+'/login/ok')
     })
@@ -435,7 +435,7 @@ export const createRouter = (ctx: AppContext) => {
 
     router.get("/votes/:did/:rkey", makeHandlerNoAuth(ctx, getTopicVersionVotesHandler))
 
-    router.post("/election", makeHandler(ctx, getTopicsDataForElectionVisualizationHandler))
+    router.post("/election", makeHandlerNoAuth(ctx, getTopicsDataForElectionVisualizationHandler))
 
     router.get("/known-props", makeHandlerNoAuth(ctx, getKnownPropsHandler))
 

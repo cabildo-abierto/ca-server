@@ -1,7 +1,7 @@
 import { ArCabildoabiertoEmbedVisualization } from "#/lex-api/index.js";
 import {AppContext} from "#/setup.js";
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
-import {CAHandler} from "#/utils/handler.js";
+import {CAHandlerNoAuth} from "#/utils/handler.js";
 import {getDataset} from "#/services/dataset/read.js";
 import {isDatasetDataSource, isEleccion} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js";
 
@@ -13,10 +13,6 @@ export type TopicData = {
 
 
 export const getTopicsDataForElectionVisualization = async (ctx: AppContext, v: ArCabildoabiertoEmbedVisualization.Main): Promise<TopicData[]> => {
-    ctx.logger.pino.info({
-        v
-    }, "getting election visualization")
-
     if(!isDatasetDataSource(v.dataSource)) return []
     if(!isEleccion(v.spec)){
         return []
@@ -69,7 +65,7 @@ export const getTopicsDataForElectionVisualization = async (ctx: AppContext, v: 
 }
 
 
-export const getTopicsDataForElectionVisualizationHandler: CAHandler<{v: ArCabildoabiertoEmbedVisualization.Main}, TopicData[]> = async (ctx, agent, params) => {
+export const getTopicsDataForElectionVisualizationHandler: CAHandlerNoAuth<{v: ArCabildoabiertoEmbedVisualization.Main}, TopicData[]> = async (ctx, agent, params) => {
     return {
         data: await getTopicsDataForElectionVisualization(ctx, params.v)
     }

@@ -42,11 +42,6 @@ export function getMonthlyValue() {
 
 export function isWeeklyActiveUser(ctx: AppContext, u: UserWithReadSessions, at: Date = new Date()): boolean {
     const lastWeekStart = new Date(at.getTime() - 1000 * 3600 * 24 * 7)
-    ctx.logger.pino.info({
-        lastWeekStart,
-        handle: u.handle,
-        sess: max(u.readSessions.map(r => r.created_at), x => new Date(x).getTime())
-    }, "isWA?")
     const recentSessions = u.readSessions
         .filter(x => new Date(x.created_at) > lastWeekStart && new Date(x.created_at) < at)
 

@@ -14,6 +14,7 @@ export class PostViewHydrator extends Hydrator<string, $Typed<PostView>> {
 
         if(!post && !caData) {
             this.ctx.logger.pino.warn({uri}, "sin datos para hidratar el post")
+            return null
         }
 
         if (!post) {
