@@ -18,6 +18,12 @@ export const getTopicsDataForElectionVisualization = async (ctx: AppContext, v: 
         return []
     }
 
+    const candidateCol = v.spec.columnaTopicIdCandidato
+    const alianzaCol = v.spec.columnaTopicIdAlianza
+    const districtCol = v.spec.columnaTopicIdDistrito
+
+    if(!candidateCol && !alianzaCol && !districtCol) return []
+
     const datasetUri = v.dataSource.dataset
 
     const {data} = await getDataset(
@@ -30,16 +36,13 @@ export const getTopicsDataForElectionVisualization = async (ctx: AppContext, v: 
     const dataset: Record<string, any>[] = JSON.parse(data.data)
 
     const topicIds = new Set<string>()
-
-    const candidateCol = v.spec.columnaTopicIdCandidato
-    const alianzaCol = v.spec.columnaTopicIdAlianza
-    const districtCol = v.spec.columnaTopicIdDistrito
-
     for(let i = 0; i < dataset.length; i++) {
         if(candidateCol) topicIds.add(dataset[i][candidateCol])
         if(alianzaCol) topicIds.add(dataset[i][alianzaCol])
         if(districtCol) topicIds.add(dataset[i][districtCol])
     }
+
+    if(topicIds.size == 0) return []
 
     const topicsData = await ctx.kysely
         .selectFrom("Topic")
