@@ -128,13 +128,13 @@ async function searchTopicsSkeleton(ctx: AppContext, query: string, categories?:
                         ]), "text"),
                         eb.cast(eb.ref('Topic.id'), 'text')
                     ).as('title'),
-                    "TopicVersion.uri"
+                    "TopicVersion.uri",
+                    "TopicVersion.props"
                 ])
         )
         .selectFrom('topics_with_titles')
         .select(["id", "title", "uri"])
         .select(eb => [
-            // Rank the results by relevance using ts_rank_cd.
             sql<number>`ts_rank(${tsVector}, ${tsQuery}, 1)`.as('match_score')
         ])
         .$if(categories != null, qb => qb.where(eb => categories!.includes("Sin categoría") ?

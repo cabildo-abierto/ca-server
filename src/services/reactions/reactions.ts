@@ -55,12 +55,12 @@ export const addReaction = async (ctx: AppContext, agent: SessionAgent, ref: ATP
             createdAt: new Date().toISOString()
         }
 
-        await new ReactionRecordProcessor(ctx).processValidated([{ref, record}])
-
+        await new ReactionRecordProcessor(ctx).processValidated([{ref: res, record}])
+        ctx.logger.pino.info("finished adding reaction")
         return {data: {uri: res.uri}}
     } catch (err) {
-        console.error("Error giving like", err)
-        return {error: "No se pudo agregar el like."}
+        ctx.logger.pino.error({error: err, ref, type}, "Error adding reaction")
+        return {error: "No se pudo crear la reacción."}
     }
 }
 

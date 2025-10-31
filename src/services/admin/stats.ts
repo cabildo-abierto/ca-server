@@ -49,16 +49,16 @@ async function getRegisteredUsers(ctx: AppContext, agent: SessionAgent): Promise
         .leftJoin("Record as CAProfile", "CAProfile.uri", "User.CAProfileUri")
         .select([
             "did",
-            "User.created_at",
+            "User.created_at_tz",
             "userValidationHash",
             "orgValidation",
             eb => jsonArrayFrom(eb
                 .selectFrom("ReadSession")
-                .selectAll()
+                .select("created_at_tz")
                 .whereRef("ReadSession.userId", "=", "User.did")
-                .orderBy("ReadSession.created_at desc")
+                .orderBy("ReadSession.created_at_tz desc")
             ).as("readSessions"),
-            "CAProfile.created_at as CAProfileCreatedAt"
+            "CAProfile.created_at_tz as CAProfileCreatedAt"
         ])
         .where("User.inCA", "=", true)
         .where("User.hasAccess", "=", true)
@@ -75,8 +75,8 @@ async function getRegisteredUsers(ctx: AppContext, agent: SessionAgent): Promise
             return {
                 ...p,
                 CAProfileCreatedAt: user.CAProfileCreatedAt,
-                lastReadSession: user.readSessions.length > 0 ? user?.readSessions[0].created_at : null,
-                createdAt: user.created_at?.toString(),
+                lastReadSession: user.readSessions.length > 0 ? user?.readSessions[0].created_at_tz : null,
+                createdAt: user.created_at_tz?.toString(),
             }
         }
         return null
@@ -177,15 +177,23 @@ function getEndOfDay(date: Date) {
 
 
 export const getStatsDashboard: CAHandler<{}, StatsDashboard> = async (ctx, agent, {}) => {
-    const lastUsers = await getRegisteredUsers(ctx, agent)
 
-    const {WAUPlot, active} = await getWAUPlot(ctx, false)
+    const [
+        lastUsers,
+        {WAUPlot, active},
+        {WAUPlot: WAUPlotVerified, active: verifiedActive},
+        topicVersionsPlot,
+        caCommentsPlot,
+        articlesPlot,
+    ] = await Promise.all([
+        getRegisteredUsers(ctx, agent),
+        getWAUPlot(ctx, false),
+        getWAUPlot(ctx, true),
+        getTopicVersionsPlot(ctx),
+        getCACommentsPlot(ctx),
+        getArticlesPlot(ctx),
+    ])
 
-    const {WAUPlot: WAUPlotVerified, active: verifiedActive} = await getWAUPlot(ctx, true)
-
-    const topicVersionsPlot = await getTopicVersionsPlot(ctx)
-    const caCommentsPlot = await getCACommentsPlot(ctx)
-    const articlesPlot = await getArticlesPlot(ctx)
     const usersPlot = await getUsersPlot(ctx, lastUsers)
 
     return {

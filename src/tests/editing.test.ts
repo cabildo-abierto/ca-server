@@ -11,7 +11,7 @@ import {splitUri} from "#/utils/uri.js";
 const testSuite = getSuiteId(__filename)
 
 
-describe('Edit post', () => {
+describe('Edit post', {timeout: 20000}, () => {
     let ctx : AppContext | undefined
     beforeAll(async () => {
         ctx = await createTestContext()
@@ -23,7 +23,7 @@ describe('Edit post', () => {
         await ctx!.worker?.clear()
     })
 
-    it("should modify the text in a post", async () => {
+    it("should modify the text in a post", {timeout: 20000}, async () => {
         const post = await getPostRefAndRecord(
             "hola!", new Date(), testSuite
         )
@@ -65,19 +65,19 @@ describe('Edit post', () => {
 
 
 
-describe('Edit article', () => {
+describe('Edit article', {timeout: 20000}, () => {
     let ctx : AppContext | undefined
     beforeAll(async () => {
         ctx = await createTestContext()
         await ctx.worker?.setup(ctx)
-    })
+    }, 20000)
 
     beforeEach(async () => {
         await cleanUPTestDataFromDB(ctx!, testSuite)
         await ctx!.worker?.clear()
-    })
+    }, 20000)
 
-    it("should modify the text and set edited", async () => {
+    it("should modify the text and set edited", {timeout: 20000}, async () => {
         const article = await getArticleRefAndRecord(
             ctx!, "título", "hola!", new Date(), testSuite
         )

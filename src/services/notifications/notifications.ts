@@ -93,20 +93,22 @@ async function getCANotifications(ctx: AppContext, agent: SessionAgent): Promise
                 "Notification.reasonSubject"
             ])
             .where("Notification.userNotifiedId", "=", agent.did)
-            .orderBy("Notification.created_at", "desc")
+            .orderBy("Notification.created_at_tz", "desc")
             .limit(20)
             .execute(),
         ctx.kysely
             .selectFrom("User")
-            .select("lastSeenNotifications")
+            .select("lastSeenNotifications_tz")
             .where("did", "=", agent.did)
             .execute()
     ])
 
     await dataplane.fetchNotificationsHydrationData(skeleton)
 
+    const lastReadTime = lastSeen[0].lastSeenNotifications_tz ?? new Date(0)
+
     return skeleton
-        .map(n => hydrateCANotification(ctx, n.id, dataplane, lastSeen[0].lastSeenNotifications))
+        .map(n => hydrateCANotification(ctx, n.id, dataplane, lastReadTime))
         .filter(n => n != null)
 }
 

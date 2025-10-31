@@ -58,7 +58,7 @@ export async function storeReadSession(ctx: AppContext, agent: Agent, readSessio
             chunks: readSession.chunks,
             totalChunks: readSession.totalChunks
         },
-        userId: agent.hasSession() ? agent.did : "anonymous",
+        userId: agent.hasSession() ? agent.did : "did:plc:2semihha42b7efhu4ywv7whi",
         readContentId: readSession.contentUri,
         contentAuthorId: getDidFromUri(readSession.contentUri),
         topicId: topicId ?? undefined,

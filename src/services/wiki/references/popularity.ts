@@ -26,7 +26,7 @@ async function getHumanUsers(ctx: AppContext) {
 
 
 export async function updateTopicPopularities(ctx: AppContext, topicIds: string[]) {
-    if(topicIds.length == 0) return
+    if(topicIds && topicIds.length == 0) return
     const lastMonth = new Date(Date.now() - 1000*3600*24*30)
     const lastWeek = new Date(Date.now() - 1000*3600*24*7)
     const lastDay = new Date(Date.now() - 1000*3600*24)
@@ -102,6 +102,13 @@ export async function updateTopicPopularities(ctx: AppContext, topicIds: string[
             .execute()
         const t3 = Date.now()
 
-        ctx.logger.logTimes("update topic popularities batch", [t1, t2 ,t3], {topics: topicIds.length})
+        ctx.logger.logTimes("update topic popularities batch", [t1, t2 ,t3], {topics: batchIds.length, total: topicIds.length})
     }
+}
+
+
+export async function updateAllTopicPopularities(ctx: AppContext) {
+    const topics = await ctx.kysely.selectFrom("Topic").select("id").execute()
+
+    await updateTopicPopularities(ctx, topics.map(t => t.id))
 }

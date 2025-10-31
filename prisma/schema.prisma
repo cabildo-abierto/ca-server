@@ -250,6 +250,8 @@ model Post {
   Record_Post_rootIdToRecord    Record?  @relation("Post_rootIdToRecord", fields: [rootId], references: [uri])
   Content                       Content  @relation(fields: [uri], references: [uri])
 
+  reasonOfVote VoteReject[]
+
   @@index([quoteToId])
   @@index([replyToId])
   @@index([rootId])
@@ -534,6 +536,9 @@ model VoteReject {
   labels   String[]
   message  String?
   Reaction Reaction @relation(fields: [uri], references: [uri])
+
+  reasonId String?
+  reason   Post?   @relation(fields: [reasonId], references: [uri])
 }
 
 model Timestamps {

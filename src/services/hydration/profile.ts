@@ -59,7 +59,16 @@ export function hydrateProfileViewBasic(ctx: AppContext, did: string, data: Data
 
     if(profile && viewer) {
         return {
-            ...profile,
+            did: profile.did,
+            handle: profile.handle,
+            displayName: profile.displayName,
+            avatar: profile.avatar,
+            associated: profile.associated,
+            labels: profile.labels,
+            createdAt: profile.createdAt,
+            caProfile: profile.caProfile,
+            verification: profile.verification,
+            editorStatus: profile.editorStatus,
             viewer,
             $type: "ar.cabildoabierto.actor.defs#profileViewBasic"
         }

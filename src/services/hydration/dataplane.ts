@@ -1,6 +1,5 @@
 import {AppContext} from "#/setup.js";
 import {bskyPublicAPI, NoSessionAgent, SessionAgent} from "#/utils/session-agent.js";
-import {PostView as BskyPostView} from "#/lex-server/types/app/bsky/feed/defs.js";
 import {ProfileViewBasic, ProfileViewDetailed} from "@atproto/api/dist/client/types/app/bsky/actor/defs.js";
 import {
     BlobRef, ThreadSkeleton
@@ -16,21 +15,20 @@ import {
     postUris,
     topicVersionUris
 } from "#/utils/uri.js";
+import {AppBskyFeedDefs} from "@atproto/api"
 import {$Typed, AtpBaseClient} from "@atproto/api";
 import {TopicVersionQueryResultBasic} from "#/services/wiki/topics.js";
 import {isMain as isVisualizationEmbed} from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
 import {
     FeedViewPost,
-    isPostView, isReasonRepost,
-    isSkeletonReasonRepost, isThreadViewPost,
+    isPostView,
+    isThreadViewPost,
     PostView, ThreadViewPost
 } from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
 import {fetchTextBlobs} from "#/services/blob.js";
 import {env} from "#/lib/env.js";
 import {RepostQueryResult} from "#/services/feed/inicio/following.js";
-import {isView as isEmbedRecordView} from "#/lex-api/types/app/bsky/embed/record.js"
-import {isView as isEmbedRecordWithMediaView} from "#/lex-api/types/app/bsky/embed/recordWithMedia.js"
-import {isViewNotFound, isViewRecord} from "#/lex-api/types/app/bsky/embed/record.js";
+import {isViewNotFound} from "#/lex-api/types/app/bsky/embed/record.js";
 import {NotificationQueryResult, NotificationsSkeleton} from "#/services/notifications/notifications.js";
 import {equalFilterCond, inFilterCond, stringListIncludes} from "#/services/dataset/read.js";
 import {Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article.js"
@@ -41,13 +39,13 @@ import {
     isColumnFilter
 } from "#/lex-api/types/ar/cabildoabierto/embed/visualization.js"
 import {getUrisFromThreadSkeleton} from "#/services/thread/thread.js";
-import {prettyPrintJSON} from "#/utils/strings.js";
 import {getValidationState} from "#/services/user/users.js";
 import {AppBskyActorDefs} from "@atproto/api"
 import {AppBskyFeedPost, ArCabildoabiertoActorDefs} from "#/lex-api/index.js"
 import {CAProfileDetailed, CAProfile} from "#/lib/types.js";
 import {hydrateProfileViewDetailed} from "#/services/hydration/profile.js";
-import logger from "@atproto/xrpc-server/dist/logger.js";
+import {AppBskyEmbedRecord, AppBskyEmbedRecordWithMedia} from "@atproto/api"
+import {isSkeletonReasonRepost} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
 
 
 export type FeedElementQueryResult = {
@@ -118,9 +116,9 @@ export class Dataplane {
     ctx: AppContext
     agent: SessionAgent | NoSessionAgent
     caContents: Map<string, FeedElementQueryResult> = new Map()
-    bskyPosts: Map<string, BskyPostView> = new Map()
-    likes: Map<string, string | null> = new Map()
-    reposts: Map<string, RepostQueryResult | null> = new Map() // mapea uri del post a información del repost asociado
+    bskyPosts: Map<string, AppBskyFeedDefs.PostView> = new Map()
+    likes: Map<string, string[]> = new Map()
+    reposts: Map<string, RepostQueryResult[]> = new Map() // mapea uri del post a información del repost asociado
     topicsByUri: Map<string, TopicVersionQueryResultBasic> = new Map()
     textBlobs: Map<string, string> = new Map()
     datasets: Map<string, DatasetQueryResult> = new Map()
@@ -186,9 +184,7 @@ export class Dataplane {
     }
 
     async fetchCAContentsAndBlobs(uris: string[]) {
-        const t1 = Date.now()
         await this.fetchCAContents(uris)
-        const t2 = Date.now()
 
         const contents = Array.from(this.caContents?.values() ?? [])
 
@@ -204,16 +200,12 @@ export class Dataplane {
             this.fetchTextBlobs(blobRefs),
             this.fetchFilteredTopics(filters)
         ])
-        const t3 = Date.now()
-        this.ctx.logger.logTimes("fetch ca contents and blobs", [t1, t2, t3])
+        //this.ctx.logger.logTimes("fetch ca contents and blobs", [t1, t2, t3])
     }
 
     async fetchCAContents(uris: string[]) {
         uris = uris.filter(u => !this.caContents?.has(u))
         if (uris.length == 0) return
-
-        this.ctx.logger.pino.info({included: uris.includes('at://did:plc:oky5czdrnfjpqslsw2a5iclo/app.bsky.feed.post/3lzduaypsv22f')},
-            "fetching ca contents")
 
         const contents = await this.ctx.kysely
             .selectFrom("Record")
@@ -257,7 +249,6 @@ export class Dataplane {
             ])
             .execute()
 
-
         contents.forEach(c => {
             if (c.cid) {
                 this.caContents.set(c.uri, {
@@ -275,7 +266,7 @@ export class Dataplane {
     }
 
     async fetchTextBlobs(blobs: BlobRef[]) {
-        this.ctx.logger.pino.info({blobs}, "fetching text blobs")
+        //this.ctx.logger.pino.info({blobs}, "fetching text blobs")
         if(blobs.length == 0) return
         const batchSize = 100
         let texts: (string | null)[] = []
@@ -295,7 +286,6 @@ export class Dataplane {
         uris = unique([...uris, ...required])
         const dids = unique([...uris.map(getDidFromUri), ...otherDids])
 
-        const t1 = Date.now()
         await Promise.all([
             this.fetchBskyPosts(postUris(uris)),
             this.fetchCAContentsAndBlobs(uris),
@@ -303,15 +293,12 @@ export class Dataplane {
             this.fetchTopicsBasicByUris(topicVersionUris(uris)),
             this.fetchProfileViewBasicHydrationData(dids)
         ])
-        const t2 = Date.now()
-        this.ctx.logger.logTimes("fetch posts and article views", [t1, t2])
+        //this.ctx.logger.logTimes("fetch posts and article views", [t1, t2])
     }
 
     async fetchTopicsBasicByUris(uris: string[]) {
         uris = uris.filter(u => !this.topicsByUri?.has(u))
         if (uris.length == 0) return
-
-        this.ctx.logger.pino.info({uris}, "fetching topic basics")
 
         const data: TopicVersionQueryResultBasic[] = await this.ctx.kysely
             .selectFrom("TopicVersion")
@@ -342,7 +329,6 @@ export class Dataplane {
             .map(e => e.reason && isSkeletonReasonRepost(e.reason) ? e.reason.repost : null)
             .filter(x => x != null)
 
-        const t1 = Date.now()
         const pUris = postUris(uris)
 
         const caPosts = (await Promise.all([
@@ -353,9 +339,8 @@ export class Dataplane {
                 .where("uri", "in", pUris)
                 .execute() : []
         ]))[1]
-        const t2 = Date.now()
 
-        this.ctx.logger.logTimes("expanding uris with replies and reposts", [t1, t2])
+        // this.ctx.logger.logTimes("expanding uris with replies and reposts", [t1, t2])
 
         const bskyPosts = uris
             .map(u => this.bskyPosts?.get(u))
@@ -423,62 +408,60 @@ export class Dataplane {
             this.ctx.logger.logTimes("fetch reposts", [t1, t2])
             reposts.forEach(r => {
                 if (r.subjectId) {
-                    this.reposts.set(r.subjectId, r)
+                    this.storeRepost({...r, subjectId: r.subjectId})
                 }
             })
         }
     }
 
-
-    addEmbedsToPostsMap(m: Map<string, BskyPostView>) {
-        const posts = Array.from(m.values())
-        posts.forEach(post => {
-            if (post.embed && isEmbedRecordView(post.embed) && isViewRecord(post.embed.record)) {
-                const record = post.embed.record
-                const collection = getCollectionFromUri(record.uri)
-                if (isPost(collection) && !m.has(record.uri)) {
-                    m.set(record.uri, {
-                        ...record,
-                        uri: record.uri,
-                        cid: record.cid,
-                        $type: "app.bsky.feed.defs#postView",
-                        author: {
-                            ...record.author
-                        },
-                        indexedAt: record.indexedAt,
-                        record: record.value,
-                        embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
-                    })
-                }
-            } else if (post.embed && isEmbedRecordWithMediaView(post.embed)) {
-                const recordView = post.embed.record
-                if (isEmbedRecordView(recordView) && isViewRecord(recordView.record)) {
-                    const record = recordView.record
-                    if(!m.has(record.uri)){
-                        m.set(record.uri, {
-                            ...record,
-                            uri: record.uri,
-                            cid: record.cid,
-                            $type: "app.bsky.feed.defs#postView",
-                            author: {
-                                ...record.author
-                            },
-                            indexedAt: record.indexedAt,
-                            record: record.value,
-                            embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
-                        })
-                    }
-                }
-            } else if (post.embed && isEmbedRecordView(post.embed) && isViewNotFound(post.embed.record)) {
-                const uri = post.embed.record.uri
-                const collection = getCollectionFromUri(uri)
-                if (isArticle(collection)) {
-                    this.requires.set(post.uri, [...(this.requires.get(post.uri) ?? []), uri])
-                }
-            }
+    storeBskyPost(uri: string, post: AppBskyFeedDefs.PostView) {
+        this.bskyPosts.set(uri, post)
+        this.bskyBasicUsers.set(getDidFromUri(uri), {
+            ...post.author,
+            $type: "app.bsky.actor.defs#profileViewBasic"
         })
+        if (post.embed && AppBskyEmbedRecord.isView(post.embed) && AppBskyEmbedRecord.isViewRecord(post.embed.record)) {
+            const record = post.embed.record
+            const collection = getCollectionFromUri(record.uri)
 
-        return m
+            if (isPost(collection)) {
+                this.storeBskyPost(record.uri, {
+                    ...record,
+                    uri: record.uri,
+                    cid: record.cid,
+                    $type: "app.bsky.feed.defs#postView",
+                    author: {
+                        ...record.author
+                    },
+                    indexedAt: record.indexedAt,
+                    record: record.value,
+                    embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
+                })
+            }
+        } else if (post.embed && AppBskyEmbedRecordWithMedia.isView(post.embed)) {
+            const recordView = post.embed.record
+            if (AppBskyEmbedRecord.isView(recordView) && AppBskyEmbedRecord.isViewRecord(recordView.record)) {
+                const record = recordView.record
+                this.storeBskyPost(record.uri, {
+                    ...record,
+                    uri: record.uri,
+                    cid: record.cid,
+                    $type: "app.bsky.feed.defs#postView",
+                    author: {
+                        ...record.author
+                    },
+                    indexedAt: record.indexedAt,
+                    record: record.value,
+                    embed: record.embeds && record.embeds.length > 0 ? record.embeds[0] : undefined
+                })
+            }
+        } else if (post.embed && AppBskyEmbedRecord.isView(post.embed) && isViewNotFound(post.embed.record)) {
+            const uri = post.embed.record.uri
+            const collection = getCollectionFromUri(uri)
+            if (isArticle(collection)) {
+                this.requires.set(post.uri, [...(this.requires.get(post.uri) ?? []), uri])
+            }
+        }
     }
 
     async fetchBskyPosts(uris: string[]) {
@@ -494,37 +477,18 @@ export class Dataplane {
         }
         let postViews: PostView[] = []
         try {
-            const t1 = Date.now()
             if (batches.length > 1) console.log(`Warning: get bsky posts has ${batches.length} batches.`)
             for (const b of batches) {
                 const res = await agent.bsky.app.bsky.feed.getPosts({uris: b})
                 postViews.push(...res.data.posts)
             }
-            const t2 = Date.now()
-            this.ctx.logger.logTimes("fetch bsky posts", [t1, t2])
         } catch (err) {
-            this.ctx.logger.pino.error({error: err, uris}, "error fetching posts from bsky")
+            this.ctx.logger.pino.warn({error: err, uris}, "error fetching posts from bsky")
             return
         }
 
-        let m = new Map<string, BskyPostView>(
-            postViews.map(item => [item.uri, item])
-        )
-
-        m = this.addEmbedsToPostsMap(m)
-        this.addAuthorsFromPostViews(Array.from(m.values()))
-
-        this.bskyPosts = joinMaps(this.bskyPosts, m)
-    }
-
-    addAuthorsFromPostViews(posts: PostView[]) {
-        posts.forEach(p => {
-            if (!this.bskyBasicUsers.has(p.author.did)) {
-                this.bskyBasicUsers.set(p.author.did, {
-                    ...p.author,
-                    $type: "app.bsky.actor.defs#profileViewBasic"
-                })
-            }
+        postViews.forEach(p => {
+            this.storeBskyPost(p.uri, p)
         })
     }
 
@@ -557,10 +521,10 @@ export class Dataplane {
         reactions.forEach(l => {
             if (l.subjectId) {
                 if (getCollectionFromUri(l.uri) == "app.bsky.feed.like") {
-                    if (!this.likes.has(l.subjectId)) this.likes.set(l.subjectId, l.uri)
+                    if (!this.likes.has(l.subjectId)) this.storeLike(l.subjectId, l.uri)
                 }
                 if (getCollectionFromUri(l.uri) == "app.bsky.feed.repost") {
-                    if (!this.reposts.has(l.subjectId)) this.reposts.set(l.subjectId, {
+                    if (!this.reposts.has(l.subjectId)) this.storeRepost({
                         uri: l.uri,
                         created_at: null,
                         subjectId: l.subjectId
@@ -568,6 +532,16 @@ export class Dataplane {
                 }
             }
         })
+    }
+
+    storeLike(subjectId: string, likeUri: string) {
+        const cur = this.likes.get(subjectId) ?? []
+        this.likes.set(subjectId, [...cur, likeUri])
+    }
+
+    storeRepost(repost: RepostQueryResult & {subjectId: string}) {
+        const cur = this.reposts.get(repost.subjectId) ?? []
+        this.reposts.set(repost.subjectId, [...cur, repost])
     }
 
     async fetchThreadHydrationData(skeleton: ThreadSkeleton) {
@@ -598,34 +572,35 @@ export class Dataplane {
         ])
     }
 
+    storeBskyBasicUser(user: ProfileViewBasic) {
+
+        this.bskyBasicUsers.set(user.did, {
+            ...user,
+            $type: "app.bsky.actor.defs#profileViewBasic"
+        })
+    }
+
     storeFeedViewPosts(feed: FeedViewPost[]) {
-        const m = new Map<string, PostView>()
         feed.forEach(f => {
-            m.set(f.post.uri, f.post)
+            this.storeBskyPost(f.post.uri, f.post)
             if (f.reply) {
                 if (isPostView(f.reply.parent)) {
-                    if (!m.has(f.reply.parent.uri)) {
-                        m.set(f.reply.parent.uri, f.reply.parent)
-                    }
+                    this.storeBskyPost(f.reply.parent.uri, f.reply.parent)
                 }
                 if (isPostView(f.reply.root)) {
-                    if (!m.has(f.reply.root.uri)) {
-                        m.set(f.reply.root.uri, f.reply.root)
-                    }
+                    this.storeBskyPost(f.reply.root.uri, f.reply.root)
                 }
             }
             if (f.reason) {
-                if (isReasonRepost(f.reason) && f.post.uri) {
-                    this.reposts.set(f.post.uri, {
+                if (AppBskyFeedDefs.isReasonRepost(f.reason) && f.post.uri) {
+                    this.storeBskyBasicUser(f.reason.by)
+                    this.storeRepost({
                         created_at: new Date(f.reason.indexedAt),
                         subjectId: f.post.uri
                     })
                 }
             }
         })
-        this.addEmbedsToPostsMap(m)
-        this.bskyPosts = joinMaps(this.bskyPosts, m)
-        this.addAuthorsFromPostViews(Array.from(m.values()))
     }
 
     async fetchDatasetsHydrationData(uris: string[]) {
@@ -754,64 +729,77 @@ export class Dataplane {
             return !(this.caUsersDetailed.has(d) && (this.bskyBasicUsers.has(d) || this.bskyDetailedUsers.has(d)))
         })
 
-        if(dids.length == 0) return
+        dids = unique(dids)
+
+        if(dids.length == 0) {
+            this.ctx.logger.pino.info({}, "all profile views were skipped")
+            return
+        }
 
         const agentDid = this.agent.hasSession() ? this.agent.did : null
 
         // TO DO (!): Esto asume que todos los usuarios de CA están sincronizados. Hay que asegurarlo.
-        const users = await this.ctx.kysely
-            .selectFrom("User")
-            .where("User.did", "in", dids)
-            .select([
-                "did",
-                "CAProfileUri",
-                "handle",
-                "displayName",
-                "avatar",
-                "created_at",
-                "orgValidation",
-                "userValidationHash",
-                "editorStatus",
-                "description",
-                eb => eb
-                    .selectFrom("Follow")
-                    .where("Follow.userFollowedId", "=", agentDid ?? "no did")
-                    .innerJoin("Record", "Record.uri", "Follow.uri")
-                    .whereRef("Record.authorId", "=", "User.did")
-                    .select("Follow.uri")
-                    .limit(1)
-                    .as("followedBy"),
-                eb => eb
-                    .selectFrom("Follow")
-                    .whereRef("Follow.userFollowedId", "=", "User.did")
-                    .innerJoin("Record", "Record.uri", "Follow.uri")
-                    .where("Record.authorId", "=", agentDid ?? "no did")
-                    .select("Follow.uri")
-                    .limit(1)
-                    .as("following")
-            ])
-            .where("inCA", "=", true)
-            .execute()
 
-        users.forEach(u => {
-            if(u.handle) {
-                this.caUsers.set(u.did, {
-                    did: u.did,
-                    caProfile: u.CAProfileUri,
-                    handle: u.handle,
-                    avatar: u.avatar,
-                    displayName: u.displayName,
-                    createdAt: u.created_at,
-                    verification: getValidationState(u),
-                    editorStatus: u.editorStatus,
-                    description: u.description,
-                    viewer: {
-                        following: u.following,
-                        followedBy: u.followedBy
-                    }
-                })
-            }
-        })
+        try {
+            const users = await this.ctx.kysely
+                .selectFrom("User")
+                .where("User.did", "in", dids)
+                .select([
+                    "did",
+                    "CAProfileUri",
+                    "handle",
+                    "displayName",
+                    "avatar",
+                    "created_at",
+                    "orgValidation",
+                    "userValidationHash",
+                    "editorStatus",
+                    "description",
+                    eb => eb
+                        .selectFrom("Follow")
+                        .where("Follow.userFollowedId", "=", agentDid ?? "no did")
+                        .innerJoin("Record", "Record.uri", "Follow.uri")
+                        .whereRef("Record.authorId", "=", "User.did")
+                        .select("Follow.uri")
+                        .limit(1)
+                        .as("followedBy"),
+                    eb => eb
+                        .selectFrom("Follow")
+                        .whereRef("Follow.userFollowedId", "=", "User.did")
+                        .innerJoin("Record", "Record.uri", "Follow.uri")
+                        .where("Record.authorId", "=", agentDid ?? "no did")
+                        .select("Follow.uri")
+                        .limit(1)
+                        .as("following")
+                ])
+                .where("inCA", "=", true)
+                .execute()
+
+
+            users.forEach(u => {
+                if(u.handle) {
+                    this.caUsers.set(u.did, {
+                        did: u.did,
+                        caProfile: u.CAProfileUri,
+                        handle: u.handle,
+                        avatar: u.avatar,
+                        displayName: u.displayName,
+                        createdAt: u.created_at,
+                        verification: getValidationState(u),
+                        editorStatus: u.editorStatus,
+                        description: u.description,
+                        viewer: {
+                            following: u.following,
+                            followedBy: u.followedBy
+                        }
+                    })
+                } else {
+                    this.ctx.logger.pino.warn({did: u.did}, "user with no handle, can't hydrate it")
+                }
+            })
+        } catch (error) {
+            this.ctx.logger.pino.error({error}, "error fetching profile views from CA")
+        }
 
         const bskyUsers = dids.filter(d => !this.caUsers.has(d))
         await this.fetchProfileViewDetailedHydrationDataFromBsky(bskyUsers)
@@ -922,9 +910,6 @@ export class Dataplane {
         )
         const t2 = Date.now()
         this.ctx.logger.logTimes(`fetch users data from bsky (N = ${dids.length})`, [t1, t2])
-
-        this.ctx.logger.pino.info("--------------------------------------------------------------------------------")
-        this.ctx.logger.pino.info({profiles, dids}, `fetching profile data from bsky`)
     }
 
 
@@ -983,7 +968,6 @@ export class Dataplane {
         })
         if(missedDids.length == 0) return
 
-
         await Promise.all([
             this.fetchProfileViewDetailedHydrationDataFromCA(missedDids),
             this.fetchProfileViewDetailedHydrationDataFromBsky(missedDids)
@@ -1023,7 +1007,7 @@ export class Dataplane {
 
         const reqAuthors = skeleton.map(n => getDidFromUri(n.causedByRecordId))
 
-        const caNotificationsData: NotificationQueryResult[] = (await Promise.all([
+        const caNotificationsData = (await Promise.all([
             this.ctx.kysely
                 .selectFrom("Notification")
                 .innerJoin("Record", "Notification.causedByRecordId", "Record.uri")
@@ -1034,7 +1018,7 @@ export class Dataplane {
                     "Notification.causedByRecordId",
                     "Notification.message",
                     "Notification.moreContext",
-                    "Notification.created_at",
+                    "Notification.created_at_tz",
                     "Notification.type",
                     "Notification.reasonSubject",
                     "Record.cid",
@@ -1042,17 +1026,19 @@ export class Dataplane {
                     "TopicVersion.topicId"
                 ])
                 .where("userNotifiedId", "=", this.agent.did)
-                .orderBy("created_at", "desc")
+                .orderBy("Notification.created_at_tz", "desc")
                 .limit(20)
                 .execute(),
             this.fetchProfileViewHydrationData(reqAuthors)
         ]))[0]
 
         caNotificationsData.forEach(n => {
-            this.notifications.set(n.id, n)
+            if(n.created_at_tz != null) this.notifications.set(n.id, {
+                ...n,
+                created_at: n.created_at_tz
+            })
         })
     }
-
 
     async fetchFilteredTopics(manyFilters: $Typed<ColumnFilter>[][]) {
         const datasets = await Promise.all(manyFilters.map(async filters => {
@@ -1108,9 +1094,7 @@ export class Dataplane {
 
     saveDataFromPostThread(thread: ThreadViewPost, includeParents: boolean, excludeChild?: string) {
         if (thread.post) {
-            this.addAuthorsFromPostViews([thread.post])
-            this.bskyPosts.set(thread.post.uri, thread.post)
-            this.addEmbedsToPostsMap(this.bskyPosts)
+            this.storeBskyPost(thread.post.uri, thread.post)
 
             if (includeParents && thread.parent && isThreadViewPost(thread.parent)) {
                 this.saveDataFromPostThread(thread.parent, true, thread.post.uri)
@@ -1123,14 +1107,12 @@ export class Dataplane {
                             this.saveDataFromPostThread(r, true)
                         }
                     } else {
-                        console.log("reply is not post view")
-                        prettyPrintJSON(r)
+                        this.ctx.logger.pino.info({r}, "reply is not post view")
                     }
                 })
             }
         } else {
-            console.log("thread->post no es postView:")
-            prettyPrintJSON(thread.post)
+            this.ctx.logger.pino.info({post: thread.post}, "thread->post no es postView")
         }
     }
 }

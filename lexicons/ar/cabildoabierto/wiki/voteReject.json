@@ -17,10 +17,10 @@
               "type": "string",
               "format": "datetime"
             },
-            "message": {
-              "type": "string",
-              "maxGraphemes": 600,
-              "maxLength": 6000
+            "reason": {
+              "type": "ref",
+              "ref": "com.atproto.repo.strongRef",
+              "description": "referencia a un post que justifique el voto"
             },
             "labels": {
               "type": "array",

@@ -5,7 +5,7 @@ import {
     MessageInput,
     MessageView
 } from "@atproto/api/dist/client/types/chat/bsky/convo/defs.js";
-import {$Typed} from "@atproto/api";
+import {$Typed, ChatBskyConvoGetConvoAvailability} from "@atproto/api";
 import {handleToDid} from "#/services/user/users.js";
 
 
@@ -50,9 +50,7 @@ export const getConversation: CAHandler<{
                 conversation: convData.convo
             }
         }
-    }
-
-    else {
+    } else {
         const convoResponse = await chatAgent.chat.bsky.convo.getConvoForMembers({members: [did]})
         if (!convoResponse.success) {
             return {error: "No se encontró la conversación."}
@@ -71,7 +69,9 @@ export const getConversation: CAHandler<{
 }
 
 
-export const createConversation: CAHandler<{params: {did: string}}, {convoId: string}> = async (ctx, agent, {params}) => {
+export const createConversation: CAHandler<{ params: { did: string } }, {
+    convoId: string
+}> = async (ctx, agent, {params}) => {
     const {did} = params
     const chatAgent = agent.bsky.withProxy("bsky_chat", "did:web:api.bsky.chat")
     try {
@@ -85,10 +85,34 @@ export const createConversation: CAHandler<{params: {did: string}}, {convoId: st
 }
 
 
-export const markConversationRead: CAHandler<{params: {convoId: string}}, {}> = async (ctx, agent, {params}) => {
+export const markConversationRead: CAHandler<{ params: { convoId: string } }, {}> = async (ctx, agent, {params}) => {
     const chatAgent = agent.bsky.withProxy("bsky_chat", "did:web:api.bsky.chat")
 
     await chatAgent.chat.bsky.convo.updateRead({convoId: params.convoId})
 
     return {data: {}}
+}
+
+
+export const getChatAvailability: CAHandler<{
+    params: { handle: string }
+}, ChatBskyConvoGetConvoAvailability.Response["data"]> = async (ctx, agent, {params}) => {
+
+    const chatAgent = agent.bsky
+        .withProxy("bsky_chat", "did:web:api.bsky.chat")
+
+    const did = await ctx.resolver.resolveHandleToDid(params.handle)
+
+    if(!did) {
+        return {error: "No se encontró el usuario"}
+    }
+
+    const res = await chatAgent.chat.bsky.convo.getConvoAvailability({
+        members: [did]
+    })
+
+    return {
+        data: res.success ? res.data : undefined,
+        error: !res.success ? "Ocurrió un error al obtener la conversación." : undefined
+    }
 }

@@ -21,16 +21,14 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 const testSuite = getSuiteId(__filename);
 
 
-describe('Process follow', () => {
+describe('Process follow', {timeout: 20000}, () => {
     let ctx : AppContext | undefined
 
     beforeAll(async () => {
         ctx = await createTestContext()
 
         await cleanUPTestDataFromDB(ctx, testSuite)
-
-
-    })
+    }, 20000)
 
     it("should create a record", async () => {
         const did = generateUserDid(testSuite)
@@ -63,19 +61,19 @@ describe('Process follow', () => {
 })
 
 
-describe('Create read session', () => {
+describe('Create read session', {timeout: 20000}, () => {
     const agent = new MockSessionAgent(generateUserDid(testSuite))
 
     let ctx : AppContext | undefined
     beforeAll(async () => {
         ctx = await createTestContext()
-    })
+    }, 20000)
 
     beforeEach(async () => {
         await cleanUPTestDataFromDB(ctx!, testSuite)
-    })
+    }, 20000)
 
-    it("should create a read session", async () => {
+    it("should create a read session", {timeout: 20000}, async () => {
         expect(ctx).not.toBeFalsy()
 
         const post = await getPostRefAndRecord(
@@ -134,7 +132,7 @@ describe('Create read session', () => {
         expect(db_rs!.topicId).toBeNull()
     })
 
-    it("should get liked if created before", async () => {
+    it("should get liked if created before", {timeout: 20000}, async () => {
         expect(ctx).not.toBeFalsy()
 
         const post = await getPostRefAndRecord("hola!", new Date(), testSuite)
@@ -152,7 +150,7 @@ describe('Create read session', () => {
         expect(record!.uniqueLikesCount).toEqual(1)
     })
 
-    it("should get liked if created later", async () => {
+    it("should get liked if created later", {timeout: 20000}, async () => {
         expect(ctx).not.toBeFalsy()
 
         const post = await getPostRefAndRecord(

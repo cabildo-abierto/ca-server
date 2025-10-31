@@ -1,4 +1,4 @@
-import {FeedViewContent} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
+import {FeedViewContent, SkeletonFeedPost} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
 import {getFollowingFeedPipeline} from "#/services/feed/inicio/following.js";
 import {Agent} from "#/utils/session-agent.js";
 import {hydrateFeed} from "#/services/hydration/hydrate.js";
@@ -15,7 +15,6 @@ import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler.js";
 import {Dataplane} from "#/services/hydration/dataplane.js";
 import {articlesFeedPipeline} from "#/services/feed/inicio/articles.js";
 import {clearFollowsHandler, getProfile, getSessionData} from "#/services/user/users.js";
-import {SkeletonFeedPost} from "@atproto/api/dist/client/types/app/bsky/feed/defs.js";
 
 
 export type FollowingFeedFilter = "Todos" | "Solo Cabildo Abierto"

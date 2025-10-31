@@ -172,14 +172,13 @@ async function applyReferencesUpdate(ctx: AppContext, referencesToInsert: Refere
     try {
         const date = new Date()
         ctx.logger.pino.info({count: referencesToInsert.length}, "applying references update")
-
         if(referencesToInsert.length > 0){
             await ctx.kysely
                 .insertInto("Reference")
                 .values(referencesToInsert
                     .map(r => ({...r, touched_tz: date})))
                 .onConflict(oc => oc.columns(["referencingContentId", "referencedTopicId"]).doUpdateSet(eb => ({
-                    touched: eb.ref("excluded.touched_tz"),
+                    touched_tz: eb.ref("excluded.touched_tz"),
                     relevance: eb.ref("excluded.relevance")
                 })))
                 .execute()
@@ -187,7 +186,7 @@ async function applyReferencesUpdate(ctx: AppContext, referencesToInsert: Refere
 
         await ctx.kysely
             .deleteFrom("Reference")
-            .where("touched", "<", date)
+            .where("touched_tz", "<", date)
             .$if(
                 contentUris != null,
                 qb => qb.where("Reference.referencingContentId", "in", contentUris!))

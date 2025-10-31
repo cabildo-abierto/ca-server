@@ -5,10 +5,10 @@ import {BlobRef} from "#/services/hydration/hydrate.js";
 import {nodesCharDiff} from "#/services/wiki/diff.js";
 import {decompress} from "#/utils/compression.js";
 import {unique} from "#/utils/arrays.js";
-import {isVersionAccepted} from "#/services/wiki/current-version.js";
 import {getTopicVersionStatusFromReactions} from "#/services/monetization/author-dashboard.js";
 import {getNumWords} from "#/services/wiki/content.js";
 import { sql } from "kysely";
+import {EditorStatus} from "@prisma/client";
 
 
 export const updateTopicContributionsHandler: CAHandler<{
@@ -24,13 +24,13 @@ type TopicVersion = {
     uri: string
     topicId: string
     authorship: boolean
-    protection: string
+    protection: EditorStatus
     text: string | null
     format: string | null
     dbFormat: string | null
     textBlobId: string | null
     authorId: string
-    editorStatus: string
+    editorStatus: EditorStatus
     created_at: Date
     reactions: {
         uri: string
@@ -93,7 +93,7 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
     const batchSize = 500
     if(topicIds.length > batchSize){
         for(let i = 0; i < topicIds.length; i += batchSize ){
-            console.log("Running update topic contributions for batch", i, "of", topicIds.length)
+            ctx.logger.pino.info({i, total: topicIds.length}, "running update topic contributions for batch")
             await updateTopicContributions(
                 ctx,
                 topicIds.slice(i, i+batchSize)
@@ -195,18 +195,19 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
         let acceptedVersions = 0
         for (let i = 0; i < topicVersions.length; i++) {
             const v = topicVersions[i]
-            const status = getTopicVersionStatusFromReactions(v.reactions?.map(r => ({uri: r.uri, editorStatus: r.editorStatus})) ?? [])
-            const accepted = isVersionAccepted(
+            const status = getTopicVersionStatusFromReactions(
+                ctx,
+                v.reactions?.map(r => ({uri: r.uri, editorStatus: r.editorStatus})) ?? [],
                 v.editorStatus,
-                v.protection,
-                status
+                v.protection
             )
-            acceptedMap.set(v.uri, accepted)
-            if(accepted) acceptedVersions++
+
+            acceptedMap.set(v.uri, status.accepted)
+            if(status.accepted) acceptedVersions++
 
             let markdown = getMarkdown(v, dataplane)
             if(markdown == null){
-                console.log("Warning: Couldn't find markdown for", v.uri)
+                ctx.logger.pino.warn({uri: v.uri}, "couldn't find markdown for topic version")
                 markdown = ""
             }
 
@@ -215,7 +216,7 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
                 markdown.split("\n\n")
             )
 
-            if(!accepted){
+            if(!status.accepted){
                 versionUpdates.push({
                     uri: v.uri,
                     charsAdded: d.charsAdded,
@@ -317,13 +318,11 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
 
 
 export async function updateTopicContributionsRequired(ctx: AppContext) {
-    console.log("getting topic versions")
     const tv = await ctx.kysely
         .selectFrom("TopicVersion")
         .where("TopicVersion.charsAdded", "is", null)
         .select("topicId")
         .execute()
     const topicIds = unique(tv.map(t => t.topicId))
-    console.log("Required topic contribution updates:", topicIds.length)
     await updateTopicContributions(ctx, topicIds)
 }

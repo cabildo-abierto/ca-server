@@ -9,6 +9,7 @@ import {AppContext} from "#/setup.js";
 import {orderNumberDesc, sortByKey, sum} from "#/utils/arrays.js";
 import {ReadChunks, ReadChunksAttr} from "#/services/monetization/read-tracking.js";
 import {FULL_READ_DURATION, joinManyChunks} from "#/services/monetization/user-months.js";
+import {EditorStatus} from "@prisma/client";
 
 type ArticleStats = {
     uri: string
@@ -56,70 +57,85 @@ type TopicVersionQueryResult = {
     contribution: string | null,
     created_at: Date
     reactions: unknown
-    protection: string
+    protection: EditorStatus
+    editorStatus: EditorStatus
     seenBy: number
     seenByVerified: number
     income: number | null
 }
 
 
-export function getTopicVersionStatusFromReactions(reactions: { uri: string, editorStatus: string }[]): TopicVersionStatus {
+export function getTopicVersionStatusFromReactions(
+    ctx: AppContext,
+    reactions: { uri: string, editorStatus: string }[],
+    authorStatus: EditorStatus,
+    protection: EditorStatus
+): TopicVersionStatus {
     const byEditorStatus = new Map<string, string[]>()
     reactions.forEach(r => {
         const cur = byEditorStatus.get(r.editorStatus)
         if (cur) {
             cur.push(r.uri)
-            byEditorStatus.set(r.editorStatus, cur)
         } else {
             byEditorStatus.set(r.editorStatus, [r.uri])
         }
     })
+
+    const voteCounts: TopicVersionStatus["voteCounts"] = Array.from(byEditorStatus.entries()).map(([k, v]) => {
+        return {
+            $type: "ar.cabildoabierto.wiki.topicVersion#categoryVotes",
+            accepts: new Set(v
+                .filter(v => getCollectionFromUri(v) == "ar.cabildoabierto.wiki.voteAccept")
+                .map(getDidFromUri))
+                .size,
+            rejects: new Set(v
+                .filter(v => getCollectionFromUri(v) == "ar.cabildoabierto.wiki.voteReject")
+                .map(getDidFromUri))
+                .size,
+            category: k
+        }
+    })
+
     return {
-        voteCounts: Array.from(byEditorStatus.entries()).map(([k, v]) => {
-            return {
-                $type: "ar.cabildoabierto.wiki.topicVersion#categoryVotes",
-                accepts: new Set(v
-                    .filter(v => getCollectionFromUri(v) == "ar.cabildoabierto.wiki.topicAccept")
-                    .map(getDidFromUri))
-                    .size,
-                rejects: new Set(v
-                    .filter(v => getCollectionFromUri(v) == "ar.cabildoabierto.wiki.topicReject")
-                    .map(getDidFromUri))
-                    .size,
-                category: k
-            }
-        })
+        voteCounts,
+        accepted: isVersionAccepted(
+            ctx,
+            authorStatus,
+            protection,
+            voteCounts
+        )
     }
 }
 
 
-async function getTopicsForDashboardQuery(ctx: AppContext, did: string) {
-    const [edits, user] = await Promise.all([
-        ctx.kysely
-            .selectFrom('TopicVersion')
-            .innerJoin('Record', 'TopicVersion.uri', 'Record.uri')
-            .innerJoin('Topic', 'Topic.id', 'TopicVersion.topicId')
-            .innerJoin(
-                'TopicVersion as TopicCurrentVersion',
-                'TopicCurrentVersion.uri',
-                'Topic.currentVersionId'
-            )
+async function getTopicsForDashboard(ctx: AppContext, did: string): Promise<TopicVersionQueryResult[]> {
+    return ctx.kysely
+        .selectFrom('TopicVersion')
+        .innerJoin('Record', 'TopicVersion.uri', 'Record.uri')
+        .innerJoin("User as Author", "Author.did", "Record.authorId")
+        .innerJoin('Topic', 'Topic.id', 'TopicVersion.topicId')
+        .innerJoin(
+            'TopicVersion as TopicCurrentVersion',
+            'TopicCurrentVersion.uri',
+            'Topic.currentVersionId'
+        )
 
-            .leftJoin("Reaction", "Reaction.subjectId", "TopicVersion.uri")
-            .leftJoin("Record as ReactionRecord", "Reaction.uri", "ReactionRecord.uri")
-            .leftJoin("User as ReactionAuthor", "ReactionAuthor.did", "ReactionRecord.authorId")
+        .leftJoin("Reaction", "Reaction.subjectId", "TopicVersion.uri")
+        .leftJoin("Record as ReactionRecord", "Reaction.uri", "ReactionRecord.uri")
+        .leftJoin("User as ReactionAuthor", "ReactionAuthor.did", "ReactionRecord.authorId")
 
-            .leftJoin("ReadSession", "ReadSession.topicId", "Topic.id")
-            .leftJoin("User as Reader", "Reader.did", "ReadSession.userId")
+        .leftJoin("ReadSession", "ReadSession.topicId", "Topic.id")
+        .leftJoin("User as Reader", "Reader.did", "ReadSession.userId")
 
-            .select([
-                'TopicVersion.uri',
-                'TopicVersion.topicId',
-                'TopicVersion.contribution',
-                'Topic.protection',
-                'Record.created_at',
-                'TopicCurrentVersion.props',
-                sql`
+        .select([
+            'TopicVersion.uri',
+            'TopicVersion.topicId',
+            'TopicVersion.contribution',
+            'Topic.protection',
+            'Record.created_at',
+            'TopicCurrentVersion.props',
+            "Author.editorStatus",
+            sql`
                     COALESCE(
                     json_agg(
                       json_build_object(
@@ -130,33 +146,40 @@ async function getTopicsForDashboardQuery(ctx: AppContext, did: string) {
                     '[]'
                   )
                 `.as('reactions'),
-                eb => eb.fn.count<number>("ReadSession.userId")
-                    .distinct()
-                    .filterWhereRef('ReadSession.created_at', '>', 'Record.created_at')
-                    .filterWhereRef("ReadSession.userId", "!=", "Record.authorId")
-                    .as("seenBy"),
-                eb => eb.fn.count<number>("ReadSession.userId")
-                    .distinct()
-                    .filterWhereRef('ReadSession.created_at', '>', 'Record.created_at')
-                    .filterWhereRef("ReadSession.userId", "!=", "Record.authorId")
-                    .filterWhere("Reader.userValidationHash", "is not", null)
-                    .as("seenByVerified"),
-                eb => eb.selectFrom('PaymentPromise')
-                    .whereRef('PaymentPromise.contentId', '=', 'TopicVersion.uri')
-                    .select(eb => eb.fn.sum<number>('PaymentPromise.amount').as("income"))
-                    .as('income')
-            ])
-            .where('Record.authorId', '=', did)
-            .groupBy([
-                'TopicVersion.uri',
-                'TopicVersion.topicId',
-                'TopicVersion.contribution',
-                'Record.created_at',
-                'TopicCurrentVersion.props',
-                "Topic.protection"
-            ])
-            .orderBy("Record.created_at", "asc")
-            .execute(),
+            eb => eb.fn.count<number>("ReadSession.userId")
+                .distinct()
+                .filterWhereRef('ReadSession.created_at', '>', 'Record.created_at')
+                .filterWhereRef("ReadSession.userId", "!=", "Record.authorId")
+                .as("seenBy"),
+            eb => eb.fn.count<number>("ReadSession.userId")
+                .distinct()
+                .filterWhereRef('ReadSession.created_at', '>', 'Record.created_at')
+                .filterWhereRef("ReadSession.userId", "!=", "Record.authorId")
+                .filterWhere("Reader.userValidationHash", "is not", null)
+                .as("seenByVerified"),
+            eb => eb.selectFrom('PaymentPromise')
+                .whereRef('PaymentPromise.contentId', '=', 'TopicVersion.uri')
+                .select(eb => eb.fn.sum<number>('PaymentPromise.amount').as("income"))
+                .as('income')
+        ])
+        .where('Record.authorId', '=', did)
+        .groupBy([
+            'TopicVersion.uri',
+            'TopicVersion.topicId',
+            'TopicVersion.contribution',
+            'Record.created_at',
+            'TopicCurrentVersion.props',
+            "Topic.protection",
+            "Author.editorStatus"
+        ])
+        .orderBy("Record.created_at", "asc")
+        .execute()
+}
+
+
+async function getTopicsForDashboardQuery(ctx: AppContext, did: string) {
+    const [edits, user] = await Promise.all([
+        getTopicsForDashboard(ctx, did),
         getSessionData(ctx, did)
     ])
 
@@ -189,11 +212,14 @@ async function getTopicsForDashboardQuery(ctx: AppContext, did: string) {
         for (const tv of t) {
             const reactions = tv.reactions as { uri: string, editorStatus: string }[]
 
-            const status: TopicVersionStatus = getTopicVersionStatusFromReactions(reactions)
+            const status: TopicVersionStatus = getTopicVersionStatusFromReactions(
+                ctx,
+                reactions,
+                tv.editorStatus,
+                tv.protection
+            )
 
-            const protection = tv.protection
-            const accepted = isVersionAccepted(user.editorStatus, protection, status)
-            if (accepted) acceptedCount++
+            if (status.accepted) acceptedCount++
         }
 
         return {

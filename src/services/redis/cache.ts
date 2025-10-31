@@ -332,6 +332,24 @@ class MirrorStatusCacheKey extends CacheKey {
     }
 }
 
+
+class DidsAndHandlesCacheKey extends CacheKey {
+
+    async getHandle(did: string): Promise<string | null> {
+        return this.cache.redis.get(`did->handle:${did}`);
+    }
+
+    async getDid(handle: string): Promise<string | null> {
+        return this.cache.redis.get(`handle->did:${handle}`);
+    }
+
+    async setHandle(did: string, handle: string) {
+        await this.cache.redis.set(`did->handle:${did}`, handle, 'EX', 3600)
+        await this.cache.redis.set(`handle->did:${did}`, handle, 'EX', 3600)
+    }
+}
+
+
 class SingleKey<T> extends CacheKey {
     key: string
     ttl: number | undefined
@@ -369,6 +387,7 @@ export class RedisCache {
     followingFeedSkeletonCAArticles: FollowingFeedSkeletonKey
     profile: ProfileCacheKey
     nextMeeting: SingleKey<NextMeeting>
+    resolver: DidsAndHandlesCacheKey
 
     constructor(redis: Redis, mirrorId: string, logger: Logger) {
         this.redis = redis
@@ -379,6 +398,7 @@ export class RedisCache {
         this.followingFeedSkeletonCAAll = new FollowingFeedSkeletonKey(this, ["ca-all"])
         this.followingFeedSkeletonCAArticles = new FollowingFeedSkeletonKey(this, ["ca-articles"])
         this.profile = new ProfileCacheKey(this)
+        this.resolver = new DidsAndHandlesCacheKey(this)
         this.nextMeeting = new SingleKey<NextMeeting>(this, "next-meeting", 60*60)
         this.logger = logger
 
@@ -389,6 +409,7 @@ export class RedisCache {
             this.followSuggestionsDirty,
             this.followingFeedSkeletonCAAll,
             this.followingFeedSkeletonCAArticles,
+            this.resolver
         ]
     }
 

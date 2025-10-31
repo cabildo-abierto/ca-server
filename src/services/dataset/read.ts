@@ -61,13 +61,8 @@ export function hydrateTopicsDatasetView(ctx: AppContext, filters: $Typed<Column
 }
 
 
-export const getDataset: CAHandlerNoAuth<{
-    params: { did: string, collection: string, rkey: string }
-}, DatasetView> = async (ctx, agent, {params}) => {
-    const {did, collection, rkey} = params
-    const uri = getUri(did, collection, rkey)
-
-    const dataplane = new Dataplane(ctx, agent)
+export async function getDataset(ctx: AppContext, uri: string) {
+    const dataplane = new Dataplane(ctx)
 
     // No se pueden paralelizar
     await dataplane.fetchDatasetsHydrationData([uri])
@@ -76,6 +71,16 @@ export const getDataset: CAHandlerNoAuth<{
     const view = hydrateDatasetView(ctx, uri, dataplane)
     if(!view) return {error: "Ocurrió un error al obtener el dataset."}
     return {data: view}
+}
+
+
+export const getDatasetHandler: CAHandlerNoAuth<{
+    params: { did: string, collection: string, rkey: string }
+}, DatasetView> = async (ctx, agent, {params}) => {
+    const {did, collection, rkey} = params
+    const uri = getUri(did, collection, rkey)
+
+    return await getDataset(ctx, uri)
 }
 
 type TopicDatasetSpec = {
