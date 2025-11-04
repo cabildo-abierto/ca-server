@@ -4,7 +4,7 @@ import {hydrateProfileViewBasic} from "#/services/hydration/profile.js";
 import {ProfileViewBasic as ProfileViewBasicCA} from "#/lex-api/types/ar/cabildoabierto/actor/defs.js"
 import {AppContext} from "#/setup.js";
 import {SessionAgent} from "#/utils/session-agent.js";
-import {getUsersWithReadSessions} from "#/services/monetization/user-months.js";
+import {getUsersWithReadSessions} from "#/services/monetization/get-users-with-read-sessions.js";
 import {isWeeklyActiveUser} from "#/services/monetization/donations.js";
 import {count, listOrderDesc, sortByKey} from "#/utils/arrays.js";
 import {sql} from "kysely";
@@ -266,3 +266,18 @@ export const getActivityStats: CAHandler<{}, ActivityStats[]> = async (ctx, agen
     return {data: stats}
 }
 
+
+
+export const getReadSessionsPlot: CAHandler<{}, {date: Date, count: number}[]> = async (ctx, agent, params) => {
+    const reads = await ctx.kysely
+        .selectFrom("ReadSession")
+        .select(["created_at_tz"])
+        .execute()
+
+    const data = dailyPlotData(reads,
+        (x, d) => x.created_at_tz != null && new Date(x.created_at_tz).toDateString() == new Date(d).toDateString())
+
+    return {
+        data
+    }
+}

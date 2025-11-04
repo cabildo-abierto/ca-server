@@ -1,8 +1,8 @@
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler.js";
 import {MercadoPagoConfig, Preference} from "mercadopago";
 import {AppContext} from "#/setup.js";
-import {getUsersWithReadSessions, UserWithReadSessions} from "#/services/monetization/user-months.js";
-import {count, max} from "#/utils/arrays.js";
+import {getUsersWithReadSessions, UserWithReadSessions} from "#/services/monetization/get-users-with-read-sessions.js";
+import {count} from "#/utils/arrays.js";
 import {v4 as uuidv4} from "uuid";
 import {env} from "#/lib/env.js";
 

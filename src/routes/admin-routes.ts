@@ -14,13 +14,15 @@ import {sessionAgent} from "#/utils/session-agent.js";
 import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration/migration.js";
 import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation.js";
 import {updateTopicContributionsHandler} from "#/services/wiki/contributions.js";
-import {getActivityStats, getStatsDashboard} from "#/services/admin/stats.js";
+import {getActivityStats, getReadSessionsPlot, getStatsDashboard} from "#/services/admin/stats.js";
 import {getRepoCounts} from "#/services/admin/repo.js";
 import {getRegisteredJobs, startJob} from "#/jobs/worker.js";
 
 import {clearRedisHandler} from "#/services/redis/cache.js";
 import {env} from "#/lib/env.js";
 import {getServerStatus} from "#/services/admin/status.js";
+import {getUserMonthPayments, getUserMonthsStats} from "#/services/monetization/user-months.js";
+import {getTopAuthors} from "#/services/monetization/author-dashboard.js";
 
 
 function isAdmin(did: string) {
@@ -157,7 +159,15 @@ export const adminRoutes = (ctx: AppContext) => {
 
     router.get("/status", makeAdminHandler(ctx, getServerStatus))
 
+    router.get("/user-months", makeAdminHandler(ctx, getUserMonthsStats))
+
+    router.get("/user-month-payments/:id", makeAdminHandler(ctx, getUserMonthPayments))
+
+    router.get("/read-sessions-plot", makeAdminHandler(ctx, getReadSessionsPlot))
+
     router.get("/registered-jobs", makeAdminHandler(ctx, getRegisteredJobs))
+
+    router.get("/top-authors", makeAdminHandler(ctx, getTopAuthors))
 
     return router
 }

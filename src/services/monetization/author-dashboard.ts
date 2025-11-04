@@ -8,7 +8,7 @@ import {getCollectionFromUri, getDidFromUri} from "#/utils/uri.js";
 import {AppContext} from "#/setup.js";
 import {orderNumberDesc, sortByKey, sum} from "#/utils/arrays.js";
 import {ReadChunks, ReadChunksAttr} from "#/services/monetization/read-tracking.js";
-import {FULL_READ_DURATION, joinManyChunks} from "#/services/monetization/user-months.js";
+import {FULL_READ_DURATION, joinManyChunks} from "#/services/monetization/get-users-with-read-sessions.js";
 import {EditorStatus} from "@prisma/client";
 
 type ArticleStats = {
@@ -157,9 +157,9 @@ async function getTopicsForDashboard(ctx: AppContext, did: string): Promise<Topi
                 .filterWhereRef("ReadSession.userId", "!=", "Record.authorId")
                 .filterWhere("Reader.userValidationHash", "is not", null)
                 .as("seenByVerified"),
-            eb => eb.selectFrom('PaymentPromise')
-                .whereRef('PaymentPromise.contentId', '=', 'TopicVersion.uri')
-                .select(eb => eb.fn.sum<number>('PaymentPromise.amount').as("income"))
+            eb => eb.selectFrom('AssignedPayment')
+                .whereRef('AssignedPayment.contentId', '=', 'TopicVersion.uri')
+                .select(eb => eb.fn.sum<number>('AssignedPayment.amount').as("income"))
                 .as('income')
         ])
         .where('Record.authorId', '=', did)
@@ -238,7 +238,7 @@ async function getTopicsForDashboardQuery(ctx: AppContext, did: string) {
     })
 
     return {
-        data: sortByKey(editStats, e => e.topicSeenBy, orderNumberDesc)
+        data: sortByKey(editStats, e => e.income, orderNumberDesc)
     }
 }
 
@@ -292,10 +292,10 @@ async function getArticlesForDashboardQuery(ctx: AppContext, did: string): Promi
         ctx.kysely
             .selectFrom("Article")
             .innerJoin("Record", "Article.uri", "Record.uri")
-            .leftJoin('PaymentPromise', 'PaymentPromise.contentId', 'Record.uri')
+            .leftJoin('AssignedPayment', 'AssignedPayment.contentId', 'Record.uri')
             .select([
                 "Article.uri",
-                eb => eb.fn.sum<number>("PaymentPromise.amount").as("income")
+                eb => eb.fn.sum<number>("AssignedPayment.amount").as("income")
             ])
             .groupBy([
                 "Article.uri"
@@ -368,6 +368,7 @@ async function getArticlesForDashboardQuery(ctx: AppContext, did: string): Promi
 
 
 export async function getAuthorDashboard(ctx: AppContext, did: string) {
+    did = "did:plc:arplmoycj2z7jz3wljgyq3lh"
     const [articles, editStats] = await Promise.all([
         getArticlesForDashboardQuery(ctx, did),
         getTopicsForDashboardQuery(ctx, did),
@@ -398,4 +399,30 @@ export async function getAuthorDashboard(ctx: AppContext, did: string) {
 
 export const getAuthorDashboardHandler: CAHandler<{}, AuthorDashboard> = async (ctx, agent, params) => {
     return getAuthorDashboard(ctx, agent.did)
+}
+
+type AuthorStats = {
+    did: string
+    handle: string | null
+    accIncome: number | null
+}
+
+
+export const getTopAuthors: CAHandler<{}, AuthorStats[]> = async (ctx, agent, params) => {
+    const authors = await ctx.kysely
+        .selectFrom("User")
+        .select([
+            "did",
+            "handle",
+            eb => eb.selectFrom("AssignedPayment")
+                .select(eb => eb.fn.sum<number>("AssignedPayment.amount").as("totalAssigned"))
+                .innerJoin("Record", "Record.uri", "AssignedPayment.contentId")
+                .whereRef("Record.authorId", "=", "User.did").as("accIncome")
+        ])
+        .where("User.inCA", "=", true)
+        .execute()
+
+    return {
+        data: authors.toSorted((a, b) => (b.accIncome ?? 0) - (a.accIncome ?? 0))
+    }
 }

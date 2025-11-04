@@ -31,7 +31,7 @@ type TopicVersion = {
     textBlobId: string | null
     authorId: string
     editorStatus: EditorStatus
-    created_at: Date
+    created_at: Date | null
     reactions: {
         uri: string
         editorStatus: string
@@ -124,7 +124,7 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
             "c.textBlobId",
             "r.authorId",
             "u.editorStatus",
-            "r.created_at",
+            "r.created_at_tz as created_at",
             eb => eb.fn.jsonAgg(
                 sql<{ uri: string; editorStatus: string }>`json_build_object('uri', "Reaction"."uri", 'editorStatus', "ReactionAuthor"."editorStatus")`
             ).filterWhere("Reaction.uri", "is not", null).as("reactions")
@@ -141,11 +141,13 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
             "c.textBlobId",
             "r.authorId",
             "u.editorStatus",
-            "r.created_at"
+            "r.created_at_tz"
         ])
         .where("t.id", "in", topicIds)
-        .orderBy("r.created_at asc")
+        .orderBy("r.created_at_tz asc")
         .execute()
+
+    ctx.logger.pino.info({versions, topicIds}, "updating topic contributions")
 
     const blobRefs: BlobRef[] = versions.map(e => {
         if (!e.textBlobId) return null
@@ -172,9 +174,11 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
         charsAdded: number
         charsDeleted: number
         accCharsAdded: number
-        contribution?: string
+        monetizedContribution?: number
+        charsContribution?: number
         diff: string
         prevAcceptedUri: string | undefined
+        accepted: boolean
     }
 
     type ContentUpd = {uri: string, numWords: number, text: string, dbFormat: string}
@@ -224,7 +228,8 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
                     accCharsAdded: accCharsAdded,
                     diff: JSON.stringify(d),
                     topicId,
-                    prevAcceptedUri: prevAccepted
+                    prevAcceptedUri: prevAccepted,
+                    accepted: false
                 })
                 versionContentUpdates.push({
                     uri: v.uri,
@@ -248,6 +253,7 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
                 diff: JSON.stringify(d),
                 topicId,
                 prevAcceptedUri: prevAccepted,
+                accepted: true,
             })
             versionContentUpdates.push({
                 uri: v.uri,
@@ -275,10 +281,10 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
                 }
             }
 
-            versionUpdates[i].contribution = JSON.stringify({
-                all: versionUpdates[i].charsAdded / accCharsAdded,
-                monetized
-            })
+
+            versionUpdates[i].monetizedContribution = monetized
+            versionUpdates[i].charsContribution = accCharsAdded == 0 ? 1.0 / 0 : versionUpdates[i].charsAdded / accCharsAdded
+            ctx.logger.pino.info({upd: versionUpdates[i], accepted, monetizedCharsAdded, acceptedVersions}, "setting contribution")
         }
         updates.push(...versionUpdates)
         contentUpdates.push(...versionContentUpdates)
@@ -293,9 +299,11 @@ export const updateTopicContributions = async (ctx: AppContext, topicIds: string
                 charsAdded: eb.ref('excluded.charsAdded'),
                 charsDeleted: eb.ref('excluded.charsDeleted'),
                 accCharsAdded: eb.ref('excluded.accCharsAdded'),
-                contribution: eb.ref('excluded.contribution'),
+                monetizedContribution: eb.ref("excluded.monetizedContribution"),
+                charsContribution: eb.ref("excluded.charsContribution"),
                 diff: eb.ref('excluded.diff'),
                 prevAcceptedUri: eb.ref('excluded.prevAcceptedUri'),
+                accepted: eb.ref("excluded.accepted")
             })))
             .execute()
 

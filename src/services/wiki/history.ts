@@ -48,7 +48,8 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
             "diff",
             "charsAdded",
             "charsDeleted",
-            "contribution",
+            "monetizedContribution",
+            "charsContribution",
             "Topic.protection",
             "message",
             "accCharsAdded",
@@ -100,9 +101,6 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
                 editorStatusToEn(author.editorStatus),
                 v.protection)
 
-            const contributionStr = v.contribution
-            const contribution = contributionStr ? JSON.parse(contributionStr) : undefined
-
             const props = Array.isArray(v.props) ? v.props as unknown as TopicProp[] : []
 
             const view: VersionInHistory = {
@@ -120,7 +118,10 @@ export async function getTopicHistory(ctx: AppContext, id: string, agent?: Agent
                 removedChars: v.charsDeleted ?? undefined,
                 props,
                 createdAt: v.created_at_tz ? v.created_at_tz.toISOString() : v.created_at.toISOString(),
-                contribution,
+                contribution: {
+                    monetized: (v.monetizedContribution ?? 0).toString(),
+                    all: (v.charsContribution ?? 0).toString()
+                },
                 prevAccepted: v.prevAcceptedUri ?? undefined,
                 claimsAuthorship: v.authorship ?? false,
                 replyCount: v.replyCount ?? 0

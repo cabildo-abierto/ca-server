@@ -25,7 +25,6 @@ import {CAHandler} from "#/utils/handler.js";
 import {assignInviteCodesToUsers} from "#/services/user/access.js";
 import {resetContentsFormat, updateContentsNumWords, updateContentsText} from "#/services/wiki/content.js";
 import {updatePostLangs} from "#/services/admin/posts.js";
-import {createPaymentPromises} from "#/services/monetization/promise-creation.js";
 import {updateFollowSuggestions} from "#/services/user/follow-suggestions.js";
 import {updateInteractionsScore} from "#/services/feed/feed-scores.js";
 import {updateAllTopicsCurrentVersions} from "#/services/wiki/current-version.js";
@@ -35,7 +34,8 @@ import {reprocessCollection} from "#/services/sync/reprocess.js";
 import {runTestJob} from "#/services/admin/status.js";
 import {clearAllRedis} from "#/services/redis/cache.js";
 import {type Redis} from "ioredis"
-import {updateAllTopicPopularities, updateTopicPopularities} from "#/services/wiki/references/popularity.js";
+import {updateAllTopicPopularities} from "#/services/wiki/references/popularity.js";
+import {assignPayments} from "#/services/monetization/payments.js";
 
 const mins = 60 * 1000
 const seconds = 1000
@@ -55,7 +55,6 @@ export class CAWorker {
 
     constructor(logger: Logger) {
         this.logger = logger
-
     }
 
     runCrons() {
@@ -158,8 +157,8 @@ export class CAWorker {
             true
         )
         this.registerJob(
-            "create-payment-promises",
-            () => createPaymentPromises(ctx)
+            "assign-payments",
+            () => assignPayments(ctx)
         )
         this.registerJob(
             "update-topics-current-versions",
@@ -226,7 +225,7 @@ export class CAWorker {
         if (this.runCrons()) {
             await this.addRepeatingJob("update-topics-categories", 30 * mins, 60 * mins + 5)
             await this.addRepeatingJob("update-categories-graph", 30 * mins, 60 * mins + 7)
-            await this.addRepeatingJob("create-user-months", 30 * mins, 60 * mins + 15)
+            await this.addRepeatingJob("assign-payments", 30 * mins, 60 * mins + 15)
             await this.addRepeatingJob("batch-jobs", mins / 2, 0, 1)
             await this.addRepeatingJob("update-follow-suggestions", 30 * mins, 30 * mins + 18)
             await this.addRepeatingJob("update-all-interactions-score", 30 * mins, 30 * mins + 23)

@@ -63,6 +63,14 @@ export type Article = {
     title: string;
     uri: string;
 };
+export type AssignedPayment = {
+    id: string;
+    created_at: Generated<Timestamp>;
+    amount: number;
+    status: Generated<PromiseStatus>;
+    contentId: string;
+    userMonthId: string | null;
+};
 export type AuthSession = {
     key: string;
     session: string;
@@ -209,7 +217,7 @@ export type PaymentPromise = {
     amount: number;
     status: Generated<PromiseStatus>;
     contentId: string;
-    userMonthId: string;
+    userMonthId: string | null;
 };
 export type Post = {
     facets: string | null;
@@ -307,6 +315,8 @@ export type TopicVersion = {
     charsAdded: number | null;
     charsDeleted: number | null;
     contribution: string | null;
+    monetizedContribution: number | null;
+    charsContribution: number | null;
     diff: string | null;
     message: Generated<string>;
     title: string | null;
@@ -314,6 +324,7 @@ export type TopicVersion = {
     uri: string;
     props: unknown | null;
     prevAcceptedUri: string | null;
+    accepted: Generated<boolean>;
 };
 export type User = {
     did: string;
@@ -348,12 +359,10 @@ export type UserMonth = {
     id: string;
     userId: string;
     monthStart: Timestamp;
-    monthStart_tz: Timestamp | null;
     monthEnd: Timestamp;
-    monthEnd_tz: Timestamp | null;
     wasActive: boolean;
     value: number;
-    promisesCreated: Generated<boolean>;
+    fullyConfirmed: Generated<boolean>;
 };
 export type ValidationRequest = {
     id: string;
@@ -381,6 +390,7 @@ export type DB = {
     _ContentToDataset: ContentToDataset;
     AccessRequest: AccessRequest;
     Article: Article;
+    AssignedPayment: AssignedPayment;
     AuthSession: AuthSession;
     AuthState: AuthState;
     Blob: Blob;
