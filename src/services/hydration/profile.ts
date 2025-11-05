@@ -21,6 +21,11 @@ export function hydrateProfileView(ctx: AppContext, did: string, data: Dataplane
 
     if(ca) {
         return {
+            viewer: {
+                $type: "app.bsky.actor.defs#viewerState",
+                following: ca.viewer.following ?? undefined,
+                followedBy: ca.viewer.followedBy ?? undefined
+            },
             did: ca.did,
             handle: ca.handle,
             displayName: ca.displayName ?? undefined,
@@ -33,7 +38,6 @@ export function hydrateProfileView(ctx: AppContext, did: string, data: Dataplane
             $type: "ar.cabildoabierto.actor.defs#profileView"
         }
     }
-
 
     const caDetailed = data.caUsersDetailed?.get(did)
     const bsky = data.bskyBasicUsers?.get(did)

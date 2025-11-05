@@ -110,6 +110,7 @@ class ProfileCacheKey extends CacheKey {
     }
 
     async getMany(dids: string[]) {
+        return dids.map(d => null) // Cache desactivada
         if(dids.length == 0) return []
         const cached = await this.cache.redis.mget(dids.map(d => this.key(d)))
         const profiles: (ArCabildoabiertoActorDefs.ProfileViewDetailed | null)[] = cached.map(this.formatCached)
