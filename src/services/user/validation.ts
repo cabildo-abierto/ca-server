@@ -126,7 +126,7 @@ export const getValidationRequest: CAHandler<{}, { type: "org" | "persona" | nul
 
     if(!res) return {data: {type: null}}
 
-    if(res.type == "Persona" && res.dniFrente == null) {
+    if(res.type == "Persona" && res.dniFrente == null && res.result != "Aceptada") {
         return {data: {type: null}}
     }
 
