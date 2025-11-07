@@ -388,6 +388,7 @@ model TopicCategory {
   CategoryLink_CategoryLink_idCategoryAToTopicCategory CategoryLink[]    @relation("CategoryLink_idCategoryAToTopicCategory")
   CategoryLink_CategoryLink_idCategoryBToTopicCategory CategoryLink[]    @relation("CategoryLink_idCategoryBToTopicCategory")
   TopicToCategory                                      TopicToCategory[]
+  interestedUsers                                      UserInterest[]    @relation("InterestedUsers")
 }
 
 model TopicInteraction {
@@ -444,6 +445,14 @@ model TopicVersion {
   @@index([topicId])
 }
 
+model UserInterest {
+  id              String        @id
+  userId          String
+  user            User          @relation("UserInterests", fields: [userId], references: [did])
+  topicCategoryId String
+  topicCategory   TopicCategory @relation("InterestedUsers", fields: [topicCategoryId], references: [id])
+}
+
 model User {
   did                                           String                   @id @db.VarChar(255)
   handle                                        String?
@@ -490,6 +499,7 @@ model User {
   Record_User_CAProfileUriToRecord              Record?                  @relation("User_CAProfileUriToRecord", fields: [CAProfileUri], references: [uri])
   UserMonth                                     UserMonth[]
   ValidationRequest                             ValidationRequest?
+  interests                                     UserInterest[]           @relation("UserInterests")
 
   @@index([CAProfileUri])
   @@index([articleLastMonth, did])

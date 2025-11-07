@@ -252,7 +252,7 @@ export type Record = {
     rkey: string;
     authorId: string;
     created_at: Generated<Timestamp>;
-    created_at_tz: Generated<Timestamp>;
+    created_at_tz: Timestamp | null;
     record: string | null;
     cid: string | null;
     uniqueLikesCount: Generated<number>;
@@ -260,9 +260,9 @@ export type Record = {
     uniqueAcceptsCount: Generated<number>;
     uniqueRejectsCount: Generated<number>;
     CAIndexedAt: Generated<Timestamp>;
-    CAIndexedAt_tz: Generated<Timestamp>;
+    CAIndexedAt_tz: Timestamp | null;
     lastUpdatedAt: Generated<Timestamp>;
-    lastUpdatedAt_tz: Generated<Timestamp>;
+    lastUpdatedAt_tz: Timestamp | null;
     editedAt: Timestamp | null;
     quotesCount: Generated<number>;
 };
@@ -331,7 +331,7 @@ export type User = {
     handle: string | null;
     email: string | null;
     created_at: Generated<Timestamp>;
-    created_at_tz: Generated<Timestamp>;
+    created_at_tz: Timestamp | null;
     editorStatus: Generated<EditorStatus>;
     hasAccess: Generated<boolean>;
     avatar: string | null;
@@ -345,7 +345,7 @@ export type User = {
     orgValidation: string | null;
     userValidationHash: string | null;
     lastSeenNotifications: Generated<Timestamp>;
-    lastSeenNotifications_tz: Generated<Timestamp>;
+    lastSeenNotifications_tz: Generated<Timestamp | null>;
     moderationState: Generated<ModerationState>;
     seenTopicMaximizedTutorial: Generated<boolean>;
     seenTopicMinimizedTutorial: Generated<boolean>;
@@ -355,6 +355,11 @@ export type User = {
     authorStatus: unknown | null;
     articleLastMonth: Generated<boolean>;
     postLastTwoWeeks: Generated<boolean>;
+};
+export type UserInterest = {
+    id: string;
+    userId: string;
+    topicCategoryId: string;
 };
 export type UserMonth = {
     id: string;
@@ -423,6 +428,7 @@ export type DB = {
     TopicToCategory: TopicToCategory;
     TopicVersion: TopicVersion;
     User: User;
+    UserInterest: UserInterest;
     UserMonth: UserMonth;
     ValidationRequest: ValidationRequest;
     VoteReject: VoteReject;
