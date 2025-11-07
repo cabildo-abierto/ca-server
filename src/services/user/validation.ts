@@ -360,10 +360,15 @@ export const attemptMPVerification: CAHandler<{}, {}> = async (ctx, agent, {}) =
             agent.did,
             transactionId
         )
+        if(error) {
+            ctx.logger.pino.error({transactionId, error}, "attempt to accept validation request from payment failed")
+        }
         if(!error) {
             return {data: {}}
         }
     }
+
+    ctx.logger.pino.error({data}, "attempt to verify using mp failed")
 
     return {error: "Ocurrió un error al verificar la cuenta."}
 }

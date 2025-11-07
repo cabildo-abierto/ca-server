@@ -289,7 +289,7 @@ export async function acceptValidationRequestFromPayment(ctx: AppContext, userId
         let dni: number | undefined = undefined
         const id = res.payer?.identification
         if(id) {
-            if(id.type == "CUIT"){
+            if(id.type == "CUIT" || id.type == "CUIL"){
                 try {
                     const dniStr = id.number?.slice(1, id.number.length-2)
                     if(!dniStr) {
