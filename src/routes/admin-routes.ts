@@ -17,7 +17,7 @@ import {
     setValidationRequestResultHandler
 } from "#/services/user/validation.js";
 import {updateTopicContributionsHandler} from "#/services/wiki/contributions.js";
-import {getActivityStats, getReadSessionsPlot, getStatsDashboard} from "#/services/admin/stats.js";
+import {getActivityStats, getReadSessionsPlot, getStatsDashboard} from "#/services/admin/stats/stats.js";
 import {getRepoCounts} from "#/services/admin/repo.js";
 import {getRegisteredJobs, startJob} from "#/jobs/worker.js";
 
@@ -26,6 +26,7 @@ import {env} from "#/lib/env.js";
 import {getServerStatus} from "#/services/admin/status.js";
 import {getUserMonthPayments, getUserMonthsStats} from "#/services/monetization/user-months.js";
 import {getTopAuthors} from "#/services/monetization/author-dashboard.js";
+import {findUsersInFollows} from "#/services/admin/otros/find-users.js";
 
 
 function isAdmin(did: string) {
@@ -171,6 +172,8 @@ export const adminRoutes = (ctx: AppContext) => {
     router.get("/registered-jobs", makeAdminHandler(ctx, getRegisteredJobs))
 
     router.get("/top-authors", makeAdminHandler(ctx, getTopAuthors))
+
+    router.post("/find-users/:handle", makeAdminHandler(ctx, findUsersInFollows))
 
     return router
 }

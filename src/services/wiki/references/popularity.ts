@@ -1,6 +1,6 @@
 import {AppContext} from "#/setup.js";
 import {getDidFromUri} from "#/utils/uri.js";
-import {testUsers} from "#/services/admin/stats.js";
+import {testUsers} from "#/services/admin/stats/stats.js";
 
 
 // Testeo de popularidades:

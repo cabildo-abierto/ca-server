@@ -9,6 +9,7 @@ import {isWeeklyActiveUser} from "#/services/monetization/donations.js";
 import {count, listOrderDesc, sortByKey} from "#/utils/arrays.js";
 import {sql} from "kysely";
 import {jsonArrayFrom} from "kysely/helpers/postgres";
+import {dailyPlotData} from "#/services/admin/stats/utils.js";
 
 
 export type StatsDashboard = {
@@ -88,17 +89,6 @@ async function getRegisteredUsers(ctx: AppContext, agent: SessionAgent): Promise
 }
 
 
-function dailyPlotData<T>(data: T[], condition: (x: T, d: Date) => boolean): {date: Date, count: number}[] {
-    const startDate = new Date(2025, 5, 15) // new Date(2025, 6, 8)
-    const oneDay = 1000 * 3600 * 24
-    const endDate = new Date(Date.now() + oneDay)
-    const res: { date: Date, count: number }[] = []
-    for (let d = new Date(startDate); d < endDate; d = new Date(d.getTime() + oneDay)) {
-        const c = count(data, u => condition(u, d))
-        res.push({date: d, count: c})
-    }
-    return res
-}
 
 
 async function getWAUPlot(ctx: AppContext, verified: boolean) {
