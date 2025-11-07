@@ -1,10 +1,14 @@
 import {CAHandler, CAHandlerNoAuth} from "#/utils/handler.js";
-import {MercadoPagoConfig, Preference} from "mercadopago";
+import {MercadoPagoConfig, Payment, Preference} from "mercadopago";
 import {AppContext} from "#/setup.js";
 import {getUsersWithReadSessions, UserWithReadSessions} from "#/services/monetization/get-users-with-read-sessions.js";
 import {count} from "#/utils/arrays.js";
 import {v4 as uuidv4} from "uuid";
 import {env} from "#/lib/env.js";
+import {
+    createValidationRequest,
+    setValidationRequestResult
+} from "#/services/user/validation.js";
 
 type Donation = {
     date: Date
@@ -102,7 +106,7 @@ export const getFundingStateHandler: CAHandlerNoAuth<{}, number> = async (ctx, a
 }
 
 
-export const createPreference: CAHandlerNoAuth<{ amount: number }, { id: string }> = async (ctx, agent, {amount}) => {
+export const createPreference: CAHandlerNoAuth<{ amount: number, verification?: boolean }, { id: string }> = async (ctx, agent, {amount, verification}) => {
     const client = new MercadoPagoConfig({accessToken: env.MP_ACCESS_TOKEN!})
     const preference = new Preference(client)
 
@@ -157,6 +161,13 @@ export const createPreference: CAHandlerNoAuth<{ amount: number }, { id: string 
                 }])
                 .execute()
 
+            if(verification && agent.hasSession()) {
+                await createValidationRequest(ctx, agent, {
+                    tipo: "persona",
+                    metodo: "mp"
+                })
+            }
+
             return {data: {id: result.id}}
         }
     } catch (err) {
@@ -178,14 +189,18 @@ const getPaymentDetails = async (orderId: string) => {
     });
 
     const body = await response.json()
-    console.log(`order ${orderId} resulted in body`, body)
     const payments = body.payments
     if (payments && payments.length > 0) {
         const payment = payments[0]
         const id = payment.id
         const amount = payment.transaction_amount
         const preference_id = body.preference_id
-        return {paymentId: id, amount, paymentStatus: payment.status, preferenceId: preference_id}
+        return {
+            paymentId: id,
+            amount,
+            paymentStatus: payment.status,
+            preferenceId: preference_id
+        }
     } else {
         throw Error("Couldn't find payments in order")
     }
@@ -207,33 +222,33 @@ type MPNotificationBody = {
 }
 
 export const processPayment: CAHandlerNoAuth<MPNotificationBody, {}> = async (ctx, agent, body) => {
-    console.log("processing payment notification with body", body)
+    ctx.logger.pino.info({body}, "processing payment notification")
     let orderId = body.id
     if (!orderId) {
-        console.log("No order id", orderId)
+        ctx.logger.pino.info({orderId}, "No order id")
         return {error: "Ocurrió un error al procesar el identificador de la transacción."}
     }
-    console.log("getting payment details with order id", orderId)
+    ctx.logger.pino.info({orderId}, "getting payment details with order id")
     const paymentDetails = await getPaymentDetails(orderId)
-    console.log("got payment details", paymentDetails)
+    ctx.logger.pino.info({paymentDetails}, "got payment details")
 
     if (paymentDetails.paymentStatus != "approved") {
-        console.log("status was", paymentDetails.paymentStatus)
+        ctx.logger.pino.warn("not approved")
         return {error: "El pago no fue aprobado."}
     }
 
     const preferenceId = paymentDetails.preferenceId
-    console.log("got preference id", preferenceId)
+    ctx.logger.pino.info({preferenceId}, "got preference id")
 
-    const donationId = await ctx.kysely
+    const donation = await ctx.kysely
         .selectFrom("Donation")
-        .select("id")
+        .select(["id", "userById"])
         .where("mpPreferenceId", "=", preferenceId)
-        .execute()
+        .executeTakeFirst()
 
-    if (donationId.length > 0) {
-        const id = donationId[0].id
-        console.log("found donation", id)
+    if (donation) {
+        const id = donation.id
+        ctx.logger.pino.info({id}, "found donation")
 
         await ctx.kysely
             .updateTable("Donation")
@@ -241,10 +256,71 @@ export const processPayment: CAHandlerNoAuth<MPNotificationBody, {}> = async (ct
             .where("id", "=", id)
             .execute()
 
+        if(donation.userById){
+            await acceptValidationRequestFromPayment(ctx, donation.userById, paymentDetails.paymentId)
+        }
+
     } else {
-        console.log(`Couldn't find donation for preference ${preferenceId} in db.`)
+        ctx.logger.pino.error(`Couldn't find donation for preference ${preferenceId} in db.`)
         return {error: `Couldn't find donation for preference ${preferenceId} in db.`}
     }
 
     return {}
+}
+
+
+export async function acceptValidationRequestFromPayment(ctx: AppContext, userId: string, paymentId: string): Promise<{error?: string}> {
+    const request = await ctx.kysely
+        .selectFrom("ValidationRequest")
+        .select(["id", "result"])
+        .where("ValidationRequest.result", "!=", "Aceptada")
+        .where("userId", "=", userId)
+        .executeTakeFirst()
+
+    if(request) {
+        const client = new MercadoPagoConfig({
+            accessToken: process.env.MP_ACCESS_TOKEN!,
+            options: { timeout: 5000 },
+        })
+
+        const payment = new Payment(client)
+        const res = await payment.get({id: paymentId})
+
+        let dni: number | undefined = undefined
+        const id = res.payer?.identification
+        if(id) {
+            if(id.type == "CUIT"){
+                try {
+                    const dniStr = id.number?.slice(1, id.number.length-2)
+                    if(!dniStr) {
+                        return {error: "Ocurrió un error al procesar el CUIT."}
+                    }
+                    dni = parseInt(dniStr)
+                } catch {
+                    return {error: "Ocurrió un error al procesar el CUIT."}
+                }
+            } else {
+                return {error: `Tipo de identificación desconocido: ${id.type}`}
+            }
+        } else {
+            return {error: "No se pudo obtener la identificación."}
+        }
+
+        if(dni) {
+            await setValidationRequestResult(
+                ctx,
+                {
+                    id: request.id,
+                    result: "accept",
+                    reason: "found payment",
+                    dni
+                }
+            )
+            return {}
+        } else {
+            return {error: "No se pudo obtener la identificación."}
+        }
+    } else {
+        return {error: "No se encontró la solicitud."}
+    }
 }

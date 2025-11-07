@@ -201,6 +201,7 @@ export const getSessionData = async (ctx: AppContext, did: string): Promise<Sess
                     "seenTopicMaximizedTutorial",
                     "seenTopicMinimizedTutorial",
                     "seenTopicsTutorial",
+                    "seenVerifiedNotification",
                     "handle",
                     "displayName",
                     "avatar",
@@ -240,6 +241,7 @@ export const getSessionData = async (ctx: AppContext, did: string): Promise<Sess
                 topicMinimized: data.seenTopicMinimizedTutorial,
                 topicMaximized: data.seenTopicMaximizedTutorial
             },
+            seenVerifiedNotification: data.seenVerifiedNotification,
             editorStatus: data.editorStatus,
             platformAdmin: data.platformAdmin,
             validation: getValidationState(data),
@@ -351,7 +353,7 @@ export const getAccount: CAHandler<{}, Account> = async (ctx, agent) => {
 }
 
 
-type Tutorial = "topic-minimized" | "topic-normal" | "home" | "topics"
+type Tutorial = "topic-minimized" | "topic-normal" | "home" | "topics" | "verification" | "panel-de-autor"
 
 
 export const setSeenTutorial: CAHandler<{ params: { tutorial: Tutorial } }, {}> = async (ctx, agent, {params}) => {
@@ -373,8 +375,13 @@ export const setSeenTutorial: CAHandler<{ params: { tutorial: Tutorial } }, {}> 
             })
             .where("did", "=", did)
             .execute()
+    } else if(tutorial == "verification") {
+        await ctx.kysely.updateTable("User")
+            .set("seenVerifiedNotification", true)
+            .where("did", "=", did)
+            .execute()
     } else {
-        console.log("Unknown tutorial", tutorial)
+        ctx.logger.pino.error("Unknown tutorial", tutorial)
     }
     return {data: {}}
 }

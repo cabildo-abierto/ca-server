@@ -46,7 +46,7 @@ import {getDatasetHandler, getDatasets, getTopicsDatasetHandler } from '#/servic
 import { createDataset } from '#/services/dataset/write.js';
 import {searchContents} from "#/services/feed/search.js";
 import {addToEnDiscusion, removeFromEnDiscusion} from "#/services/feed/inicio/discusion.js";
-import {cancelValidationRequest, createValidationRequest, getValidationRequest } from '#/services/user/validation.js';
+import {attemptMPVerification, cancelValidationRequest, createValidationRequest, getValidationRequest } from '#/services/user/validation.js';
 import {createPreference, getDonationHistory, getFundingStateHandler, getMonthlyValueHandler, processPayment} from '#/services/monetization/donations.js';
 import { storeReadSessionHandler } from '#/services/monetization/read-tracking.js';
 import { getTopicTitleHandler } from '#/services/wiki/current-version.js';
@@ -444,6 +444,8 @@ export const createRouter = (ctx: AppContext) => {
         ctx,
         getChatAvailability
     ))
+
+    router.post("/attempt-mp-verification", makeHandler(ctx, attemptMPVerification))
 
     router.use(adminRoutes(ctx))
 

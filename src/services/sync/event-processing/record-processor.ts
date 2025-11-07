@@ -121,7 +121,7 @@ export class RecordProcessor<T> {
                 CAIndexedAt: new Date(),
                 CAIndexedAt_tz: new Date(),
                 lastUpdatedAt: new Date(),
-                created_at_tz: record.createdAt ? new Date(record.createdAt) : undefined
+                created_at_tz: record.createdAt ? new Date(record.createdAt) : new Date()
             })
         })
 

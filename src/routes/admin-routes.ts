@@ -12,7 +12,10 @@ import {
 } from "#/services/wiki/topics.js";
 import {sessionAgent} from "#/utils/session-agent.js";
 import {createAccountInCabildoPDS, finishMigrationToCA, migrateToCA} from "#/services/sync/migration/migration.js";
-import {getPendingValidationRequests, setValidationRequestResult} from "#/services/user/validation.js";
+import {
+    getPendingValidationRequests,
+    setValidationRequestResultHandler
+} from "#/services/user/validation.js";
 import {updateTopicContributionsHandler} from "#/services/wiki/contributions.js";
 import {getActivityStats, getReadSessionsPlot, getStatsDashboard} from "#/services/admin/stats.js";
 import {getRepoCounts} from "#/services/admin/repo.js";
@@ -136,7 +139,7 @@ export const adminRoutes = (ctx: AppContext) => {
     router.get("/pending-validation-requests", makeAdminHandler(ctx, getPendingValidationRequests))
 
     router.post(
-        "/validation-request/result", makeAdminHandler(ctx, setValidationRequestResult)
+        "/validation-request/result", makeAdminHandler(ctx, setValidationRequestResultHandler)
     )
 
     router.post('/update-topic-contributions/:id', makeHandler(ctx, updateTopicContributionsHandler))

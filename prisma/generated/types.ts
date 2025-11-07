@@ -52,7 +52,7 @@ export type ValidationType = (typeof ValidationType)[keyof typeof ValidationType
 export type AccessRequest = {
     id: string;
     created_at: Generated<Timestamp>;
-    created_at_tz: Generated<Timestamp | null>;
+    created_at_tz: Generated<Timestamp>;
     email: string;
     comment: string;
     sentInviteAt: Timestamp | null;
@@ -121,7 +121,7 @@ export type Donation = {
     id: string;
     userById: string | null;
     created_at: Generated<Timestamp>;
-    created_at_tz: Generated<Timestamp | null>;
+    created_at_tz: Generated<Timestamp>;
     transactionId: string | null;
     amount: number;
     mpPreferenceId: string | null;
@@ -129,9 +129,9 @@ export type Donation = {
 export type Draft = {
     id: string;
     created_at: Generated<Timestamp>;
-    created_at_tz: Generated<Timestamp | null>;
+    created_at_tz: Generated<Timestamp>;
     lastUpdate: Generated<Timestamp>;
-    lastUpdate_tz: Generated<Timestamp | null>;
+    lastUpdate_tz: Generated<Timestamp>;
     authorId: string;
     collection: string;
     embeds: unknown | null;
@@ -165,8 +165,8 @@ export type InviteCode = {
     usedAt: Timestamp | null;
     usedAt_tz: Timestamp | null;
     recommenderId: string | null;
-    created_at: Generated<Timestamp | null>;
-    created_at_tz: Timestamp | null;
+    created_at: Generated<Timestamp>;
+    created_at_tz: Generated<Timestamp>;
 };
 export type JobApplication = {
     id: string;
@@ -188,7 +188,7 @@ export type MailingListSubscription = {
 export type Meeting = {
     id: string;
     date: Timestamp;
-    date_tz: Timestamp | null;
+    date_tz: Timestamp;
     title: string;
     url: string;
     description: string;
@@ -202,7 +202,7 @@ export type Notification = {
     message: string | null;
     moreContext: string | null;
     created_at: Generated<Timestamp>;
-    created_at_tz: Generated<Timestamp | null>;
+    created_at_tz: Generated<Timestamp>;
     reasonSubject: string | null;
 };
 export type NotInterested = {
@@ -213,7 +213,7 @@ export type NotInterested = {
 export type PaymentPromise = {
     id: string;
     created_at: Generated<Timestamp>;
-    created_at_tz: Generated<Timestamp | null>;
+    created_at_tz: Generated<Timestamp>;
     amount: number;
     status: Generated<PromiseStatus>;
     contentId: string;
@@ -240,7 +240,7 @@ export type ReadSession = {
     id: string;
     userId: string;
     created_at: Generated<Timestamp>;
-    created_at_tz: Generated<Timestamp | null>;
+    created_at_tz: Generated<Timestamp>;
     readContentId: string | null;
     readChunks: unknown;
     contentAuthorId: string;
@@ -252,7 +252,7 @@ export type Record = {
     rkey: string;
     authorId: string;
     created_at: Generated<Timestamp>;
-    created_at_tz: Timestamp | null;
+    created_at_tz: Generated<Timestamp>;
     record: string | null;
     cid: string | null;
     uniqueLikesCount: Generated<number>;
@@ -260,9 +260,9 @@ export type Record = {
     uniqueAcceptsCount: Generated<number>;
     uniqueRejectsCount: Generated<number>;
     CAIndexedAt: Generated<Timestamp>;
-    CAIndexedAt_tz: Timestamp | null;
+    CAIndexedAt_tz: Generated<Timestamp>;
     lastUpdatedAt: Generated<Timestamp>;
-    lastUpdatedAt_tz: Timestamp | null;
+    lastUpdatedAt_tz: Generated<Timestamp>;
     editedAt: Timestamp | null;
     quotesCount: Generated<number>;
 };
@@ -331,7 +331,7 @@ export type User = {
     handle: string | null;
     email: string | null;
     created_at: Generated<Timestamp>;
-    created_at_tz: Timestamp | null;
+    created_at_tz: Generated<Timestamp>;
     editorStatus: Generated<EditorStatus>;
     hasAccess: Generated<boolean>;
     avatar: string | null;
@@ -345,11 +345,12 @@ export type User = {
     orgValidation: string | null;
     userValidationHash: string | null;
     lastSeenNotifications: Generated<Timestamp>;
-    lastSeenNotifications_tz: Generated<Timestamp | null>;
+    lastSeenNotifications_tz: Generated<Timestamp>;
     moderationState: Generated<ModerationState>;
     seenTopicMaximizedTutorial: Generated<boolean>;
     seenTopicMinimizedTutorial: Generated<boolean>;
     seenTopicsTutorial: Generated<boolean>;
+    seenVerifiedNotification: Generated<boolean>;
     algorithmConfig: unknown | null;
     authorStatus: unknown | null;
     articleLastMonth: Generated<boolean>;
@@ -376,7 +377,7 @@ export type ValidationRequest = {
     sitioWeb: string | null;
     tipoOrg: string | null;
     created_at: Generated<Timestamp>;
-    created_at_tz: Generated<Timestamp | null>;
+    created_at_tz: Generated<Timestamp>;
     rejectReason: string | null;
     result: Generated<ValidationRequestResult>;
 };
