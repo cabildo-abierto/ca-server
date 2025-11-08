@@ -100,10 +100,8 @@ export async function getTopics(
     limit?: number,
     did?: string
 ): CAHandlerOutput<TopicViewBasic[]> {
-
     if(!limit) limit = 50
 
-    const t1 = Date.now()
     const topics = await ctx.kysely
         .selectFrom('Topic')
         .innerJoin('TopicVersion', 'TopicVersion.uri', 'Topic.currentVersionId')
@@ -137,17 +135,13 @@ export async function getTopics(
             .orderBy("lastEdit_tz desc"))
         .limit(limit)
         .execute()
-    const t2 = Date.now()
 
     const dataplane = new Dataplane(ctx)
     await dataplane.fetchTopicsBasicByUris(topics.map(t => t.uri))
-    const t3 = Date.now()
 
     const data = topics
         .map(t => hydrateTopicViewBasicFromUri(t.uri, dataplane).data)
         .filter(x => x != null)
-
-    ctx.logger.logTimes( "get trending topics", [t1, t2, t3], {limit, categories, sortedBy, time})
 
     return {data}
 }
@@ -351,6 +345,20 @@ export function hydrateEmbedViews(authorId: string, embeds: ArticleEmbed[]): Art
 }
 
 
+function processTopicProps(props: TopicProp[]) {
+    const names = new Set<string>()
+    let newProps: TopicProp[] = []
+    props.forEach(p => {
+        if(names.has(p.name)){
+            return
+        }
+        names.add(p.name)
+        newProps.push(p)
+    })
+    return newProps
+}
+
+
 export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: string): Promise<{
     data?: TopicView,
     error?: string
@@ -426,7 +434,9 @@ export const getTopicVersion = async (ctx: AppContext, uri: string, viewerDid?: 
 
     const {text: transformedText, format: transformedFormat} = anyEditorStateToMarkdownOrLexical(text, format)
 
-    const props = Array.isArray(topic.props) ? topic.props as TopicProp[] : []
+    let props = Array.isArray(topic.props) ? topic.props as TopicProp[] : []
+
+    props = processTopicProps(props)
 
     const record = topic.record ? JSON.parse(topic.record) as TopicVersionRecord : undefined
     const embeds = record ? hydrateEmbedViews(authorId, record.embeds ?? []) : []

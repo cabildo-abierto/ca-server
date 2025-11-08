@@ -84,29 +84,18 @@ export type GetFeedOutput = {
 export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAHandlerOutput<GetFeedOutput> => {
     const data = new Dataplane(ctx, agent)
 
-    const t1 = Date.now()
     let newCursor: string | undefined
     let skeleton: FeedSkeleton
     try {
-        const t1 = Date.now()
         const res = await pipeline.getSkeleton(ctx, agent, data, cursor)
-
-        const t2 = Date.now()
-        ctx.logger.logTimes("feed skeleton", [t1, t2])
         newCursor = res.cursor
         skeleton = res.skeleton
     } catch (err) {
-        console.error("Error getting feed skeleton", err)
-        if(err instanceof Error){
-            console.error("name", err.name)
-            console.error("message", err.message)
-        }
+        ctx.logger.pino.error({error: err}, "Error getting feed skeleton")
         return {error: "Ocurrió un error al obtener el muro."}
     }
-    const t2 = Date.now()
 
     let feed: FeedViewContent[] = await hydrateFeed(ctx, skeleton, data)
-    const t3 = Date.now()
 
     if(pipeline.sortKey){
         feed = sortByKey(feed, pipeline.sortKey, listOrderDesc)
@@ -115,8 +104,5 @@ export const getFeed = async ({ctx, agent, pipeline, cursor}: GetFeedProps): CAH
     if(pipeline.filter){
         feed = pipeline.filter(ctx, feed)
     }
-    const t4 = Date.now()
-
-    ctx.logger.logTimes("get feed", [t1, t2, t3, t4])
     return {data: {feed, cursor: newCursor}}
 }

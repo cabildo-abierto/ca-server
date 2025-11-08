@@ -133,26 +133,22 @@ export const unfollow: CAHandler<{ followUri: string }> = async (ctx, agent, {fo
 
 export const getProfile: CAHandlerNoAuth<{ params: { handleOrDid: string } }, ArCabildoabiertoActorDefs.ProfileViewDetailed> = async (ctx, agent, {params}) => {
     try {
-        const t1 = Date.now()
         const did = await handleToDid(ctx, agent, params.handleOrDid)
         if (!did) return {error: "No se encontró el usuario."}
-        const t2 = Date.now()
 
         const dataplane = new Dataplane(ctx, agent)
 
         await dataplane.fetchProfileViewDetailedHydrationData([did])
-        const t3 = Date.now()
 
         const profile = hydrateProfileViewDetailed(ctx, did, dataplane)
 
-        ctx.logger.logTimes(`perfil ${did}`, [t1, t2, t3])
         if(!profile) {
             return {error: "Error al obtener el perfil"}
         } else {
             return {data: profile}
         }
     } catch (err) {
-        console.log("Error getting profile", err)
+        ctx.logger.pino.error({error: err}, "error getting profile")
         return {error: "No se encontró el usuario."}
     }
 }
@@ -281,7 +277,7 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
     }
 
     const data = await getSessionData(ctx, agent.did)
-    if (isFullSessionData(data) && data.hasAccess && data.caProfile) {
+    if (data && isFullSessionData(data) && data.hasAccess && data.caProfile) {
         return {data}
     }
 
@@ -320,7 +316,7 @@ export const getSession: CAHandlerNoAuth<{ params?: { code?: string } }, Session
     }
 
     await deleteSession(ctx, agent)
-    ctx.logger.pino.error({did: agent.did}, "error getting session data")
+    ctx.logger.pino.error({did: agent.did}, "error getting session data, deleted session")
     return {error: "Ocurrió un error al crear el usuario."}
 }
 
@@ -353,36 +349,62 @@ export const getAccount: CAHandler<{}, Account> = async (ctx, agent) => {
 }
 
 
-type Tutorial = "topic-minimized" | "topic-normal" | "home" | "topics" | "verification" | "panel-de-autor"
-
-
-export const setSeenTutorial: CAHandler<{ params: { tutorial: Tutorial } }, {}> = async (ctx, agent, {params}) => {
-    const {tutorial} = params
-    const did = agent.did
+export async function setSeenTutorial(ctx: AppContext, did: string, tutorial: Tutorial, value: boolean) {
+    ctx.logger.pino.info({did, tutorial, value}, "setting seen tutorial")
     if (tutorial == "topic-minimized") {
-        await ctx.kysely.updateTable("User").set("seenTopicMinimizedTutorial", true).where("did", "=", did).execute()
+        await ctx.kysely
+            .updateTable("User")
+            .set("seenTopicMinimizedTutorial", value)
+            .where("did", "=", did)
+            .execute()
     } else if (tutorial == "home") {
-        await ctx.kysely.updateTable("User").set("seenTutorial", true).where("did", "=", did).execute()
+        await ctx.kysely
+            .updateTable("User")
+            .set("seenTutorial", value)
+            .where("did", "=", did)
+            .execute()
     } else if (tutorial == "topics") {
-        await ctx.kysely.updateTable("User").set("seenTopicsTutorial", true).where("did", "=", did).execute()
+        await ctx.kysely
+            .updateTable("User")
+            .set("seenTopicsTutorial", value)
+            .where("did", "=", did)
+            .execute()
     } else if (tutorial == "topic-normal") {
-        await ctx.kysely.updateTable("User").set("seenTopicMaximizedTutorial", true).where("did", "=", did).execute()
-    } else if (tutorial == "panel-de-autor") {
         await ctx.kysely.updateTable("User")
+            .set("seenTopicMaximizedTutorial", value)
+            .where("did", "=", did)
+            .execute()
+    } else if (tutorial == "panel-de-autor") {
+        await ctx.kysely
+            .updateTable("User")
             .set("authorStatus", {
                 isAuthor: true,
-                seenAuthorTutorial: true
+                seenAuthorTutorial: value
             })
             .where("did", "=", did)
             .execute()
     } else if(tutorial == "verification") {
-        await ctx.kysely.updateTable("User")
-            .set("seenVerifiedNotification", true)
+        await ctx.kysely
+            .updateTable("User")
+            .set("seenVerifiedNotification", value)
             .where("did", "=", did)
             .execute()
     } else {
         ctx.logger.pino.error("Unknown tutorial", tutorial)
     }
+}
+
+
+
+type Tutorial = "topic-minimized" | "topic-normal" | "home" | "topics" | "verification" | "panel-de-autor"
+
+
+export const setSeenTutorialHandler: CAHandler<{ params: { tutorial: Tutorial } }, {}> = async (ctx, agent, {params}) => {
+    const {tutorial} = params
+    const did = agent.did
+
+    await setSeenTutorial(ctx, did, tutorial, true)
+
     return {data: {}}
 }
 
