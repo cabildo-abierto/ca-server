@@ -62,6 +62,11 @@ export class ArticleDeleteProcessor extends DeleteProcessor {
     async deleteRecordsFromDB(uris: string[]){
         await this.ctx.kysely.transaction().execute(async (trx) => {
             await trx
+                .deleteFrom("Notification")
+                .where("Notification.causedByRecordId", "in", uris)
+                .execute()
+
+            await trx
                 .deleteFrom("TopicInteraction")
                 .where("TopicInteraction.recordId", "in", uris)
                 .execute()

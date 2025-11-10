@@ -487,10 +487,7 @@ export const getTopicVersionHandler: CAHandlerNoAuth<{
 
 // TO DO: Usar el título cuando hagamos que las referencias también lo usen
 export const getTopicsMentioned: CAHandlerNoAuth<{title: string, text: string}, TopicMention[]> = async (ctx, agent, {title, text}) => {
-    const t1 = Date.now()
     const topicMentions = await getTopicsReferencedInText(ctx, text)
-    const t2 = Date.now()
-    ctx.logger.logTimes("topics mentioned", [t1, t2])
     return {
         data: topicMentions
     }

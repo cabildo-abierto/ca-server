@@ -1,4 +1,5 @@
 import {AppBskyRichtextFacet, RichText, UnicodeString} from "@atproto/api"
+import {SessionAgent} from "#/utils/session-agent.js";
 
 // from https//github.com/bluesky-social/social-app
 export function toShortUrl(url: string): string {
@@ -51,11 +52,11 @@ export function shortenLinks(rt: RichText): RichText {
 }
 
 
-export function getParsedPostContent(text: string) {
+export async function getParsedPostContent(agent: SessionAgent, text: string) {
     let rt = new RichText({
         text
     })
-    rt.detectFacetsWithoutResolution()
+    await rt.detectFacets(agent.bsky)
     rt = shortenLinks(rt)
     return rt
 }

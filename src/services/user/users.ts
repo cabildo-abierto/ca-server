@@ -148,7 +148,7 @@ export const getProfile: CAHandlerNoAuth<{ params: { handleOrDid: string } }, Ar
             return {data: profile}
         }
     } catch (err) {
-        ctx.logger.pino.error({error: err}, "error getting profile")
+        ctx.logger.pino.error({error: err, params}, "error getting profile")
         return {error: "No se encontró el usuario."}
     }
 }

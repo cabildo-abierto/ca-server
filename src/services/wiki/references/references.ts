@@ -14,8 +14,10 @@ import {getTimestamp, updateTimestamp} from "#/services/admin/status.js";
 import { TopicMention } from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
 import {getTopicTitle} from "#/services/wiki/utils.js";
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
-import {getCollectionFromUri} from "#/utils/uri.js";
+import {getCollectionFromUri, isArticle, isTopicVersion} from "#/utils/uri.js";
 import {isReactionCollection} from "#/utils/type-utils.js";
+import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms.js";
+import {NotificationJobData} from "#/services/notifications/notifications.js";
 
 
 export async function updateReferencesForNewContents(ctx: AppContext) {
@@ -272,6 +274,57 @@ export async function updatePopularitiesOnTopicsChange(ctx: AppContext, topicIds
 }
 
 
+export function findMentionsInText(text: string) {
+    const mentionRegex = /\[@([a-zA-Z0-9.-]+)\]\(\/perfil\/\1\)/g
+    const matches = text.matchAll(mentionRegex)
+    const mentions = new Set<string>()
+    for(const match of matches) {
+        mentions.add(match[1])
+    }
+    return Array.from(mentions)
+}
+
+
+async function createMentionNotifications(ctx: AppContext, uris: string[]) {
+    const filteredUris = uris.filter(u => {
+        const c = getCollectionFromUri(u)
+        return isArticle(c) || isTopicVersion(c)
+    })
+
+    if(filteredUris.length == 0) return
+
+    const texts = await ctx.kysely
+        .selectFrom("Content")
+        .where("Content.uri", "in", filteredUris)
+        .select(["Content.text", "Content.dbFormat", "Content.uri"])
+        .execute()
+
+    const data: NotificationJobData[] = []
+    for(let i = 0; i < texts.length; i++) {
+        const res = anyEditorStateToMarkdownOrLexical(texts[i].text, texts[i].dbFormat)
+        if(res.format == "markdown") {
+            const mentions = findMentionsInText(res.text)
+            ctx.logger.pino.info({...texts[i], mentions: Array.from(mentions)}, "looking for mentions in text")
+            for(const m of mentions) {
+                data.push({
+                    type: "Mention",
+                    uri: texts[i].uri,
+                    handle: m
+                })
+            }
+        } else {
+            ctx.logger.pino.error({
+                    uri: texts[i].uri
+                }, "couldn't create mention notifications because text is not markdown"
+            )
+        }
+    }
+    if(data.length > 0) {
+        ctx.worker?.addJob("batch-create-notifications", data)
+    }
+}
+
+
 export async function updatePopularitiesOnContentsChange(ctx: AppContext, uris: string[]) {
     const t1 = Date.now()
     await updateContentsText(ctx, uris)
@@ -285,6 +338,8 @@ export async function updatePopularitiesOnContentsChange(ctx: AppContext, uris: 
 
     await updateTopicPopularities(ctx, topicsWithNewInteractions)
     const t6 = Date.now()
+
+    await createMentionNotifications(ctx, uris)
 
     ctx.logger.logTimes(`update refs and pops on ${uris.length} contents`, [t1, t2, t3, t4, t5, t6])
 }
