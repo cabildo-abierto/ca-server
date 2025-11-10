@@ -215,7 +215,7 @@ model Notification {
   Record           Record           @relation(fields: [causedByRecordId], references: [uri])
   User             User             @relation(fields: [userNotifiedId], references: [did])
 
-  @@unique([causedByRecordId, userNotifiedId])
+  @@unique([causedByRecordId, userNotifiedId, type])
   @@index([userNotifiedId])
 }
 
