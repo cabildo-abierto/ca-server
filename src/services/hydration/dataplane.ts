@@ -323,7 +323,7 @@ export class Dataplane {
         this.topicsByUri = joinMaps(this.topicsByUri, mapByUri)
     }
 
-    async expandUrisWithRepliesAndReposts(skeleton: FeedSkeleton): Promise<string[]> {
+    async expandUrisWithRepliesQuotesAndReposts(skeleton: FeedSkeleton): Promise<string[]> {
         const uris = skeleton.map(e => e.post)
         const repostUris = skeleton
             .map(e => e.reason && isSkeletonReasonRepost(e.reason) ? e.reason.repost : null)
@@ -335,14 +335,12 @@ export class Dataplane {
             this.fetchBskyPosts(pUris),
             pUris.length > 0 ? this.ctx.kysely
                 .selectFrom("Post")
-                .select(["uri", "replyToId", "rootId"])
+                .select(["uri", "replyToId", "quoteToId", "rootId"])
                 .where("uri", "in", pUris)
                 .execute() : []
         ]))[1]
 
-        // this.ctx.logger.logTimes("expanding uris with replies and reposts", [t1, t2])
-
-        const bskyPosts = uris
+        const bskyPosts = pUris
             .map(u => this.bskyPosts?.get(u))
             .filter(x => x != null)
 
@@ -351,14 +349,27 @@ export class Dataplane {
             ...repostUris,
             ...caPosts.map(p => p.replyToId),
             ...caPosts.map(p => p.rootId),
-            ...bskyPosts.map(p => (p.record as AppBskyFeedPost.Record).reply?.root?.uri),
-            ...bskyPosts.map(p => (p.record as AppBskyFeedPost.Record).reply?.parent?.uri),
-            // faltan quote posts
+            ...caPosts.map(p => p.quoteToId),
+            ...bskyPosts.flatMap(p => {
+                const record = p.record as AppBskyFeedPost.Record
+                const res = [
+                    record.reply?.root?.uri,
+                    record.reply?.parent?.uri,
+                ]
+
+                if(AppBskyEmbedRecord.isMain(record.embed)){
+                    res.push(record.embed.record.uri)
+                } else if(AppBskyEmbedRecordWithMedia.isMain(record.embed)){
+                    res.push(record.embed.record.record.uri)
+                }
+
+                return res
+            })
         ].filter(x => x != null))
     }
 
     async fetchFeedHydrationData(skeleton: FeedSkeleton) {
-        const expandedUris = await this.expandUrisWithRepliesAndReposts(skeleton)
+        const expandedUris = await this.expandUrisWithRepliesQuotesAndReposts(skeleton)
 
         await Promise.all([
             this.fetchPostAndArticleViewsHydrationData(expandedUris),
@@ -372,15 +383,12 @@ export class Dataplane {
         uris = uris.filter(u => isPost(getCollectionFromUri(u)))
         if (uris.length == 0) return
 
-        const t1 = Date.now()
         const rootCreationDates = await this.ctx.kysely
             .selectFrom("Post")
             .innerJoin("Record", "Record.uri", "Post.rootId")
             .select(["Post.uri", "Record.created_at"])
             .where("Post.uri", "in", uris)
             .execute()
-        const t2 = Date.now()
-        this.ctx.logger.logTimes("root creation dates", [t1, t2])
 
         rootCreationDates.forEach(r => {
             this.rootCreationDates.set(r.uri, r.created_at)
@@ -391,8 +399,6 @@ export class Dataplane {
     async fetchRepostsHydrationData(uris: string[]) {
         uris = uris.filter(u => getCollectionFromUri(u) == "app.bsky.feed.repost")
         if (uris.length > 0) {
-            const t1 = Date.now()
-
             const reposts: RepostQueryResult[] = await this.ctx.kysely
                 .selectFrom("Reaction")
                 .innerJoin("Record", "Reaction.uri", "Record.uri")
@@ -404,8 +410,6 @@ export class Dataplane {
                 .where("Reaction.uri", "in", uris)
                 .execute()
 
-            const t2 = Date.now()
-            this.ctx.logger.logTimes("fetch reposts", [t1, t2])
             reposts.forEach(r => {
                 if (r.subjectId) {
                     this.storeRepost({...r, subjectId: r.subjectId})
@@ -503,7 +507,6 @@ export class Dataplane {
         if (uris.length == 0) return
 
         const did = agent.did
-        const t1 = Date.now()
         const reactions = await this.ctx.kysely
             .selectFrom("Reaction")
             .innerJoin("Record", "Record.uri", "Reaction.uri")
@@ -515,8 +518,6 @@ export class Dataplane {
             .where("Record.collection", "in", ["app.bsky.feed.like", "app.bsky.feed.repost"])
             .where("Reaction.subjectId", "in", uris)
             .execute()
-        const t2 = Date.now()
-        this.ctx.logger.logTimes("fetch engagement", [t1, t2])
 
         reactions.forEach(l => {
             if (l.subjectId) {
@@ -810,8 +811,6 @@ export class Dataplane {
         dids = unique(dids.filter(d => !this.caUsersDetailed.has(d)))
         if (dids.length == 0) return
 
-        const t1 = Date.now()
-
         const profiles = await this.ctx.kysely
             .selectFrom("User")
             .select([
@@ -879,9 +878,6 @@ export class Dataplane {
         formattedProfiles.forEach(p => {
             this.caUsersDetailed.set(p.did, p)
         })
-
-        const t2 = Date.now()
-        this.ctx.logger.logTimes(`fetch users data from ca (N = ${dids.length})`, [t1, t2])
     }
 
     async fetchProfileViewDetailedHydrationDataFromBsky(dids: string[]) {
@@ -890,7 +886,6 @@ export class Dataplane {
         dids = unique(dids.filter(d => !this.bskyDetailedUsers.has(d)))
         if (dids.length == 0) return
 
-        const t1 = Date.now()
         const didBatches: string[][] = []
         for (let i = 0; i < dids.length; i += 25) didBatches.push(dids.slice(i, i + 25))
         const profiles: ProfileViewDetailed[] = []
@@ -908,8 +903,6 @@ export class Dataplane {
             this.bskyBasicUsers,
             new Map(profiles.map(v => [v.did, {...v, $type: "app.bsky.actor.defs#profileViewBasic"}]))
         )
-        const t2 = Date.now()
-        this.ctx.logger.logTimes(`fetch users data from bsky (N = ${dids.length})`, [t1, t2])
     }
 
 

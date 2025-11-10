@@ -182,7 +182,7 @@ export const getUnreadNotificationsCount: CAHandler<{}, number> = async (ctx, ag
 }
 
 
-export type NotificationJobData = (Omit<FullNotification, "type"> & {type: "Mention" | "Reply"}) | TopicVersionVoteNotification | TopicEditNotification
+export type NotificationJobData = (Omit<FullNotification, "type"> & {type: "Reply"}) | TopicVersionVoteNotification | TopicEditNotification | MentionNotification
 
 
 type FullNotification = {
@@ -205,6 +205,12 @@ type TopicVersionVoteNotification = {
 type TopicEditNotification = {
     type: "TopicEdit"
     uri: string
+}
+
+type MentionNotification = {
+    type: "Mention"
+    uri: string
+    handle: string
 }
 
 
@@ -285,15 +291,48 @@ async function createFullNotifications(ctx: AppContext, data: FullNotification[]
 }
 
 
+async function getMentionsFullNotifications(ctx: AppContext, data: MentionNotification[]) : Promise<FullNotification[]> {
+    if(data.length == 0) return []
+
+    const dids = await ctx.kysely
+        .selectFrom("User")
+        .select(["did", "handle"])
+        .where("User.handle", "in", data.map(d => d.handle))
+        .execute()
+
+    const handleToDidArray: [string, string][] = dids
+        .map((d) : [string, string] | null => (d.handle ? [d.handle, d.did] : null))
+        .filter(x => x != null)
+
+    const handleToDid = new Map<string, string>(handleToDidArray)
+
+    return data.map(d => {
+        const userNotifiedId = handleToDid.get(d.handle)
+        if(!userNotifiedId) return null
+        const n: FullNotification = {
+            type: "Mention",
+            userNotifiedId,
+            causedByRecordId: d.uri,
+            created_at: new Date()
+        }
+        return n
+    }).filter(x => x != null)
+}
+
+
 export const createNotificationsJob = async (ctx: AppContext, data: NotificationJobData[]) => {
     const topicEdits = await getTopicEditsFullNotifications(ctx, data.filter(d => d.type == "TopicEdit"))
     const topicVersionVotes = await getTopicVersionVoteFullNotifications(ctx, data.filter(d => d.type == "TopicVersionVote"))
+    const mentions = await getMentionsFullNotifications(ctx, data.filter(d => d.type == "Mention"))
 
     const fullNotifications = [
         ...topicEdits,
         ...topicVersionVotes,
-        ...data.filter(d => d.type != "TopicVersionVote" && d.type != "TopicEdit")
+        ...mentions,
+        ...data.filter(d => d.type != "TopicVersionVote" && d.type != "TopicEdit" && d.type != "Mention")
     ]
+
+    ctx.logger.pino.info({data, fullNotifications}, "creating notifications")
 
     await createFullNotifications(ctx, fullNotifications)
 }

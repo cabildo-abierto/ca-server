@@ -131,7 +131,7 @@ export async function createPostAT({
     agent: SessionAgent
     post: CreatePostProps
 }): Promise<{ ref: ATProtoStrongRef, record: PostRecord }> {
-    const rt = getParsedPostContent(post.text)
+    const rt = await getParsedPostContent(agent, post.text)
 
     const embed = await getPostEmbed(agent, post)
 
@@ -149,6 +149,7 @@ export async function createPostAT({
     }
 
     if(!post.uri) {
+        ctx.logger.pino.info({post: record}, "creating bsky post")
         const ref = await agent.bsky.post({...record})
         return {ref, record}
     } else {

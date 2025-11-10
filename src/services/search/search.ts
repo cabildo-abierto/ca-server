@@ -65,12 +65,10 @@ export const searchUsers: CAHandlerNoAuth<{
 
     const dataplane = new Dataplane(ctx, agent)
 
-    const t1 = Date.now()
     let [caSearchResults, bskySearchResults] = await Promise.all([
         searchUsersInCA(ctx, searchQuery, limit),
         searchUsersInBsky(agent, searchQuery, dataplane, limit)
     ])
-    const t2 = Date.now()
 
     let usersList: string[] = []
     for(let i = 0; i < limit; i++){
@@ -84,9 +82,6 @@ export const searchUsers: CAHandlerNoAuth<{
     usersList = usersList.slice(0, limit)
 
     await dataplane.fetchProfileViewHydrationData(usersList)
-    const t3 = Date.now()
-
-    ctx.logger.logTimes(`search users ${searchQuery}`, [t1, t2, t3])
 
     const users = usersList.map(did => hydrateProfileViewBasic(ctx, did, dataplane))
 
@@ -190,25 +185,21 @@ export const searchUsersAndTopics: CAHandlerNoAuth<{
     const {query: searchQuery} = params
     const limit = query?.limit ?? 25
 
-
     const dataplane = new Dataplane(ctx, agent)
 
     const limitByKind = Math.ceil(limit / 2)
 
-    const t1 = Date.now()
     const [caUsers, caTopics, bskyUsers] = await Promise.all([
         searchUsersInCA(ctx, searchQuery, limitByKind),
         searchTopicsSkeleton(ctx, searchQuery, undefined, limitByKind),
         searchUsersInBsky(agent, searchQuery, dataplane, limitByKind)
     ])
 
-    const t2 = Date.now()
     const userDids = unique([...caUsers, ...bskyUsers])
     await Promise.all([
         dataplane.fetchProfileViewBasicHydrationData(userDids),
         dataplane.fetchTopicsBasicByUris(caTopics.map(t => t.uri)),
     ])
-    const t3 = Date.now()
 
     let users: $Typed<ArCabildoabiertoActorDefs.ProfileViewBasic>[] = userDids
         .map(d => hydrateProfileViewBasic(ctx, d, dataplane))
@@ -246,7 +237,5 @@ export const searchUsersAndTopics: CAHandlerNoAuth<{
         (a, b) => b-a
     )
 
-    const t4 = Date.now()
-    ctx.logger.logTimes("search users and topics", [t1, t2, t3, t4])
     return {data: data}
 }

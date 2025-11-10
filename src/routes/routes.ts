@@ -17,7 +17,7 @@ import {
     getFollows,
     getProfile,
     getSession,
-    setSeenTutorial,
+    setSeenTutorialHandler,
     unfollow,
     updateAlgorithmConfig,
     updateProfile
@@ -313,7 +313,7 @@ export const createRouter = (ctx: AppContext) => {
     )
 
     router.post('/seen-tutorial/:tutorial',
-        makeHandler(ctx, setSeenTutorial)
+        makeHandler(ctx, setSeenTutorialHandler)
     )
 
     router.get('/datasets',

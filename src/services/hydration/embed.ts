@@ -113,10 +113,12 @@ export class EmbedHydrator extends Hydrator<string, PostView["embed"]> {
             const post = new PostViewHydrator(this.ctx, this.dataplane)
                 .hydrate(uri)
             if (post) {
+                const embed = post.embed
                 return {
                     $type: "ar.cabildoabierto.embed.record#view",
                     record: {
                         ...post,
+                        embeds: embed ? [embed] : undefined,
                         value: post.record,
                         $type: "ar.cabildoabierto.embed.record#viewRecord"
                     }

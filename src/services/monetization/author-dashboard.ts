@@ -368,7 +368,6 @@ async function getArticlesForDashboardQuery(ctx: AppContext, did: string): Promi
 
 
 export async function getAuthorDashboard(ctx: AppContext, did: string) {
-    did = "did:plc:arplmoycj2z7jz3wljgyq3lh"
     const [articles, editStats] = await Promise.all([
         getArticlesForDashboardQuery(ctx, did),
         getTopicsForDashboardQuery(ctx, did),

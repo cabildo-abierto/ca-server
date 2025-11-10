@@ -131,13 +131,10 @@ export async function getFollowSuggestionsToAvoid(ctx: AppContext, did: string) 
 
 
 export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: string}}, {profiles: ProfileView[], cursor?: string}> = async (ctx, agent, {params}) =>  {
-    const t1 = Date.now()
     const [ranking, avoid] = await Promise.all([
         getRecommendationRankingForUser(ctx, agent.did),
         getFollowSuggestionsToAvoid(ctx, agent.did)
     ])
-
-    const t2 = Date.now()
 
     const limit = parseInt(params.limit)
     const offset = params.cursor ? parseInt(params.cursor) : 0
@@ -154,8 +151,6 @@ export const getFollowSuggestions: CAHandler<{params: {limit: string, cursor?: s
 
     const dataplane = new Dataplane(ctx, agent)
     await dataplane.fetchProfileViewHydrationData(dids)
-    const t3 = Date.now()
-    ctx.logger.logTimes("follow suggestions", [t1, t2, t3])
 
     const profiles = dids
         .map(d => hydrateProfileView(ctx, d, dataplane))
