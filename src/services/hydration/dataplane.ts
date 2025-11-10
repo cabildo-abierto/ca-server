@@ -560,6 +560,8 @@ export class Dataplane {
             if (r) uris.push()
         })
 
+        uris = await this.expandUrisWithRepliesQuotesAndReposts(uris.map(u => ({post: u})))
+
         const c = getCollectionFromUri(skeleton.post)
 
         const dids = uris.map(u => getDidFromUri(u))
