@@ -17,6 +17,18 @@
               "minLength": 1,
               "maxLength": 50
             },
+            "description": {
+              "type": "string",
+              "maxLength": 3000,
+              "maxGraphemes": 225
+            },
+            "thumbnail":  {
+              "type": "blob",
+              "accept": [
+                "image/*"
+              ],
+              "maxSize": 1000000
+            },
             "title": {
               "type": "string",
               "minLength": 1,

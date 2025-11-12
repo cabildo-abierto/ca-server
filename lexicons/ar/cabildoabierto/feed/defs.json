@@ -272,6 +272,10 @@
           "maxGraphemes": 300,
           "description": "A summary of the article to be shown in the feed."
         },
+        "thumbnail": {
+          "type": "ref",
+          "ref": "#articleThumbnailView"
+        },
         "summaryFormat":  {
           "type": "string",
           "maxLength": 50
@@ -318,6 +322,24 @@
         "threadgate": {
           "type": "ref",
           "ref": "app.bsky.feed.defs#threadgateView"
+        }
+      }
+    },
+    "articleThumbnailView": {
+      "type": "object",
+      "properties": {
+        "thumb": {
+          "type": "string",
+          "format": "uri",
+          "description": "Fully-qualified URL where a thumbnail of the image can be fetched. For example, CDN location provided by the App View."
+        },
+        "alt": {
+          "type": "string",
+          "description": "Alt text description of the image, for accessibility."
+        },
+        "aspectRatio": {
+          "type": "ref",
+          "ref": "app.bsky.embed.defs#aspectRatio"
         }
       }
     },
