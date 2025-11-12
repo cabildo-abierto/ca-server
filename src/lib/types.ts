@@ -94,20 +94,60 @@ export type FilterProps = {
 }
 
 
-export type JetstreamEvent = {
+export type JetstreamEvent = UpdateEvent | AccountEvent | IdentityEvent | CommitEvent
+
+
+export type UpdateEvent = {
+    kind: "update"
     did: string
-    kind: "commit" | "update" | "identity" | "account"
     time_us: number
 }
 
 
+export type AccountEvent = {
+    kind: "account"
+    did: string
+    time_us: number
+}
 
-export type CommitEvent = JetstreamEvent & {
+
+export type IdentityEvent = {
+    kind: "identity"
+    did: string
+    time_us: number
+    identity: {
+        did: string
+        handle: string
+        seq: number
+        time: string
+    }
+}
+
+export type CommitEvent = {
+    kind: "commit"
+    did: string
+    time_us: number
     commit: {
+        rev: string
         collection: string
-        operation: "create" | "delete" | "update"
         rkey: string
         cid: string
-        record?: any
-    }
+    } & (CreateCommit | DeleteCommit | UpdateCommit)
+}
+
+
+export type CreateCommit = {
+    operation: "create"
+    record: any
+}
+
+
+export type DeleteCommit = {
+    operation: "delete"
+}
+
+
+export type UpdateCommit = {
+    operation: "update"
+    record: any
 }

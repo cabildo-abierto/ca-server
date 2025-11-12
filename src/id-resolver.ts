@@ -14,16 +14,16 @@ export function createIdResolver() {
 export interface BidirectionalResolver {
     resolveHandleToDid(handle: string): Promise<string | null>
 
-    resolveDidToHandle(did: string): Promise<string>
+    resolveDidToHandle(did: string, useCache: boolean): Promise<string>
 
     resolveDidsToHandles(dids: string[]): Promise<Record<string, string>>
 }
 
 export function createBidirectionalResolver(resolver: IdResolver, redis: RedisCache) {
     return {
-        async resolveDidToHandle(did: string): Promise<string> {
+        async resolveDidToHandle(did: string, useCache: boolean = true): Promise<string> {
             const handle = await redis.resolver.getHandle(did)
-            if(!handle){
+            if(!handle || !useCache){
                 const didDoc = await resolver.did.resolveAtprotoData(did)
                 const resolvedHandle = await resolver.handle.resolve(didDoc.handle)
                 if (resolvedHandle === did) {

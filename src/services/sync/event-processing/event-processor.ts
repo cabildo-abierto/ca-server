@@ -1,10 +1,9 @@
 import {AppContext} from "#/setup.js";
-import {CommitEvent, JetstreamEvent} from "#/lib/types.js";
+import {JetstreamEvent} from "#/lib/types.js";
 import {getUri, isCAProfile} from "#/utils/uri.js";
 import {getRecordProcessor} from "#/services/sync/event-processing/get-record-processor.js";
 import {getDeleteProcessor} from "#/services/sync/event-processing/get-delete-processor.js";
 import {RefAndRecord} from "#/services/sync/types.js";
-
 
 
 function newUser(ctx: AppContext, did: string, inCA: boolean) {
@@ -51,10 +50,11 @@ class CommitEventProcessor extends EventProcessor {
     async process(events: JetstreamEvent[]) {
         await super.process(events)
 
-        for(let i = 0; i < events.length; i++) {
-            const c = events[i] as CommitEvent
-            if (isCAProfile(c.commit.collection) && c.commit.rkey == "self") {
-                await newUser(this.ctx, c.did, true)
+        for(const c of events) {
+            if(c.kind == "commit") {
+                if (isCAProfile(c.commit.collection) && c.commit.rkey == "self") {
+                    await newUser(this.ctx, c.did, true)
+                }
             }
         }
     }
@@ -66,18 +66,19 @@ class CommitCreateOrUpdateEventProcessor extends CommitEventProcessor {
         await super.process(events)
 
         const byCollection = new Map<string, RefAndRecord[]>()
-        for(const e of events) {
-            const c = e as CommitEvent
-            const collection = c.commit.collection
-            const uri = getUri(c.did, c.commit.collection, c.commit.rkey)
-            const ref = {uri, cid: c.commit.cid}
-            const refAndRecord = {ref, record: c.commit.record}
+        for(const c of events) {
+            if(c.kind == "commit" && c.commit.operation != "delete"){
+                const collection = c.commit.collection
+                const uri = getUri(c.did, c.commit.collection, c.commit.rkey)
+                const ref = {uri, cid: c.commit.cid}
+                const refAndRecord = {ref, record: c.commit.record}
 
-            const cur = byCollection.get(collection)
-            if(!cur) {
-                byCollection.set(collection, [refAndRecord])
-            } else {
-                cur.push(refAndRecord)
+                const cur = byCollection.get(collection)
+                if(!cur) {
+                    byCollection.set(collection, [refAndRecord])
+                } else {
+                    cur.push(refAndRecord)
+                }
             }
         }
 
@@ -94,16 +95,17 @@ class CommitDeleteEventProcessor extends CommitEventProcessor {
         await super.process(events)
 
         const byCollection = new Map<string, string[]>()
-        for(const e of events) {
-            const c = e as CommitEvent
-            const collection = c.commit.collection
-            const uri = getUri(c.did, c.commit.collection, c.commit.rkey)
+        for(const c of events) {
+            if(c.kind == "commit" && c.commit.operation == "delete"){
+                const collection = c.commit.collection
+                const uri = getUri(c.did, c.commit.collection, c.commit.rkey)
 
-            const cur = byCollection.get(collection)
-            if(!cur) {
-                byCollection.set(collection, [uri])
-            } else {
-                cur.push(uri)
+                const cur = byCollection.get(collection)
+                if(!cur) {
+                    byCollection.set(collection, [uri])
+                } else {
+                    cur.push(uri)
+                }
             }
         }
 
@@ -115,37 +117,30 @@ class CommitDeleteEventProcessor extends CommitEventProcessor {
 }
 
 
-export function getProcessorForEvent(ctx: AppContext, e: JetstreamEvent) {
-    if(e.kind == "commit"){
-        const c = e as CommitEvent
-
-        if(c.commit.operation == "create" || c.commit.operation == "update"){
-            return new CommitCreateOrUpdateEventProcessor(ctx)
-        } else if(c.commit.operation == "delete") {
-            return new CommitDeleteEventProcessor(ctx)
-        } else {
-            return new EventProcessor(ctx)
+class IdentityEventProcessor extends EventProcessor {
+    async process(events: JetstreamEvent[]) {
+        for(const e of events) {
+            if(e.kind == "identity") {
+                await this.updateUserIdentity(e.identity.did, e.identity.handle)
+            }
         }
+    }
 
-    } else {
-        return new EventProcessor(ctx)
+    async updateUserIdentity(did: string, handle: string) {
+        this.ctx.logger.pino.info({did, handle}, "updating user identity")
+        await this.ctx.kysely
+            .updateTable("User")
+            .set("handle", handle)
+            .where("User.did", "=", did)
+            .execute()
+        await this.ctx.redisCache.resolver.setHandle(did, handle)
     }
 }
 
 
 export async function processEventsBatch(ctx: AppContext, events: JetstreamEvent[]) {
-    const createAndUpdateEvents = events.filter(e => {
-        if(e.kind != "commit") return false
-        const c = e as CommitEvent
-        return c.commit.operation == "create" || c.commit.operation == "update"
-    }) as CommitEvent[]
-    const deleteEvents = events.filter(e => {
-        if(e.kind != "commit") return false
-        const c = e as CommitEvent
-        return c.commit.operation == "delete"
-    }) as CommitEvent[]
-
-    await new CommitCreateOrUpdateEventProcessor(ctx).process(createAndUpdateEvents)
-    await new CommitDeleteEventProcessor(ctx).process(deleteEvents)
+    await new CommitCreateOrUpdateEventProcessor(ctx).process(events)
+    await new CommitDeleteEventProcessor(ctx).process(events)
+    await new IdentityEventProcessor(ctx).process(events)
 }
 
