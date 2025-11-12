@@ -119,6 +119,7 @@ export async function setupAppContext(roles: Role[]) {
             ctx.logger.pino.info("adding sync ca users jobs")
             const caUsers = await getCAUsersDids(ctx)
             for(const u of caUsers){
+                await ctx.redisCache.mirrorStatus.set(u, "InProcess", true)
                 await worker.addJob("sync-user", {handleOrDid: u}, 21)
             }
         }

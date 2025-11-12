@@ -76,12 +76,11 @@ function getMarkdown(v: TopicVersion, dataplane: Dataplane): string | null {
 
 
 export async function updateAllTopicContributions(ctx: AppContext) {
-    console.log("getting topic ids")
     const topicIds = (await ctx.kysely
         .selectFrom("Topic")
         .select("id")
         .execute()).map(t => t.id)
-    console.log("updating topic contributions for topics", topicIds.length)
+    ctx.logger.pino.info({count: topicIds.length}, "updating topic contributions for topics")
 
     await updateTopicContributions(ctx, topicIds)
 }

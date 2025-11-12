@@ -11,6 +11,7 @@ export const findUsersInFollows: CAHandler<{params: {handle: string}}, {}> = asy
         .innerJoin(
             "User as FollowedUser", "FollowedUser.did", "Follow.userFollowedId")
         .where("User.handle", "=", handle)
+        .where("FollowedUser.inCA", "=", false)
         .select([
             "FollowedUser.handle",
             "FollowedUser.did"
@@ -21,6 +22,9 @@ export const findUsersInFollows: CAHandler<{params: {handle: string}}, {}> = asy
 
     ctx.logger.pino.info({handle, count: users.length}, "got follows")
     for(let i = 0; i < users.length; i++) {
+        if(i % 20 == 0) {
+            ctx.logger.pino.info({i, handle}, "at index")
+        }
         const av = await chatAgent.chat.bsky.convo.getConvoAvailability({
             members: [users[i].did]
         })
@@ -29,5 +33,6 @@ export const findUsersInFollows: CAHandler<{params: {handle: string}}, {}> = asy
             ctx.logger.pino.info({...users[i], handle}, "can chat")
         }
     }
+    ctx.logger.pino.info({handle}, "done")
     return {data: {}}
 }

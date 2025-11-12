@@ -70,6 +70,7 @@ export async function updateTopicInteractionsOnNewReactions(ctx: AppContext, rec
                 id: uuidv4(),
                 touched: new Date(),
             })))
+            .onConflict(oc => oc.columns(["recordId", "referenceId"]).doNothing())
             .execute()
 
         return interactions.map(i => i.referencedTopicId)
@@ -109,6 +110,7 @@ export async function updateTopicInteractionsOnNewReplies(ctx: AppContext, recor
                     id: uuidv4(),
                     touched: new Date(),
                 })))
+                .onConflict(oc => oc.columns(["recordId", "referenceId"]).doNothing())
                 .execute()
         }
 

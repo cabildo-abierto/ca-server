@@ -7,7 +7,7 @@ import {ExpressionBuilder, OnConflictDatabase, OnConflictTables, sql} from "kyse
 import {DB} from "../../../../prisma/generated/types.js";
 import {NotificationJobData} from "#/services/notifications/notifications.js";
 import {getCidFromBlobRef} from "#/services/sync/utils.js";
-import * as TopicVersion from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
+import {ArCabildoabiertoWikiTopicVersion} from "#/lex-api/index.js"
 import {
     RecordProcessor
 } from "#/services/sync/event-processing/record-processor.js";
@@ -16,11 +16,11 @@ import {unique} from "#/utils/arrays.js";
 import {updateTopicsCurrentVersionBatch} from "#/services/wiki/current-version.js";
 
 
-export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Record> {
+export class TopicVersionRecordProcessor extends RecordProcessor<ArCabildoabiertoWikiTopicVersion.Record> {
 
-    validateRecord = TopicVersion.validateRecord
+    validateRecord = ArCabildoabiertoWikiTopicVersion.validateRecord
 
-    async addRecordsToDB(records: RefAndRecord<TopicVersion.Record>[], reprocess: boolean = false) {
+    async addRecordsToDB(records: RefAndRecord<ArCabildoabiertoWikiTopicVersion.Record>[], reprocess: boolean = false) {
         const contents: { ref: ATProtoStrongRef, record: SyncContentProps }[] = records.map(r => ({
             record: {
                 format: r.record.format,
@@ -89,7 +89,7 @@ export class TopicVersionRecordProcessor extends RecordProcessor<TopicVersion.Re
         }
     }
 
-    async createJobs(records: RefAndRecord<TopicVersion.Record>[], inserted: {uri: string, topicId: string}[] | undefined, topics: {id: string}[]) {
+    async createJobs(records: RefAndRecord<ArCabildoabiertoWikiTopicVersion.Record>[], inserted: {uri: string, topicId: string}[] | undefined, topics: {id: string}[]) {
         const authors = unique(records.map(r => getDidFromUri(r.ref.uri)))
 
         if (inserted) {
@@ -119,7 +119,7 @@ export class TopicVersionDeleteProcessor extends DeleteProcessor {
 }
 
 
-function getUniqueTopicUpdates(records: { ref: ATProtoStrongRef, record: TopicVersion.Record }[]) {
+function getUniqueTopicUpdates(records: { ref: ATProtoStrongRef, record: ArCabildoabiertoWikiTopicVersion.Record }[]) {
     const topics = new Map<string, { id: string, lastEdit: Date }>()
     records.forEach(r => {
         const id = r.record.id

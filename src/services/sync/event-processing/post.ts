@@ -5,7 +5,7 @@ import {
     isArticle,
     isTopicVersion
 } from "#/utils/uri.js";
-import * as Post from "#/lex-api/types/app/bsky/feed/post.js"
+import {AppBskyFeedPost} from "#/lex-api/index.js"
 import {
     isMain as isVisualizationEmbed,
     isDatasetDataSource
@@ -25,11 +25,11 @@ import {Transaction} from "kysely";
 import {DB} from "../../../../prisma/generated/types.js";
 
 
-export class PostRecordProcessor extends RecordProcessor<Post.Record> {
+export class PostRecordProcessor extends RecordProcessor<AppBskyFeedPost.Record> {
 
-    validateRecord = Post.validateRecord
+    validateRecord = AppBskyFeedPost.validateRecord
 
-    async createReferences(records: RefAndRecord<Post.Record>[], trx: Transaction<DB>){
+    async createReferences(records: RefAndRecord<AppBskyFeedPost.Record>[], trx: Transaction<DB>){
         const referencedRefs: ATProtoStrongRef[] = records.reduce((acc, r) => {
             const quoteRef = this.getQuotedPostRef(r.record)
             return [
@@ -42,7 +42,7 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
         await this.processDirtyRecordsBatch(trx, referencedRefs)
     }
 
-    async createContents(records: RefAndRecord<Post.Record>[], trx: Transaction<DB>){
+    async createContents(records: RefAndRecord<AppBskyFeedPost.Record>[], trx: Transaction<DB>){
         const contents: { ref: ATProtoStrongRef, record: SyncContentProps }[] = records.map(r => {
             let datasetsUsed: string[] = []
             if (isVisualizationEmbed(r.record.embed) && isDatasetDataSource(r.record.embed.dataSource)) {
@@ -64,7 +64,7 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
         await processContentsBatch(this.ctx, trx, contents)
     }
 
-    getQuotedPostRef(r: Post.Record){
+    getQuotedPostRef(r: AppBskyFeedPost.Record){
         if (!r.embed){
             return undefined
         }
@@ -82,7 +82,7 @@ export class PostRecordProcessor extends RecordProcessor<Post.Record> {
         }
     }
 
-    async addRecordsToDB(records: RefAndRecord<Post.Record>[], reprocess: boolean = false) {
+    async addRecordsToDB(records: RefAndRecord<AppBskyFeedPost.Record>[], reprocess: boolean = false) {
         const insertedPosts = await this.ctx.kysely.transaction().execute(async (trx) => {
             await this.processRecordsBatch(trx, records)
             await this.createReferences(records, trx)
