@@ -67,9 +67,10 @@ import { getAuthorDashboardHandler } from '#/services/monetization/author-dashbo
 import { getFollowSuggestions, setNotInterested } from '#/services/user/follow-suggestions.js';
 import {AppContext} from "#/setup.js";
 import { jobApplicationHandler } from '#/services/admin/jobs.js';
-import {unsubscribe, unsubscribeHandler} from "#/services/emails/sending.js";
+import {unsubscribeHandler} from "#/services/emails/sending.js";
 import {getTopicsDataForElectionVisualizationHandler} from "#/services/wiki/election.js";
 import {getKnownPropsHandler} from "#/services/wiki/known-props.js";
+import { syncHandler } from "#/services/sync/sync-user.js";
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
     return {data: "live"}
@@ -446,6 +447,8 @@ export const createRouter = (ctx: AppContext) => {
     ))
 
     router.post("/attempt-mp-verification", makeHandler(ctx, attemptMPVerification))
+
+    router.post("/sync", makeHandler(ctx, syncHandler))
 
     router.use(adminRoutes(ctx))
 

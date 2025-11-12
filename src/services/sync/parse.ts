@@ -5,7 +5,7 @@ import {AppContext} from "#/setup.js";
 export function parseRecord(ctx: AppContext, obj: any): any {
 
     if (Array.isArray(obj)) {
-        return obj.map(parseRecord);
+        return Array.from(obj.map(o => parseRecord(ctx, o)))
     }
 
     if (obj && typeof obj === 'object') {

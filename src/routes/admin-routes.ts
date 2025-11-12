@@ -79,7 +79,7 @@ export const adminRoutes = (ctx: AppContext) => {
 
 
     router.post(
-        "/sync-user.js/:handleOrDid",
+        "/sync-user/:handleOrDid",
         makeAdminHandler(ctx, syncUserHandler)
     )
     router.post(

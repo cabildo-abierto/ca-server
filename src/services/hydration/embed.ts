@@ -23,7 +23,7 @@ import {
     Main as SelectionQuoteEmbed,
     View as SelectionQuoteEmbedView
 } from "#/lex-server/types/ar/cabildoabierto/embed/selectionQuote.js";
-import {$Typed} from "@atproto/api";
+import {$Typed, AppBskyEmbedExternal, AppBskyEmbedImages, AppBskyEmbedVideo} from "@atproto/api";
 import {getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri.js";
 import {ArticleEmbed, Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article.js";
 import {Record as TopicVersionRecord, TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
@@ -39,6 +39,9 @@ import {Main as RecordEmbed} from "#/lex-api/types/app/bsky/embed/record.js";
 import {
     View as CARecordEmbedView
 } from "#/lex-api/types/ar/cabildoabierto/embed/record.js";
+import {
+    View as CARecordWithMediaEmbedView
+} from "#/lex-api/types/ar/cabildoabierto/embed/recordWithMedia.js";
 import {
     Main as RecordWithMediaEmbed
 } from "#/lex-api/types/app/bsky/embed/recordWithMedia.js";
@@ -71,6 +74,8 @@ export class EmbedHydrator extends Hydrator<string, PostView["embed"]> {
         const record = caData?.record ? JSON.parse(caData.record) as PostRecord : post.record as PostRecord
         const embed = record.embed
 
+        const authorId = getDidFromUri(uri)
+
         if (isSelectionQuoteEmbed(embed) && record.reply) {
             return this.hydrateSelectionQuoteEmbedView(
                 embed,
@@ -78,23 +83,49 @@ export class EmbedHydrator extends Hydrator<string, PostView["embed"]> {
             )
         } else if (isVisualizationEmbed(embed)) {
             return this.hydrateVisualizationEmbedView(embed)
-        } else if (isRecordEmbed(embed) || isRecordWithMediaEmbed(embed)) {
+        } else if (isRecordEmbed(embed)) {
             return this.hydrateRecordEmbedView(embed)
+        } else if(isRecordWithMediaEmbed(embed)) {
+            return this.hydrateRecordWithMediaEmbedView(embed, authorId)
         } else if (isImageEmbed(embed)) {
             return this.hydrateImageEmbedView(
                 embed,
-                getDidFromUri(uri)
+                authorId
             )
         } else if (isExternalEmbed(embed)) {
-            return this.hydrateExternalEmbedView( embed, getDidFromUri(uri))
+            return this.hydrateExternalEmbedView( embed, authorId)
         }
 
         return post.embed
     }
 
+    hydrateRecordWithMediaEmbedView(embed: $Typed<RecordWithMediaEmbed>, authorId: string): $Typed<CARecordWithMediaEmbedView> | null {
+        const uri = embed.record.record.uri
+        const record = this.hydrateRecordEmbedViewFromUri(uri)
+        if(!record) return null
 
-    hydrateRecordEmbedView(embed: $Typed<RecordEmbed> | $Typed<RecordWithMediaEmbed>): $Typed<CARecordEmbedView> | null {
-        const uri = isRecordWithMediaEmbed(embed) ? embed.record.record.uri : embed.record.uri
+        let media: CARecordWithMediaEmbedView["media"]
+
+        if(AppBskyEmbedImages.isMain(embed.media)){
+            media = this.hydrateImageEmbedView(embed.media, authorId)
+        } else if(AppBskyEmbedVideo.isMain(embed.media)) {
+            this.ctx.logger.pino.error("video embed hydration not implemented")
+            return null
+        } else if(AppBskyEmbedExternal.isMain(embed.media)) {
+            media = this.hydrateExternalEmbedView(embed.media, authorId)
+        } else {
+            return null
+        }
+
+        return {
+            $type: "ar.cabildoabierto.embed.recordWithMedia#view",
+            record,
+            media
+        }
+    }
+
+
+    hydrateRecordEmbedViewFromUri(uri: string): $Typed<CARecordEmbedView> | null {
         const collection = getCollectionFromUri(uri)
 
         if (isArticle(collection)) {
@@ -128,6 +159,12 @@ export class EmbedHydrator extends Hydrator<string, PostView["embed"]> {
             this.ctx.logger.pino.warn({collection}, `hydration not implemented for collection`)
         }
         return null
+    }
+
+
+    hydrateRecordEmbedView(embed: $Typed<RecordEmbed>): $Typed<CARecordEmbedView> | null {
+        const uri = embed.record.uri
+        return this.hydrateRecordEmbedViewFromUri(uri)
     }
 
     hydrateVisualizationEmbedView(embed: VisualizationEmbed): $Typed<VisualizationEmbedView> | null {

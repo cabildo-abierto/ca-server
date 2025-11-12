@@ -90,9 +90,20 @@ export class RepoSync {
         const t6 = Date.now()
         await this.processPendingEvents()
 
+        await this.updateHandle()
+
         const t7 = Date.now()
         await ctx.redisCache.mirrorStatus.set(did, "Sync", inCA)
         ctx.logger.logTimes(`${did} sync done`, [t1, t2, t3, t4, t5, t6, t7])
+    }
+
+    async updateHandle() {
+        const handle = await this.ctx.resolver.resolveDidToHandle(this.did, false)
+        await this.ctx.kysely
+            .updateTable("User")
+            .set("handle", handle)
+            .where("did", "=", this.did)
+            .execute()
     }
 
     async getPresentRecords() {
@@ -455,6 +466,28 @@ export const syncUserHandler: CAHandler<{
     await ctx.worker?.addJob("sync-user", {
         handleOrDid,
         collectionsMustUpdate: c ? (typeof c == "string" ? [c] : c) : undefined
+    })
+
+    return {data: {}}
+}
+
+
+
+export const syncHandler: CAHandler<{}, {}> = async (ctx, agent) => {
+    const did = agent.did
+
+    const status = await ctx.redisCache.mirrorStatus.get(did, true)
+    if(status == "Failed - Too Large") {
+        return {error: "Tu repositorio es demasiado grande. Escribinos a @cabildoabierto.ar."}
+    } else if(status != "Failed") {
+        return {data: {}}
+    }
+
+    await ctx.redisCache.mirrorStatus.set(did, "InProcess", true)
+
+    await ctx.worker?.addJob("sync-user", {
+        did,
+        collectionsMustUpdate: undefined
     })
 
     return {data: {}}
