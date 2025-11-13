@@ -23,7 +23,13 @@ import {
     Main as SelectionQuoteEmbed,
     View as SelectionQuoteEmbedView
 } from "#/lex-server/types/ar/cabildoabierto/embed/selectionQuote.js";
-import {$Typed, AppBskyEmbedExternal, AppBskyEmbedImages, AppBskyEmbedVideo} from "@atproto/api";
+import {
+    $Typed,
+    AppBskyEmbedExternal,
+    AppBskyEmbedImages,
+    AppBskyEmbedRecordWithMedia,
+    AppBskyEmbedVideo, AppBskyFeedDefs
+} from "@atproto/api";
 import {getCollectionFromUri, getDidFromUri, isArticle, isPost, isTopicVersion} from "#/utils/uri.js";
 import {ArticleEmbed, Record as ArticleRecord} from "#/lex-api/types/ar/cabildoabierto/feed/article.js";
 import {Record as TopicVersionRecord, TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
@@ -59,9 +65,6 @@ import {
 import {PostViewHydrator} from "#/services/hydration/post-view.js";
 
 
-
-
-
 export class EmbedHydrator extends Hydrator<string, PostView["embed"]> {
 
     hydrate(uri: string): PostView["embed"] | null {
@@ -86,7 +89,7 @@ export class EmbedHydrator extends Hydrator<string, PostView["embed"]> {
         } else if (isRecordEmbed(embed)) {
             return this.hydrateRecordEmbedView(embed)
         } else if(isRecordWithMediaEmbed(embed)) {
-            return this.hydrateRecordWithMediaEmbedView(embed, authorId)
+            return this.hydrateRecordWithMediaEmbedView(embed, authorId, post)
         } else if (isImageEmbed(embed)) {
             return this.hydrateImageEmbedView(
                 embed,
@@ -99,7 +102,7 @@ export class EmbedHydrator extends Hydrator<string, PostView["embed"]> {
         return post.embed
     }
 
-    hydrateRecordWithMediaEmbedView(embed: $Typed<RecordWithMediaEmbed>, authorId: string): $Typed<CARecordWithMediaEmbedView> | null {
+    hydrateRecordWithMediaEmbedView(embed: $Typed<RecordWithMediaEmbed>, authorId: string, postView?: AppBskyFeedDefs.PostView): $Typed<CARecordWithMediaEmbedView> | null {
         const uri = embed.record.record.uri
         const record = this.hydrateRecordEmbedViewFromUri(uri)
         if(!record) return null
@@ -109,11 +112,16 @@ export class EmbedHydrator extends Hydrator<string, PostView["embed"]> {
         if(AppBskyEmbedImages.isMain(embed.media)){
             media = this.hydrateImageEmbedView(embed.media, authorId)
         } else if(AppBskyEmbedVideo.isMain(embed.media)) {
-            this.ctx.logger.pino.error("video embed hydration not implemented")
-            return null
+            if(postView && AppBskyEmbedRecordWithMedia.isView(postView.embed)) {
+                media = postView.embed.media
+            } else {
+                this.ctx.logger.pino.error("video embed hydration not implemented")
+                return null
+            }
         } else if(AppBskyEmbedExternal.isMain(embed.media)) {
             media = this.hydrateExternalEmbedView(embed.media, authorId)
         } else {
+            this.ctx.logger.pino.error({embed}, "hydration not implemented for media")
             return null
         }
 

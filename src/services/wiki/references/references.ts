@@ -12,13 +12,14 @@ import {updateTopicPopularities} from "#/services/wiki/references/popularity.js"
 import {updateContentsText} from "#/services/wiki/content.js";
 import {getTimestamp, updateTimestamp} from "#/services/admin/status.js";
 import { TopicMention } from "#/lex-api/types/ar/cabildoabierto/feed/defs.js";
-import {getTopicTitle} from "#/services/wiki/utils.js";
+import {getTopicCategories, getTopicTitle} from "#/services/wiki/utils.js";
 import {TopicProp} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
 import {getCollectionFromUri, isArticle, isTopicVersion} from "#/utils/uri.js";
 import {isReactionCollection} from "#/utils/type-utils.js";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms.js";
 import {NotificationJobData} from "#/services/notifications/notifications.js";
-
+import {jsonArrayFrom} from "kysely/helpers/postgres";
+import {unique} from "#/utils/arrays.js";
 
 export async function updateReferencesForNewContents(ctx: AppContext) {
     const lastUpdate = await getLastReferencesUpdate(ctx)
@@ -270,6 +271,8 @@ export async function updatePopularitiesOnTopicsChange(ctx: AppContext, topicIds
     await updateTopicPopularities(ctx, topicIds)
     const t5 = Date.now()
 
+    await updateContentCategoriesOnTopicsChange(ctx, topicIds)
+
     ctx.logger.logTimes(`update refs and pops on ${topicIds.length} topics`, [t1, t2, t3, t4, t5])
 }
 
@@ -340,8 +343,12 @@ export async function updatePopularitiesOnContentsChange(ctx: AppContext, uris: 
     const t6 = Date.now()
 
     await createMentionNotifications(ctx, uris)
+    const t7 = Date.now()
 
-    ctx.logger.logTimes(`update refs and pops on ${uris.length} contents`, [t1, t2, t3, t4, t5, t6])
+    await updateDiscoverFeedIndex(ctx, uris)
+    const t8 = Date.now()
+
+    ctx.logger.logTimes(`update refs and pops on ${uris.length} contents`, [t1, t2, t3, t4, t5, t6, t7, t8])
 }
 
 
@@ -437,4 +444,85 @@ export async function getTopicsReferencedInText(ctx: AppContext, text: string): 
 
     return Array.from(topicsMap.values())
         .sort((a, b) => b.count - a.count)
+}
+
+
+export async function updateDiscoverFeedIndex(ctx: AppContext, uris?: string[]) {
+    const batchSize = 2000
+    let offset = 0
+
+    while(true) {
+        const contents = await ctx.kysely
+            .selectFrom("Content")
+            .innerJoin("Record", "Record.uri", "Content.uri")
+            .where("Record.collection", "in", ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"])
+            .$if(uris != null, qb => qb.where("Content.uri", "in", uris!))
+            .limit(batchSize)
+            .offset(offset)
+            .select([
+                "Content.uri",
+                "Record.created_at_tz",
+                eb => jsonArrayFrom(eb
+                    .selectFrom("Reference")
+                    .whereRef("Reference.referencingContentId", "=", "Content.uri")
+                    .innerJoin("Topic", "Topic.id", "Reference.referencedTopicId")
+                    .innerJoin("TopicVersion", "TopicVersion.uri", "Topic.currentVersionId")
+                    .select(["TopicVersion.props"])
+                ).as("mentionedTopicsProps")
+            ])
+            .orderBy("Record.created_at_tz desc")
+            .execute()
+        if(contents.length == 0) break
+
+        const values: {categoryId: string, contentId: string, created_at: Date}[] = []
+        for(const c of contents) {
+            const cats = unique(c.mentionedTopicsProps.flatMap(p => {
+                return getTopicCategories(p.props as TopicProp[])
+            }))
+            for(const cat of cats) {
+                if(c.created_at_tz){
+                    values.push({
+                        categoryId: cat,
+                        contentId: c.uri,
+                        created_at: c.created_at_tz
+                    })
+                } else {
+                    ctx.logger.pino.warn({uri: c.uri}, "content has no created at tz")
+                }
+            }
+        }
+
+        ctx.logger.pino.info({count: values.length}, "inserting content categories")
+        await ctx.kysely.transaction().execute(async trx => {
+            await trx
+                .deleteFrom("DiscoverFeedIndex")
+                .where("contentId", "in", unique(values.map(v => v.contentId)))
+                .execute()
+
+            if(values.length > 0){
+                await trx
+                    .insertInto("DiscoverFeedIndex")
+                    .values(values)
+                    .execute()
+            }
+        })
+
+        offset += batchSize
+        if(contents.length < batchSize) {
+            break
+        }
+    }
+}
+
+
+/***
+ actualizamos las categorías de todos los contenidos que mencionen a algún tema de la lista
+*/
+export async function updateContentCategoriesOnTopicsChange(ctx: AppContext, topicIds: string[]) {
+    const contents = await ctx.kysely.selectFrom("Reference")
+        .where("referencedTopicId", "in", topicIds)
+        .select("Reference.referencingContentId")
+        .execute()
+
+    await updateDiscoverFeedIndex(ctx, contents.map(c => c.referencingContentId))
 }

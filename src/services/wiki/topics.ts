@@ -11,7 +11,7 @@ import {Agent} from "#/utils/session-agent.js";
 import {anyEditorStateToMarkdownOrLexical} from "#/utils/lexical/transforms.js";
 import {Dataplane} from "#/services/hydration/dataplane.js";
 import {$Typed} from "@atproto/api";
-import {getTopicSynonyms} from "#/services/wiki/utils.js";
+import {getTopicSynonyms, getTopicTitle} from "#/services/wiki/utils.js";
 import {TopicMention} from "#/lex-api/types/ar/cabildoabierto/feed/defs.js"
 import {getTopicVersionViewer} from "#/services/wiki/history.js";
 import {Record as TopicVersionRecord} from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js"
@@ -567,4 +567,28 @@ export const getTopicsWhereTitleIsNotSetAsSynonym: CAHandlerNoAuth<{}, string[]>
     })
 
     return {data: data.map(d => d.id)}
+}
+
+
+export const getTopicsMentionedByContent: CAHandlerNoAuth<{params: {did: string, rkey: string, collection: string}}, {}> = async (ctx, agent, {params}) => {
+    const uri = getUri(params.did, params.collection, params.rkey)
+
+    const res = await ctx.kysely
+        .selectFrom("Reference")
+        .innerJoin("Topic", "Topic.id", "referencedTopicId")
+        .innerJoin("TopicVersion", "Topic.currentVersionId", "TopicVersion.uri")
+        .where("referencingContentId", "=", uri)
+        .select(["referencedTopicId as id", "count", "TopicVersion.props"])
+        .execute()
+
+    const data: TopicMention[] = res.map(r => {
+        return {
+            $type: "ar.cabildoabierto.feed.defs#topicMention",
+            title: getTopicTitle({id: r.id, props: r.props as TopicProp[]}),
+            count: r.count ?? 0,
+            id: r.id
+        }
+    })
+
+    return {data}
 }

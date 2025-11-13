@@ -6,7 +6,9 @@ export async function updateInteractionsScore(ctx: AppContext, uris?: string[]) 
     if(uris && uris.length == 0) return
     const batchSize = 500
     let offset = 0
+    const lastYear = new Date(Date.now() - 1000*3600*24*365)
     const lastMonth = new Date(Date.now() - 1000*3600*24*30)
+    const label = 'ca:en discusión'
     while(true){
         const t1 = Date.now()
 

@@ -4,6 +4,11 @@ import {
     TopicProp
 } from "#/lex-api/types/ar/cabildoabierto/wiki/topicVersion.js";
 
+
+/***
+
+
+ */
 export async function updateTopicsCategories(ctx: AppContext) {
     const topics = await ctx.kysely
         .selectFrom('Topic')
@@ -26,7 +31,7 @@ export async function updateTopicsCategories(ctx: AppContext) {
     ];
 
     if (allCategoryIds.length === 0) {
-        console.log('No categories to update.');
+        ctx.logger.pino.info('No categories to update.');
         return;
     }
 
@@ -39,7 +44,7 @@ export async function updateTopicsCategories(ctx: AppContext) {
                 .onConflict((oc) => oc.column('id').doNothing())
                 .execute();
         } catch (err) {
-            console.log(`Error inserting categories: ${err}.`);
+            ctx.logger.pino.error(`Error inserting categories: ${err}.`);
         }
 
         const topicCategoryValues = topicCategories.flatMap(({topicId, categoryIds}) =>
@@ -50,34 +55,34 @@ export async function updateTopicsCategories(ctx: AppContext) {
         );
 
         if (topicCategoryValues.length === 0) {
-            console.log('No topic-category relationships to update.');
+            ctx.logger.pino.info('No topic-category relationships to update.');
             return;
         }
 
-        let existing: {topicId: string, categoryId: string}[] = []
+        let existing: { topicId: string, categoryId: string }[] = []
         try {
             existing = await trx
                 .selectFrom('TopicToCategory')
                 .select(['topicId', 'categoryId'])
                 .execute();
-        } catch (err) {
-            console.log("Error getting existing relations", err)
+        } catch (error) {
+            ctx.logger.pino.error({error}, "Error getting existing relations")
             return
         }
         const batchSize = 2000;
 
         ctx.logger.pino.info({count: topicCategoryValues.length}, "inserting new category relations")
 
-        for(let i = 0; i < topicCategoryValues.length; i += batchSize) {
-            console.log(`Batch ${i}.`)
+        for (let i = 0; i < topicCategoryValues.length; i += batchSize) {
+            ctx.logger.pino.info(`Batch ${i}.`)
             try {
                 await trx
                     .insertInto('TopicToCategory')
                     .values(topicCategoryValues.slice(i, i + batchSize))
                     .onConflict((oc) => oc.columns(['topicId', 'categoryId']).doNothing())
                     .execute();
-            } catch (err) {
-                console.log(`Error inserting relations: ${err}.`);
+            } catch (error) {
+                ctx.logger.pino.error({error}, `Error inserting relations.`);
             }
         }
         const toDelete = existing.filter(r => !topicCategoryValues.some(v => v.topicId == r.topicId && v.categoryId == r.categoryId));
@@ -86,7 +91,7 @@ export async function updateTopicsCategories(ctx: AppContext) {
         ctx.logger.pino.info({count: toDelete.length}, "deleting old category relations")
 
         try {
-            if(toDelete.length > 0) {
+            if (toDelete.length > 0) {
                 for (let i = 0; i < toDelete.length; i += batchSize) {
                     const chunk = toDelete.slice(i, i + batchSize);
                     try {
@@ -102,7 +107,7 @@ export async function updateTopicsCategories(ctx: AppContext) {
                             .execute();
                     } catch (err) {
                         ctx.logger.pino.error({error: err}, "error deleting old relations")
-                        console.log({error: err},  `error deleting batch`);
+                        console.log({error: err}, `error deleting batch`);
                     }
                 }
             }
@@ -110,12 +115,38 @@ export async function updateTopicsCategories(ctx: AppContext) {
             ctx.logger.pino.error({error: err}, "error deleting old category relations")
         }
 
+        const nonEmptyCategories = (await trx
+            .selectFrom("TopicCategory")
+            .where(eb => eb.or([
+                eb.exists(eb
+                    .selectFrom("TopicToCategory")
+                    .whereRef("TopicToCategory.categoryId", "=", "TopicCategory.id")
+                ),
+                eb.exists(eb
+                    .selectFrom("UserInterest")
+                    .whereRef("UserInterest.topicCategoryId", "=", "TopicCategory.id")
+                )
+            ]))
+            .select("id")
+            .execute()
+        ).map(c => c.id)
+
+        await trx
+            .deleteFrom("CategoryLink")
+            .where(
+                eb => eb.or([
+                    eb("idCategoryA", "not in", nonEmptyCategories),
+                    eb("idCategoryB", "not in", nonEmptyCategories)
+                ])
+            )
+            .execute()
+
         await trx
             .deleteFrom("TopicCategory")
             .where(
                 "id",
                 "not in",
-                trx.selectFrom("TopicToCategory").select("categoryId")
+                nonEmptyCategories
             )
             .execute()
     })

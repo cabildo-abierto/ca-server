@@ -117,6 +117,11 @@ export type Dataset = {
     uri: string;
     description: string | null;
 };
+export type DiscoverFeedIndex = {
+    contentId: string;
+    categoryId: string;
+    created_at: Timestamp;
+};
 export type Donation = {
     id: string;
     userById: string | null;
@@ -404,6 +409,7 @@ export type DB = {
     Content: Content;
     DataBlock: DataBlock;
     Dataset: Dataset;
+    DiscoverFeedIndex: DiscoverFeedIndex;
     Donation: Donation;
     Draft: Draft;
     EmailSent: EmailSent;

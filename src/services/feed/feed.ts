@@ -10,7 +10,7 @@ import {
     FeedFormatOption,
     getEnDiscusionFeedPipeline
 } from "#/services/feed/inicio/discusion.js";
-import {discoverFeedPipeline} from "#/services/feed/inicio/discover.js";
+import {discoverFeedPipeline} from "#/services/feed/discover/discover.js";
 import {CAHandlerNoAuth, CAHandlerOutput} from "#/utils/handler.js";
 import {Dataplane} from "#/services/hydration/dataplane.js";
 import {articlesFeedPipeline} from "#/services/feed/inicio/articles.js";

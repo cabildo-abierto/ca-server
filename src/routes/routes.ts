@@ -32,7 +32,8 @@ import {
     getTrendingTopics,
     getTopicsHandler,
     getCategories,
-    getTopicsMentioned
+    getTopicsMentioned,
+    getTopicsMentionedByContent
 } from "#/services/wiki/topics.js";
 import {getTopicFeed, getTopicMentionsInTopicsFeed, getTopicQuoteReplies} from "#/services/feed/topic.js";
 import {deleteCAProfile, deleteRecordHandler, deleteRecordsHandler} from "#/services/delete.js";
@@ -71,6 +72,7 @@ import {unsubscribeHandler} from "#/services/emails/sending.js";
 import {getTopicsDataForElectionVisualizationHandler} from "#/services/wiki/election.js";
 import {getKnownPropsHandler} from "#/services/wiki/known-props.js";
 import { syncHandler } from "#/services/sync/sync-user.js";
+import {getInterestsHandler, newInterestHandler, removeInterestHandler} from "#/services/feed/discover/interests.js";
 
 const serverStatusRouteHandler: CAHandlerNoAuth<{}, string> = async (ctx, agent, {}) => {
     return {data: "live"}
@@ -346,6 +348,11 @@ export const createRouter = (ctx: AppContext) => {
         makeHandlerNoAuth(ctx, getTopicsMentioned)
     )
 
+    router.get(
+        '/topics-mentioned/:did/:collection/:rkey',
+        makeHandlerNoAuth(ctx, getTopicsMentionedByContent)
+    )
+
     router.post(
         '/profile',
         handler(makeHandler(ctx, updateProfile))
@@ -449,6 +456,12 @@ export const createRouter = (ctx: AppContext) => {
     router.post("/attempt-mp-verification", makeHandler(ctx, attemptMPVerification))
 
     router.post("/sync", makeHandler(ctx, syncHandler))
+
+    router.get("/interests", makeHandler(ctx, getInterestsHandler))
+
+    router.post("/interest/:id", makeHandler(ctx, newInterestHandler))
+
+    router.post("/remove-interest/:id", makeHandler(ctx, removeInterestHandler))
 
     router.use(adminRoutes(ctx))
 

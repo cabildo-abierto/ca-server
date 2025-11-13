@@ -8,7 +8,7 @@ import {
     updatePopularitiesOnContentsChange,
     updateReferences,
     updatePopularitiesOnTopicsChange,
-    updatePopularitiesOnNewReactions, recomputeTopicInteractionsAndPopularities
+    updatePopularitiesOnNewReactions, recomputeTopicInteractionsAndPopularities, updateDiscoverFeedIndex
 } from "#/services/wiki/references/references.js";
 import {updateEngagementCounts} from "#/services/feed/getUserEngagement.js";
 import {deleteCollection} from "#/services/delete.js";
@@ -215,6 +215,10 @@ export class CAWorker {
         this.registerJob(
             "update-all-topics-popularities",
             () => updateAllTopicPopularities(ctx)
+        )
+        this.registerJob(
+            "update-all-content-categories",
+            () => updateDiscoverFeedIndex(ctx)
         )
 
         this.logger.pino.info("worker jobs registered")

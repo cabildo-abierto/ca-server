@@ -85,6 +85,7 @@ model Content {
   TopicVersion            TopicVersion?
   Dataset                 Dataset[]
   text_tsv                Unsupported("tsvector")?
+  inDiscoverFeed          DiscoverFeedIndex[]
 
   @@index([text_tsv], map: "content_text_fts_idx", type: Gin)
   @@index([created_at(sort: Desc)])
@@ -354,6 +355,7 @@ model Reference {
   touched_tz DateTime? @db.Timestamptz(3)
 
   @@unique([referencingContentId, referencedTopicId])
+  @@index([referencingContentId, referencedTopicId])
   @@index([referencedTopicId])
   @@index([referencingContentId])
   @@index([touched])
@@ -389,6 +391,7 @@ model TopicCategory {
   CategoryLink_CategoryLink_idCategoryBToTopicCategory CategoryLink[]    @relation("CategoryLink_idCategoryBToTopicCategory")
   TopicToCategory                                      TopicToCategory[]
   interestedUsers                                      UserInterest[]    @relation("InterestedUsers")
+  contents                                             DiscoverFeedIndex[]
 }
 
 model TopicInteraction {
@@ -451,6 +454,21 @@ model UserInterest {
   user            User          @relation("UserInterests", fields: [userId], references: [did])
   topicCategoryId String
   topicCategory   TopicCategory @relation("InterestedUsers", fields: [topicCategoryId], references: [id])
+
+  @@unique([userId, topicCategoryId])
+  @@index([userId])
+  @@index([topicCategoryId])
+}
+
+model DiscoverFeedIndex {
+  contentId      String
+  content        Content  @relation(fields: [contentId], references: [uri])
+  categoryId     String
+  Category       TopicCategory    @relation(fields: [categoryId], references: [id])
+  created_at     DateTime @db.Timestamptz(3)
+
+  @@id([contentId, categoryId])
+  @@index([categoryId, created_at(sort: Desc)])
 }
 
 model User {

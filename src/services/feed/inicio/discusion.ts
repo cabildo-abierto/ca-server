@@ -30,6 +30,8 @@ export function getEnDiscusionStartDate(time: EnDiscusionTime) {
         return new Date(Date.now() - 7 * oneDay)
     } else if (time == "Último mes") {
         return new Date(Date.now() - 30 * oneDay)
+    } else if (time == "Último año") {
+        return new Date( Date.now() - 365 * oneDay)
     } else {
         throw Error(`Período de tiempo inválido: ${time}`)
     }
@@ -37,7 +39,7 @@ export function getEnDiscusionStartDate(time: EnDiscusionTime) {
 
 
 export type EnDiscusionMetric = "Me gustas" | "Interacciones" | "Popularidad relativa" | "Recientes"
-export type EnDiscusionTime = "Último día" | "Última semana" | "Último mes"
+export type EnDiscusionTime = "Último día" | "Última semana" | "Último mes" | "Último año"
 export type FeedFormatOption = "Todos" | "Artículos"
 
 export type EnDiscusionSkeletonElement = {uri: string, createdAt: Date}
@@ -143,23 +145,32 @@ const getEnDiscusionSkeletonQuery: (metric: EnDiscusionMetric, time: EnDiscusion
 
             if(offsetFrom && offsetTo && offsetFrom.getTime() <= offsetTo.getTime()) return []
 
-            const res = await ctx.kysely.selectFrom('Record')
+            const res = await ctx.kysely.with("EnDiscusionContent", eb => eb.selectFrom('Record')
                 .where('Record.collection', 'in', collections)
-                .$if(offsetFrom != null, qb => qb.where("Record.created_at", "<", offsetFrom!))
-                .$if(offsetTo != null, qb => qb.where("Record.created_at", ">", offsetTo!))
                 .innerJoin('Content', 'Record.uri', 'Content.uri')
                 .where(sql<boolean>`"Content"."selfLabels" @> ARRAY[${label}]::text[]`)
+                .orderBy("Record.authorId")
+                .orderBy("Record.created_at desc")
+                .distinctOn("Record.authorId")
                 .select([
                     'Record.uri',
+                    "Record.authorId",
                     "Record.created_at as createdAt"
+                ]))
+                .selectFrom("EnDiscusionContent")
+                .select([
+                    "EnDiscusionContent.uri",
+                    "EnDiscusionContent.createdAt"
                 ])
-                .orderBy('Record.created_at', 'desc')
+                .$if(offsetFrom != null, qb => qb.where("EnDiscusionContent.createdAt", "<", offsetFrom!))
+                .$if(offsetTo != null, qb => qb.where("EnDiscusionContent.createdAt", ">", offsetTo!))
+                .orderBy('EnDiscusionContent.createdAt', 'desc')
                 .limit(limit)
                 .execute()
             return res.map(r => ({
                 uri: r.uri,
-                createdAt: r.createdAt,
-                score: r.createdAt.getTime()
+                createdAt: r.createdAt ?? new Date(),
+                score: r.createdAt?.getTime() ?? 0
             }))
         } else {
             throw Error(`Métrica desconocida! ${metric}`)
