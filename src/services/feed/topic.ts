@@ -43,7 +43,7 @@ const getTopicRepliesSkeleton = async (ctx: AppContext, id: string) => {
 
 const getTopicMentionsSkeletonQuery: (id: string, metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption) => SkeletonQuery<EnDiscusionSkeletonElement> = (id, metric, time, format) => {
     return async (ctx, agent, from, to, limit) => {
-        const startDate = getEnDiscusionStartDate(time)
+        const startDate = metric != "Recientes" ? getEnDiscusionStartDate(time) : new Date(0)
         const collections = format == "Artículos" ? ["ar.cabildoabierto.feed.article"] : ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
 
         if(limit == 0){
