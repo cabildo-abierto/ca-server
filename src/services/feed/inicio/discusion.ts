@@ -30,6 +30,8 @@ export function getEnDiscusionStartDate(time: EnDiscusionTime) {
         return new Date(Date.now() - 7 * oneDay)
     } else if (time == "Último mes") {
         return new Date(Date.now() - 30 * oneDay)
+    } else if (time == "Último año") {
+        return new Date(Date.now() - 365 * oneDay)
     } else {
         throw Error(`Período de tiempo inválido: ${time}`)
     }
@@ -44,7 +46,7 @@ export type EnDiscusionSkeletonElement = {uri: string, createdAt: Date}
 
 const getEnDiscusionSkeletonQuery: (metric: EnDiscusionMetric, time: EnDiscusionTime, format: FeedFormatOption) => SkeletonQuery<EnDiscusionSkeletonElement> = (metric, time, format) => {
     return async (ctx, agent, from, to, limit) => {
-        const startDate = getEnDiscusionStartDate(time)
+        const startDate = metric != "Recientes" ? getEnDiscusionStartDate(time) : new Date(0)
         const collections = format == "Artículos" ?
             ["ar.cabildoabierto.feed.article"] :
             ["ar.cabildoabierto.feed.article", "app.bsky.feed.post"]
